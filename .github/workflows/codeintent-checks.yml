@@ -2,6 +2,11 @@ name: CodeIntent Checks
 
 # This trusted base-branch workflow never checks out or executes PR code.
 # It downloads the textual diff for TypeSafe and lets the Lambda run checks.
+#
+# Coding standards: the soft rules are governed in code-intent and bundled into
+# the Lambda image, so a PR cannot change the rules it is checked against. This
+# workflow only sends the changed Java files, fetched as text at the head SHA
+# through the API (never executed), so the Lambda can judge whole methods.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
@@ -69,12 +74,73 @@ jobs:
 
           gh api -H 'Accept: application/vnd.github.v3.diff' \
             "repos/$PR_FULL_REPO/pulls/$PR_NUMBER" > /tmp/pr.diff
+
+          # Coding-standards input. Everything here is fetched as text through
+          # the API and only forwarded; nothing from the PR is executed.
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          from urllib.parse import quote
+
+          repo = os.environ["PR_FULL_REPO"]
+          sha = os.environ["PR_SHA"]
+          max_file = int(os.environ.get("STANDARDS_MAX_FILE_BYTES", "60000"))
+          # API Gateway invokes the Lambda asynchronously, so the whole request
+          # (diff included) must fit the much smaller async payload limit.
+          max_total = int(os.environ.get("STANDARDS_MAX_TOTAL_BYTES", "200000"))
+
+
+          class NotFound(Exception):
+              pass
+
+
+          def gh(*args):
+              run = subprocess.run(["gh", "api", *args], capture_output=True, text=True)
+              if run.returncode != 0:
+                  if "HTTP 404" in run.stderr:
+                      raise NotFound()
+                  sys.exit(f"::error::GitHub API request failed: {run.stderr.strip()[:200]}")
+              return run.stdout
+
+
+          def raw(path, ref):
+              return gh("-H", "Accept: application/vnd.github.raw",
+                        f"repos/{repo}/contents/{quote(path)}?ref={quote(ref, safe='')}")
+
+
+          files, omitted, total = {}, [], 0
+          changed = gh("--paginate", f"repos/{repo}/pulls/{os.environ['PR_NUMBER']}/files",
+                       "--jq", '.[] | select(.status != "removed") | .filename')
+          for path in changed.splitlines():
+              if not path.endswith(".java"):
+                  continue
+              try:
+                  text = raw(path, sha)
+              except NotFound:
+                  omitted.append(path)
+                  continue
+              size = len(text.encode("utf-8"))
+              if size > max_file or total + size > max_total:
+                  omitted.append(path)
+                  continue
+              files[path] = text
+              total += size
+
+          with open("/tmp/standards-input.json", "w", encoding="utf-8") as stream:
+              json.dump({"standards": {"files_omitted": omitted}, "files": files}, stream)
+          print(f"Standards input: {len(files)} changed Java file(s) sent, {len(omitted)} omitted.")
+          PY
+
           python3 - <<'PY'
           import json
           import os
 
           with open("/tmp/pr.diff", encoding="utf-8", errors="replace") as stream:
               diff = stream.read()
+          with open("/tmp/standards-input.json", encoding="utf-8") as stream:
+              standards_input = json.load(stream)
           payload = {
               "pipeline": "typesafe-checks-v1",
               "owner": os.environ["PR_OWNER"],
@@ -85,6 +151,7 @@ jobs:
               "pr_ref": os.environ["PR_HEAD_REF"],
               "pull_request_number": int(os.environ["PR_NUMBER"]),
               "pull_request_title": os.environ["PR_TITLE"],
+              **standards_input,
           }
           with open("/tmp/codeintent-payload.json", "w", encoding="utf-8") as stream:
               json.dump(payload, stream)
@@ -130,6 +197,22 @@ jobs:
             elif [ "$state" = "completed" ]; then
               verdict=$(jq -r '.verdict // "UNKNOWN"' <<<"$document")
               jq -r '.checks[]? | "\(.label): \(.state) — \(.detail // "")"' <<<"$document"
+              # Coding-standards findings never fail the job by themselves;
+              # they are listed so the author can respond.
+              findings=$(jq -r '.checks[]? | select(.id == "coding_standards") | .findings[]? |
+                "- **\(if .band == "finding" then "Finding" else "FYI" end)** [\(.severity)] \(.rule_id) v\(.rule_version) \(.name): `\(.file):\(.line)` \(.unit) (confidence \(.confidence))" +
+                (if .guidance != "" then "\n  Suggested fix: \(.guidance)" else "" end)' <<<"$document")
+              if [ -n "$findings" ]; then
+                printf '%s\n' "$findings"
+                {
+                  echo "### Coding standards"
+                  echo
+                  echo "Findings ask for a response (fix, intended, or false alarm); FYIs need none. They never block the merge on their own."
+                  echo
+                  printf '%s\n' "$findings"
+                  echo
+                } >> "$GITHUB_STEP_SUMMARY"
+              fi
               echo "[Open the live report ↗]($DASHBOARD_URL)" >> "$GITHUB_STEP_SUMMARY"
               [ "$verdict" = "PASS" ] && exit 0
               echo "::error::CodeIntent completed with $verdict"
