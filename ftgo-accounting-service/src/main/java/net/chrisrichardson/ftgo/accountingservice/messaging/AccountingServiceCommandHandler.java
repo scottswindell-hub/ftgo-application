@@ -62,7 +62,6 @@ public class AccountingServiceCommandHandler {
     accountRepository.update(Long.toString(command.getConsumerId()),
             makeReviseAuthorizeCommandInternal(command),
             replyingTo(cm)
-                    .catching(AccountDisabledException.class, () -> withFailure(new AccountDisabledReply()))
                     .build());
 
 
