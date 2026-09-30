@@ -5,7 +5,8 @@ name: CodeIntent Checks (preview of this PR's workflow)
 # of the updated workflow runs on `pull_request` (the PR's own version; same-
 # repository branches only) and reports under a separate status id
 # (`<sha>-preview`), so it never overwrites the real check. It passes when the
-# coding_standards check passes; the overall verdict is reported, not enforced.
+# run's verdict is PASS, or when coding_standards passes despite the fail-closed
+# stubs' UNKNOWN verdict.
 
 # This trusted base-branch workflow never checks out or executes PR code.
 # It downloads the textual diff for TypeSafe and lets the Lambda run checks.
@@ -214,11 +215,15 @@ jobs:
               echo "Overall verdict: $verdict (improper_tests and intent_diff are fail-closed stubs)"
               echo "coding_standards: $standards"
               echo "Overall verdict: **$verdict**; coding_standards: **${standards%%|*}**, ${standards#*|}" >> "$GITHUB_STEP_SUMMARY"
-              if [ "${standards%%|*}" = "passed" ]; then
-                echo "The updated workflow delivered the standards input and the coding_standards check passed."
+              if [ "$verdict" = "PASS" ]; then
+                echo "The updated workflow ran end to end and the run passed."
                 exit 0
               fi
-              echo "::error::coding_standards did not pass: $standards"
+              if [ "${standards%%|*}" = "passed" ]; then
+                echo "The updated workflow delivered the standards input and coding_standards passed; the $verdict verdict comes from the fail-closed stubs."
+                exit 0
+              fi
+              echo "::error::Neither the run nor coding_standards passed: $verdict / $standards"
               exit 1
             else
               echo "CodeIntent state: $state — $DASHBOARD_URL"
