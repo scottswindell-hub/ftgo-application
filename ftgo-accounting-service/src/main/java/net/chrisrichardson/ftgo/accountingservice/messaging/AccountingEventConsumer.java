@@ -21,7 +21,11 @@ public class AccountingEventConsumer {
   }
 
   private void createAccount(DomainEventEnvelope<ConsumerCreated> dee) {
-    accountingService.create(dee.getAggregateId());
+    try {
+      accountingService.create(dee.getAggregateId());
+    } catch (Exception e) {
+      logger.warn("ignored", e);
+    }
   }
 
 
