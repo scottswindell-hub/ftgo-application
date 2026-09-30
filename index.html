@@ -1,0 +1,1004 @@
+<!--
+  CodeIntent — Semantic Governance Gate · live status page (GitHub Pages).
+
+  Self-contained (inline CSS/JS, no external assets) so it works both as a
+  GitHub Pages site and inside a strict CSP. It reads its target run from the
+  URL and polls a /status endpoint that mirrors the Lambda's _Reporter state:
+
+    ?sha=<head sha>         which run to show (required in real mode)
+    &pr=<n>&repo=<o/r>      shown in the header (optional; /status also returns them)
+    &api=<base url>         status endpoint base, e.g. the API Gateway stage URL
+    &mock=1                 simulate a run end-to-end with no backend (preview)
+
+  /status contract (legacy v1 and current "drift-gate-status-v2"):
+    { schema, sha, pr, repo, state: absent|in_progress|completed,
+      started_at, updated_at,
+      stages/checks: [ {id,label,requires,
+        state: pending|running|passed|stopped|blocked|failed|error,
+        conclusion,detail,started_at,completed_at} ],
+      verdict: null|PASS|VIOLATION|REVIEW|UNKNOWN, magnitude, reason,
+      severity: {status,decision,label,score,confidence,threshold},
+      analysis: { files_analyzed:[...], n_behaviors, changes:[{concept,file,line,kind,reason}] },
+      coverage_impact: { total:{changed,covered,uncovered,no_baseline,pct_of_measured},
+                         files:[{file,changed,covered,uncovered,status}] },
+      check_run_url, cis: null|{review_url,coverage_url,baseline_url},
+      reconciliation_proposal_id, reconciliation: {status,provider,model,classification,candidate,
+        validation,grounded_validation,promotion_approval} }
+-->
+<title>CodeIntent — Semantic Governance Gate</title>
+<main id="app" data-state="loading">
+  <header class="top">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <div class="brand-text">
+        <div class="brand-title">CodeIntent</div>
+        <div class="brand-sub">Semantic Governance Gate</div>
+      </div>
+    </div>
+    <div class="run" id="run-meta">
+      <a class="atlas-link" href="./rules/" title="Browse the Fineract governance rules">📖 Rule Atlas</a>
+      <span class="pill" id="live-pill"><span class="pdot"></span><span id="live-text">connecting</span></span>
+      <div class="run-ids">
+        <a id="pr-link" class="run-id" href="#" target="_blank" rel="noopener">PR&nbsp;#—</a>
+        <span class="run-id mono" id="sha">—</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="stage-line" id="status-line">
+    <h1 id="headline">Waiting for the gate…</h1>
+    <p class="sub" id="subline">This page follows a pull request through the semantic-change gate in real time.</p>
+  </section>
+
+  <section class="rail" id="rail" aria-label="Analysis progress"></section>
+
+  <section class="verdict" id="verdict" hidden>
+    <div class="verdict-head">
+      <span class="verdict-badge" id="verdict-badge">—</span>
+      <div class="verdict-copy">
+        <div class="verdict-title" id="verdict-title">—</div>
+        <div class="verdict-reason mono" id="verdict-reason"></div>
+      </div>
+      <span class="mag" id="mag" hidden></span>
+    </div>
+
+    <div class="panel changes" id="changes-panel" hidden>
+      <div class="panel-title">Governed behavior affected</div>
+      <div class="change-list" id="change-list"></div>
+    </div>
+
+    <div class="panel checked" id="checked-panel" hidden>
+      <div class="panel-title">What CodeIntent checked</div>
+      <ul class="checked-list" id="checked-list"></ul>
+    </div>
+
+    <div class="panel coverage" id="coverage-panel" hidden>
+      <div class="panel-title">Test coverage of this change</div>
+      <div class="cov-headline">
+        <span class="cov-pct" id="cov-pct">—</span>
+        <span class="cov-pct-sub" id="cov-pct-sub"></span>
+      </div>
+      <div class="cov-bar" id="cov-bar" role="img" aria-label="Coverage of changed lines"></div>
+      <div class="cov-legend" id="cov-legend"></div>
+      <div class="cov-files" id="cov-files"></div>
+    </div>
+
+    <div class="verdict-actions" id="verdict-actions"></div>
+  </section>
+
+  <section class="recon" id="recon-pane" hidden>
+    <div class="recon-head">
+      <div>
+        <span class="recon-eyebrow">AI-assisted rule reconciliation</span>
+        <h2 id="recon-title">Awaiting human intent decision</h2>
+      </div>
+      <span class="recon-badge" id="recon-badge">waiting</span>
+    </div>
+    <p class="recon-note" id="recon-note"></p>
+    <div class="rail recon-rail" id="recon-rail" aria-label="Rule reconciliation progress"></div>
+    <div class="ai-card" id="ai-card"></div>
+  </section>
+
+  <section class="cis" id="cis-pane" hidden>
+    <div class="cis-head">
+      <span class="cis-eyebrow">Governance record · CodeIntent Studio</span>
+      <span class="cis-badge" id="cis-badge">—</span>
+    </div>
+    <div class="cis-status mono" id="cis-status"></div>
+    <div class="cis-meta" id="cis-meta"></div>
+    <div class="cis-actions" id="cis-actions"></div>
+    <div class="cis-note" id="cis-note" hidden></div>
+  </section>
+
+  <footer class="foot">
+    <span id="foot-updated">—</span>
+    <span class="foot-sep">·</span>
+    <span>Evidence-backed, deterministic — the verdict is <em>is</em>; the decision to allow is <em>ought</em>.</span>
+  </footer>
+</main>
+
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0e1118;
+    --bg-2: #151a24;
+    --panel: #171d29;
+    --panel-2: #1c2330;
+    --line: #263041;
+    --line-soft: #1e2634;
+    --ink: #e8edf6;
+    --ink-2: #9aa8bd;
+    --ink-3: #64728a;
+    --accent: #35d0e0;         /* electric cyan — "analyzing" signal */
+    --accent-ink: #0b1116;
+    --ok: #3fd07a;
+    --warn: #f3b03a;
+    --bad: #ff5d6c;
+    --unknown: #7f8ca3;
+    --sev-trivial: #7f8ca3;
+    --sev-low: #3fd07a;
+    --sev-medium: #e6b83f;
+    --sev-high: #f28b3c;
+    --sev-critical: #ff5d6c;
+    --shadow: 0 18px 50px -24px rgba(0,0,0,.75);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f4f6fb; --bg-2: #eef1f8; --panel: #ffffff; --panel-2: #f7f9fd;
+      --line: #dbe2ee; --line-soft: #e7ecf5;
+      --ink: #131822; --ink-2: #47536a; --ink-3: #7d8aa1;
+      --accent: #0c9fb2; --accent-ink: #ffffff;
+      --ok: #1c9d54; --warn: #b9791a; --bad: #d83a4c; --unknown: #6b7890;
+      --shadow: 0 20px 50px -30px rgba(20,30,60,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg:#0e1118; --bg-2:#151a24; --panel:#171d29; --panel-2:#1c2330; --line:#263041; --line-soft:#1e2634;
+    --ink:#e8edf6; --ink-2:#9aa8bd; --ink-3:#64728a; --accent:#35d0e0; --accent-ink:#0b1116;
+    --ok:#3fd07a; --warn:#f3b03a; --bad:#ff5d6c; --unknown:#7f8ca3; --shadow:0 18px 50px -24px rgba(0,0,0,.75);
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg:#f4f6fb; --bg-2:#eef1f8; --panel:#fff; --panel-2:#f7f9fd; --line:#dbe2ee; --line-soft:#e7ecf5;
+    --ink:#131822; --ink-2:#47536a; --ink-3:#7d8aa1; --accent:#0c9fb2; --accent-ink:#fff;
+    --ok:#1c9d54; --warn:#b9791a; --bad:#d83a4c; --unknown:#6b7890; --shadow:0 20px 50px -30px rgba(20,30,60,.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background:
+      radial-gradient(1100px 600px at 82% -12%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%),
+      radial-gradient(900px 500px at 0% 0%, var(--bg-2), transparent 55%),
+      var(--bg);
+    color: var(--ink); font-family: var(--sans);
+    -webkit-font-smoothing: antialiased; line-height: 1.5;
+  }
+  #app { max-width: 820px; margin: 0 auto; padding: clamp(20px, 4vw, 44px) clamp(16px, 4vw, 28px) 64px; }
+
+  /* header */
+  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .mark { width: 34px; height: 34px; border-radius: 9px; flex: none;
+    background: linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 40%, #6a7cff));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent) inset, 0 8px 20px -8px color-mix(in srgb, var(--accent) 60%, transparent);
+    position: relative; }
+  .mark::after { content:""; position:absolute; inset:9px; border-radius:3px;
+    background: var(--accent-ink); opacity:.85;
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%, 22% 50%, 42% 70%, 78% 32%, 50% 32%); }
+  .brand-title { font-weight: 700; letter-spacing: .2px; font-size: 15px; }
+  .brand-sub { color: var(--ink-2); font-size: 12.5px; letter-spacing: .3px; }
+
+  .run { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .7px; padding: 5px 10px; border-radius: 999px;
+    background: var(--panel); border: 1px solid var(--line); color: var(--ink-2); }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+  #app[data-state="in_progress"] .pill { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+  #app[data-state="in_progress"] .pill .dot { background: var(--accent); animation: pulse 1.15s ease-in-out infinite; }
+  #app[data-state="completed"] .pill { color: var(--ink-2); }
+  .run-ids { display: flex; gap: 8px; align-items: center; }
+  .run-id { font-size: 12.5px; color: var(--ink-2); text-decoration: none; padding: 3px 9px; border-radius: 7px;
+    border: 1px solid var(--line-soft); background: color-mix(in srgb, var(--panel) 70%, transparent); }
+  a.run-id:hover { color: var(--ink); border-color: var(--line); }
+  .atlas-link { font-size: 12.5px; font-weight: 600; text-decoration: none; color: var(--accent);
+    padding: 5px 11px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+    background: color-mix(in srgb, var(--accent) 10%, transparent); white-space: nowrap; }
+  .atlas-link:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+  .mono { font-family: var(--mono); }
+
+  /* headline */
+  .stage-line { margin: clamp(26px, 5vw, 44px) 0 22px; }
+  #headline { font-size: clamp(23px, 4.6vw, 33px); line-height: 1.12; margin: 0 0 8px; letter-spacing: -0.5px;
+    text-wrap: balance; font-weight: 720; }
+  .sub { margin: 0; color: var(--ink-2); font-size: 14.5px; max-width: 62ch; }
+
+  /* progress rail */
+  .rail { display: grid; gap: 2px; margin: 8px 0 6px; }
+  .step { display: grid; grid-template-columns: 30px 1fr; gap: 14px; padding: 13px 0; position: relative; }
+  .step:not(:last-child)::before { content:""; position: absolute; left: 14px; top: 32px; bottom: -2px;
+    width: 2px; background: var(--line-soft); }
+  .step.done::before { background: color-mix(in srgb, var(--ok) 45%, var(--line-soft)); }
+  .node { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+    border: 2px solid var(--line); background: var(--panel); color: var(--ink-3); font-size: 13px; z-index: 1; }
+  .step.done .node { border-color: var(--ok); color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, var(--panel)); }
+  .step.fail .node { border-color: var(--bad); color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, var(--panel)); }
+  .step.error .node { border-color: var(--warn); color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, var(--panel)); }
+  .step.blocked .node { border-style: dashed; border-color: var(--ink-3); }
+  .step.fail .step-label { color: var(--bad); }
+  .step.error .step-label { color: var(--warn); }
+  .step.active .node { border-color: var(--accent); color: var(--accent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); animation: ring 1.5s ease-out infinite; }
+  .step.skip .node { border-style: dashed; }
+  .step-body { min-width: 0; padding-top: 3px; }
+  .step-label { font-weight: 600; font-size: 14.5px; }
+  .step.active .step-label { color: var(--ink); }
+  .step:not(.active):not(.done) .step-label { color: var(--ink-2); }
+  .step-detail { color: var(--ink-2); font-size: 13px; font-family: var(--mono); margin-top: 3px;
+    min-height: 1.1em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .step.active .step-detail { color: var(--accent); }
+  .caret { display: inline-block; width: 7px; background: currentColor; margin-left: 1px;
+    animation: blink 1s steps(2) infinite; }
+
+  /* verdict */
+  .verdict { margin-top: 26px; opacity: 0; transform: translateY(10px); }
+  .verdict.show { animation: rise .5s cubic-bezier(.2,.7,.2,1) forwards; }
+  .verdict-head { display: flex; align-items: center; gap: 16px; padding: 20px;
+    border-radius: var(--radius); background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
+    border-left: 4px solid var(--v, var(--line)); }
+  .verdict-badge { flex: none; font-weight: 800; font-size: 12px; letter-spacing: 1px; text-transform: uppercase;
+    padding: 8px 12px; border-radius: 9px; color: #fff; background: var(--v, var(--unknown));
+    box-shadow: 0 8px 22px -10px var(--v, transparent); }
+  .verdict-copy { flex: 1 1 auto; min-width: 0; }
+  .verdict-title { font-weight: 700; font-size: 17px; letter-spacing: -.2px; }
+  .verdict-reason { color: var(--ink-2); font-size: 13px; margin-top: 4px; word-break: break-word; }
+  .mag { flex: none; font-family: var(--mono); font-size: 11.5px; font-weight: 700; letter-spacing: .5px;
+    padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line);
+    color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+  #app[data-severity="trivial"] .mag { color:var(--sev-trivial); border-color:color-mix(in srgb,var(--sev-trivial) 45%,var(--line)); background:color-mix(in srgb,var(--sev-trivial) 12%,transparent); }
+  #app[data-severity="low"] .mag { color:var(--sev-low); border-color:color-mix(in srgb,var(--sev-low) 45%,var(--line)); background:color-mix(in srgb,var(--sev-low) 12%,transparent); }
+  #app[data-severity="medium"] .mag { color:var(--sev-medium); border-color:color-mix(in srgb,var(--sev-medium) 45%,var(--line)); background:color-mix(in srgb,var(--sev-medium) 12%,transparent); }
+  #app[data-severity="high"] .mag { color:var(--sev-high); border-color:color-mix(in srgb,var(--sev-high) 45%,var(--line)); background:color-mix(in srgb,var(--sev-high) 12%,transparent); }
+  #app[data-severity="critical"] .mag { color:var(--sev-critical); border-color:color-mix(in srgb,var(--sev-critical) 45%,var(--line)); background:color-mix(in srgb,var(--sev-critical) 12%,transparent); }
+
+  .panel { margin-top: 14px; padding: 16px 18px; border-radius: var(--radius);
+    background: var(--panel-2); border: 1px solid var(--line-soft); }
+  .panel-title { font-size: 11.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--ink-3);
+    font-weight: 700; margin-bottom: 12px; }
+  /* coverage-of-change panel: status viz (covered / uncovered / no-baseline) */
+  .cov-headline { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+  .cov-pct { font-size: 34px; font-weight: 800; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .cov-pct-sub { font-size: 12.5px; color: var(--ink-3); }
+  .cov-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--line-soft);
+    gap: 2px; /* 2px surface gap between fills */ }
+  .cov-seg { display: block; min-width: 2px; }
+  .cov-seg.ok { background: var(--ok); }
+  .cov-seg.warn { background: var(--warn); }
+  .cov-seg.unknown { background: var(--unknown); }
+  .cov-legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0 4px; font-size: 12px; color: var(--ink-2); }
+  .cov-legend .lg { display: inline-flex; align-items: center; gap: 6px; }
+  .cov-legend .sw { width: 10px; height: 10px; border-radius: 3px; }
+  .cov-legend .sw.ok { background: var(--ok); } .cov-legend .sw.warn { background: var(--warn); }
+  .cov-legend .sw.unknown { background: var(--unknown); }
+  .cov-legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .cov-files { display: grid; gap: 8px; margin-top: 14px; }
+  .cov-file { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; }
+  .cov-file-name { font-family: var(--mono); font-size: 12px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cov-file-name a { color: inherit; text-decoration: none; border-bottom: 1px solid var(--line); }
+  .cov-file-count { font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cov-file-bar { grid-column: 1 / -1; display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--line-soft); gap: 2px; }
+  .cov-file.warnrow .cov-file-count::after { content: " ⚠"; color: var(--warn); }
+  .change-list { display: grid; gap: 10px; }
+  .change { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: baseline;
+    padding: 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line-soft); }
+  .kind { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+    padding: 4px 8px; border-radius: 6px; color: #fff; white-space: nowrap; }
+  .kind.removed, .kind.changed { background: var(--bad); }
+  .kind.added { background: var(--warn); }
+  .change-main { min-width: 0; }
+  .change-concept { font-weight: 700; font-size: 14px; }
+  a.rule-link { color: var(--accent); text-decoration: none; border-bottom: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent); }
+  a.rule-link:hover { border-bottom-style: solid; }
+  .change-loc { font-family: var(--mono); font-size: 12.5px; color: var(--accent); word-break: break-all; }
+  a.src-link { color: inherit; text-decoration: none; border-bottom: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent); }
+  a.src-link:hover { border-bottom-style: solid; }
+  .change-reason { color: var(--ink-2); font-size: 12.5px; margin-top: 2px; }
+
+  /* inline code preview — GitHub blocks framing its own pages (X-Frame-Options),
+     so this fetches raw.githubusercontent.com (CORS-open) instead of an iframe */
+  .snippet { margin-top: 10px; border-radius: 10px; border: 1px solid var(--line-soft);
+    background: var(--bg); overflow: hidden; }
+  .snippet-head { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3);
+    padding: 6px 10px; border-bottom: 1px solid var(--line-soft); background: var(--panel-2); }
+  .snippet-body { max-height: 220px; overflow: auto; }
+  .cl { display: grid; grid-template-columns: 38px 1fr; width: max-content; min-width: 100%; }
+  .cln { text-align: right; padding: 1px 8px; font-family: var(--mono); font-size: 12.5px;
+    color: var(--ink-3); user-select: none; border-right: 1px solid var(--line-soft); background: var(--panel-2); }
+  .clc { padding: 1px 10px; font-family: var(--mono); font-size: 12.5px; white-space: pre; color: var(--ink-2); }
+  .cl.hit { background: color-mix(in srgb, var(--bad) 14%, transparent); }
+  .cl.hit .cln { color: var(--bad); font-weight: 700; }
+  .cl.hit .clc { color: var(--ink); }
+  .snippet-loading, .snippet-error { padding: 8px 10px; font-size: 12.5px; color: var(--ink-3); font-family: var(--mono); }
+
+  .checked-list { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 13.5px; display: grid; gap: 6px; }
+  .checked-list b { color: var(--ink); font-family: var(--mono); }
+
+  .verdict-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+  .btn { display: inline-flex; align-items: center; gap: 7px; text-decoration: none; font-size: 13px; font-weight: 600;
+    padding: 9px 14px; border-radius: 9px; border: 1px solid var(--line); color: var(--ink); background: var(--panel);
+    transition: border-color .15s, transform .05s; }
+  .btn:hover { border-color: var(--accent); }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+
+  /* Human → AI → validator reconciliation workflow */
+  .recon { margin-top: 16px; padding: 20px; border-radius: var(--radius); background: var(--panel);
+    border: 1px solid var(--line); border-top: 3px solid var(--accent); box-shadow: var(--shadow); }
+  .recon-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
+  .recon-eyebrow { color:var(--accent); font-size:11px; font-weight:800; letter-spacing:.9px; text-transform:uppercase; }
+  .recon h2 { margin:4px 0 0; font-size:18px; line-height:1.25; }
+  .recon-badge { flex:none; font-family:var(--mono); font-size:11px; font-weight:800; text-transform:uppercase;
+    letter-spacing:.5px; padding:5px 9px; border-radius:7px; color:var(--accent);
+    background:color-mix(in srgb, var(--accent) 12%, transparent); border:1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); }
+  .recon-note { color:var(--ink-2); font-size:13.5px; margin:10px 0 2px; }
+  .recon-rail { margin-top:10px; }
+  .ai-card { margin-top:14px; padding:16px; border-radius:11px; background:var(--panel-2); border:1px solid var(--line-soft); }
+  .ai-card:empty { display:none; }
+  .ai-title { display:flex; align-items:center; justify-content:space-between; gap:10px; font-weight:750; }
+  .ai-meta { margin-top:5px; color:var(--ink-3); font:12px var(--mono); word-break:break-word; }
+  .ai-rationale { margin:12px 0; color:var(--ink-2); font-size:13.5px; }
+  .ai-label { margin-top:13px; color:var(--ink-3); font-size:10.5px; text-transform:uppercase; letter-spacing:.8px; font-weight:800; }
+  .proposal-delta { margin-top:7px; padding:11px; border-radius:9px; background:var(--panel); border:1px solid var(--line-soft); }
+  .delta-id { color:var(--ink); font:12px var(--mono); word-break:break-all; }
+  .delta-values { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:8px; }
+  .delta-values > div { min-width:0; }
+  .delta-values span { color:var(--ink-3); font-size:10px; text-transform:uppercase; letter-spacing:.6px; }
+  .delta-values pre { margin:3px 0 0; padding:7px; overflow:auto; color:var(--ink-2); font:11px/1.4 var(--mono);
+    background:var(--bg); border-radius:6px; }
+  .validation-line { margin-top:10px; color:var(--ink-2); font-size:13px; }
+  .validation-line strong { color:var(--ink); }
+  .finding-list { margin:7px 0 0; padding-left:18px; color:var(--ink-2); font-size:12.5px; }
+  .pending-ai { color:var(--ink-2); font-size:13.5px; }
+  @media (max-width:600px) { .delta-values { grid-template-columns:1fr; } }
+
+  /* Governance (CIS) pane — the persisted source of truth */
+  .cis { margin-top: 16px; padding: 18px 20px; border-radius: var(--radius);
+    background: var(--panel); border: 1px solid var(--line);
+    border-top: 3px solid var(--info); box-shadow: var(--shadow); }
+  .cis-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .cis-eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; font-weight: 700; color: var(--info); }
+  .cis-badge { font-family: var(--mono); font-size: 11.5px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase;
+    padding: 5px 10px; border-radius: 7px; color: #fff; background: var(--cisv, var(--unknown)); }
+  .cis-status { margin-top: 10px; color: var(--ink); font-size: 13.5px; }
+  .cis-meta { margin-top: 8px; color: var(--ink-2); font-size: 12.5px; font-family: var(--mono); }
+  .cis-actions { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .cis-note { margin-top: 10px; color: var(--ink-3); font-size: 12px; }
+  #app[data-cis="VIOLATION"] .cis-badge { --cisv: var(--bad); }
+  #app[data-cis="PASS"] .cis-badge { --cisv: var(--ok); }
+  #app[data-cis="REVIEW"] .cis-badge { --cisv: var(--warn); }
+  #app[data-cis="UNKNOWN"] .cis-badge { --cisv: var(--unknown); }
+
+  .foot { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line-soft);
+    color: var(--ink-3); font-size: 12.5px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .foot em { color: var(--ink-2); font-style: normal; font-weight: 600; }
+  .foot-sep { opacity: .5; }
+
+  /* verdict color binding */
+  #app[data-verdict="VIOLATION"] .verdict-head { --v: var(--bad); }
+  #app[data-verdict="PASS"] .verdict-head { --v: var(--ok); }
+  #app[data-verdict="REVIEW"] .verdict-head { --v: var(--warn); }
+  #app[data-verdict="UNKNOWN"] .verdict-head { --v: var(--unknown); }
+  #app[data-verdict="VIOLATION"] .verdict-badge { --v: var(--bad); }
+  #app[data-verdict="PASS"] .verdict-badge { --v: var(--ok); }
+  #app[data-verdict="REVIEW"] .verdict-badge { --v: var(--warn); }
+  #app[data-verdict="UNKNOWN"] .verdict-badge { --v: var(--unknown); }
+
+  @keyframes pulse { 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
+  @keyframes ring { 0%{ box-shadow:0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);} 70%{ box-shadow:0 0 0 8px transparent;} 100%{ box-shadow:0 0 0 0 transparent;} }
+  @keyframes blink { 0%{opacity:1;} 50%{opacity:0;} }
+  @keyframes rise { to { opacity:1; transform:none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .pill .dot, .step.active .node { animation: none !important; }
+    .verdict.show { animation: none; opacity:1; transform:none; }
+    .caret { animation: none; }
+  }
+</style>
+
+<script>
+(function () {
+  "use strict";
+  var qs = new URLSearchParams(location.search);
+  var SHA = qs.get("sha") || "";
+  var PR = qs.get("pr") || "";
+  var REPO = qs.get("repo") || "";
+  var API = (qs.get("api") || "").replace(/\/$/, "");
+  var API_CIS = (qs.get("cis") || "").replace(/\/$/, "");  // override CIS read base
+  var MOCK = qs.get("mock") === "1";
+  var POLL_MS = 1500;
+
+  var app = document.getElementById("app");
+  var el = function (id) { return document.getElementById(id); };
+  var VERDICT_TITLE = {
+    VIOLATION: "Required governance checks failed",
+    PASS: "Eligible governance checks completed",
+    REVIEW: "Needs authorized human review",
+    UNKNOWN: "Could not establish a governed outcome"
+  };
+  var HEAD = {
+    absent: "Waiting for the gate…",
+    in_progress: "Analyzing this change…",
+    completed: { VIOLATION: "Change blocked by governance checks", PASS: "Checks completed",
+      REVIEW: "Human review required", UNKNOWN: "Outcome undetermined" }
+  };
+  var SEVERITY_META = {
+    trivial:  { icon: "○", label: "TRIVIAL" },
+    low:      { icon: "●", label: "LOW" },
+    medium:   { icon: "▲", label: "MEDIUM" },
+    high:     { icon: "◆", label: "HIGH" },
+    critical: { icon: "⚠", label: "CRITICAL" },
+    unavailable: { icon: "?", label: "UNAVAILABLE" }
+  };
+
+  // ---- rendering -----------------------------------------------------------
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+    return { "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]; }); }
+  function baseName(p) { return String(p || "").split("/").pop(); }
+
+  // ---- inline code preview -------------------------------------------------
+  // GitHub sends X-Frame-Options on github.com, so a plain <iframe src="…blob…">
+  // is refused by the browser. raw.githubusercontent.com serves file content
+  // with permissive CORS instead, so this fetches the file client-side and
+  // renders a small window of it, centered on the flagged line.
+  var SNIPPET_CONTEXT = 4; // lines of context above/below the target line
+  var snippetFileCache = {}; // "repo@sha:file" -> Promise<string> (dedupe repeat hits on one file)
+
+  function rawUrl(repo, sha, file) {
+    return "https://raw.githubusercontent.com/" + repo + "/" + sha + "/" +
+      file.split("/").map(encodeURIComponent).join("/");
+  }
+
+  function loadSnippet(containerId, repo, sha, file, line) {
+    var key = repo + "@" + sha + ":" + file;
+    if (!snippetFileCache[key]) {
+      snippetFileCache[key] = fetch(rawUrl(repo, sha, file)).then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.text();
+      });
+    }
+    snippetFileCache[key].then(function (text) {
+      var box = el(containerId);
+      if (!box) return; // a newer render already replaced this panel
+      var lines = text.split("\n");
+      var start = Math.max(1, line - SNIPPET_CONTEXT);
+      var end = Math.min(lines.length, line + SNIPPET_CONTEXT);
+      var rows = [];
+      for (var n = start; n <= end; n++) {
+        rows.push('<div class="cl' + (n === line ? " hit" : "") + '">' +
+          '<span class="cln">' + n + '</span><code class="clc">' + esc(lines[n - 1]) + '</code></div>');
+      }
+      box.innerHTML = '<div class="snippet-head">' + esc(baseName(file)) + ':' + line + '</div>' +
+        '<div class="snippet-body">' + rows.join("") + '</div>';
+    }).catch(function () {
+      var box = el(containerId);
+      if (box) box.innerHTML = '<div class="snippet-error">Couldn’t load a code preview — use the ↗ link above.</div>';
+    });
+  }
+
+  function renderHeader(s) {
+    el("sha").textContent = (s.sha || SHA || "—").slice(0, 7);
+    var pr = s.pr || PR, repo = s.repo || REPO;
+    var prLink = el("pr-link");
+    prLink.textContent = "PR #" + (pr || "—");
+    if (repo && pr) prLink.href = "https://github.com/" + repo + "/pull/" + pr;
+    el("live-text").textContent = s.state === "completed" ? "complete"
+      : s.state === "in_progress" ? "live" : "waiting";
+  }
+
+  function renderRail(stages) {
+    var rail = el("rail");
+    rail.innerHTML = (stages || []).map(function (st) {
+      var raw = st.state || "pending";
+      var cls = ({ running:"active", passed:"done", stopped:"skip",
+        blocked:"blocked", failed:"fail", error:"error" })[raw] || raw;
+      var icon = cls === "done" ? "✓" : cls === "skip" || cls === "blocked" ? "–"
+        : cls === "fail" ? "×" : cls === "error" ? "!" : "";
+      var detail = st.detail ? esc(st.detail) : (cls === "active" ? "working" : "");
+      var caret = cls === "active" ? '<span class="caret">&nbsp;</span>' : "";
+      return '<div class="step ' + cls + '">' +
+        '<div class="node">' + icon + '</div>' +
+        '<div class="step-body"><div class="step-label">' + esc(st.label) + '</div>' +
+        '<div class="step-detail">' + detail + caret + '</div></div></div>';
+    }).join("");
+  }
+
+  function renderVerdict(s) {
+    var v = s.verdict;
+    if (!v) { el("verdict").hidden = true; return; }
+    app.setAttribute("data-verdict", v);
+    el("verdict-badge").textContent = v;
+    var isSeverityPipeline = s.pipeline === "typesafe-checks-v1";
+    var decision = s.severity && s.severity.decision;
+    var title = VERDICT_TITLE[v] || v;
+    if (isSeverityPipeline && v === "PASS" && decision === "skip_small") {
+      title = "Low-impact change; deeper checks skipped";
+    } else if (isSeverityPipeline && v === "PASS") {
+      title = "Semantic change assessed; required checks passed";
+    } else if (isSeverityPipeline && v === "VIOLATION") {
+      title = "Semantic change detected; required checks failed";
+    } else if (isSeverityPipeline && v === "UNKNOWN") {
+      title = "Semantic change detected; required checks unavailable";
+    }
+    el("verdict-title").textContent = title;
+    el("verdict-reason").textContent = s.reason || "";
+    var mag = el("mag");
+    var severity = s.severity || {};
+    var severityLabel = String(severity.label || s.magnitude || "").toLowerCase();
+    var severityMeta = SEVERITY_META[severityLabel];
+    if (severityMeta) {
+      app.setAttribute("data-severity", severityLabel);
+      mag.hidden = false;
+      mag.textContent = severityMeta.icon + " " + severityMeta.label +
+        (severity.score != null ? " · " + severity.score : "");
+      mag.setAttribute("aria-label", "Semantic change severity: " + severityMeta.label.toLowerCase());
+    } else {
+      app.removeAttribute("data-severity");
+      mag.hidden = true;
+      mag.removeAttribute("aria-label");
+    }
+
+    var changes = (s.analysis && s.analysis.changes) || [];
+    var cp = el("changes-panel");
+    if (changes.length) {
+      cp.hidden = false;
+      el("change-list").innerHTML = changes.map(function (c, i) {
+        var loc = c.file ? baseName(c.file) + (c.line != null ? ":" + c.line : "") : "—";
+        // link the governed rule to its definition in the Rule Atlas (by idiom id)
+        var concept = c.idiom
+          ? '<a class="rule-link" href="rules/?rule=' + encodeURIComponent(c.idiom) +
+            '" title="View this rule in the Rule Atlas">' + esc(c.concept) + ' · ' + esc(c.idiom) + ' ↗</a>'
+          : esc(c.concept);
+        var canLink = !!(s.repo && s.sha && /^[0-9a-f]{7,40}$/i.test(s.sha) && c.file);
+        // link file:line to the GitHub source at this run's head SHA (real runs only)
+        var locHtml = canLink
+          ? '<a class="src-link" target="_blank" rel="noopener" href="https://github.com/' + s.repo +
+            '/blob/' + s.sha + '/' + c.file + (c.line != null ? '#L' + c.line : '') + '">' + esc(loc) + ' ↗</a>'
+          : esc(loc);
+        // GitHub blocks framing its own pages, so the inline preview below fetches
+        // raw.githubusercontent.com (CORS-open) instead of embedding an iframe.
+        var snippetHtml = (canLink && c.line != null)
+          ? '<div class="snippet" id="snippet-' + i + '"><div class="snippet-loading">loading code preview…</div></div>'
+          : "";
+        return '<div class="change"><span class="kind ' + esc(c.kind) + '">' + esc(c.kind) + '</span>' +
+          '<div class="change-main"><div class="change-concept">' + concept + '</div>' +
+          '<div class="change-loc">' + locHtml + '</div>' +
+          (c.reason ? '<div class="change-reason">' + esc(c.reason) + '</div>' : '') +
+          snippetHtml +
+          '</div></div>';
+      }).join("");
+      changes.forEach(function (c, i) {
+        if (s.repo && s.sha && /^[0-9a-f]{7,40}$/i.test(s.sha) && c.file && c.line != null) {
+          loadSnippet("snippet-" + i, s.repo, s.sha, c.file, c.line);
+        }
+      });
+    } else { cp.hidden = true; }
+
+    var a = s.analysis || {};
+    var checked = el("checked-panel");
+    if (a.files_analyzed || a.n_behaviors != null) {
+      checked.hidden = false;
+      var items = [
+        "Assembled both revisions and built a code-property graph of each",
+        "Compared <b>" + (a.n_behaviors != null ? a.n_behaviors : "—") +
+          "</b> governed behavior(s) across <b>" + ((a.files_analyzed || []).length) + "</b> analyzed file(s)",
+        changes.length ? "Detected <b>" + changes.length + "</b> behavior change(s)"
+          : "No idiom-grounded behavior changed"
+      ];
+      el("checked-list").innerHTML = items.map(function (i) { return "<li>" + i + "</li>"; }).join("");
+    } else { checked.hidden = true; }
+
+    renderCoverageImpact(s);
+
+    var actions = [];
+    if (s.check_run_url) actions.push('<a class="btn primary" target="_blank" rel="noopener" href="' + esc(s.check_run_url) + '">View the PR check ↗</a>');
+    // the CIS governance link is owned by the governance pane (needs the CIS base)
+    el("verdict-actions").innerHTML = actions.join("");
+
+    var box = el("verdict");
+    box.hidden = false;
+    // reflow then animate in
+    void box.offsetWidth; box.classList.add("show");
+  }
+
+  // ---- coverage of this change (diff coverage) -----------------------------
+  // Renders s.coverage_impact = { total:{changed,covered,uncovered,no_baseline,
+  // pct_of_measured}, files:[{file,changed,covered,uncovered,status}] } produced
+  // by line_coverage.diff_coverage. Status viz: covered=ok, uncovered(measured)=
+  // warn, no-baseline=unknown. Labels accompany every color (never color-alone).
+  function renderCoverageImpact(s) {
+    var ci = s.coverage_impact, panel = el("coverage-panel");
+    if (!ci || !ci.total || !ci.total.changed) { panel.hidden = true; return; }
+    panel.hidden = false;
+    var t = ci.total, uncovMeasured = t.uncovered - t.no_baseline;
+
+    el("cov-pct").textContent = t.pct_of_measured == null ? "—" : t.pct_of_measured + "%";
+    el("cov-pct-sub").textContent = t.pct_of_measured == null
+      ? "no baseline coverage for the changed files"
+      : "of measured changed lines are covered by tests";
+
+    function seg(n, cls, label) {
+      return n > 0 ? '<span class="cov-seg ' + cls + '" style="flex:' + n +
+        '" title="' + label + ': ' + n + ' line(s)"></span>' : "";
+    }
+    el("cov-bar").innerHTML =
+      seg(t.covered, "ok", "Covered") +
+      seg(uncovMeasured, "warn", "Changed but untested") +
+      seg(t.no_baseline, "unknown", "No coverage baseline");
+
+    function lg(cls, label, n) {
+      return '<span class="lg"><span class="sw ' + cls + '"></span>' + label + " <b>" + n + "</b></span>";
+    }
+    el("cov-legend").innerHTML =
+      lg("ok", "Covered", t.covered) +
+      lg("warn", "Untested", uncovMeasured) +
+      (t.no_baseline ? lg("unknown", "No baseline", t.no_baseline) : "");
+
+    var canLink = !!(s.repo && s.sha && /^[0-9a-f]{7,40}$/i.test(s.sha));
+    el("cov-files").innerHTML = (ci.files || []).map(function (f) {
+      var nb = f.status === "no_baseline";
+      var uc = f.changed - f.covered - (nb ? f.changed : 0);
+      var bar = nb
+        ? seg(f.changed, "unknown", "No coverage baseline")
+        : seg(f.covered, "ok", "Covered") + seg(uc, "warn", "Untested");
+      var name = canLink
+        ? '<a target="_blank" rel="noopener" href="https://github.com/' + s.repo + "/blob/" + s.sha + "/" + f.file + '">' + esc(baseName(f.file)) + " ↗</a>"
+        : esc(baseName(f.file));
+      var count = nb ? "no baseline" : f.covered + "/" + f.changed + " covered";
+      var risk = (nb || f.covered < f.changed) ? " warnrow" : "";
+      return '<div class="cov-file' + risk + '"><span class="cov-file-name">' + name +
+        '</span><span class="cov-file-count">' + count + '</span>' +
+        '<span class="cov-file-bar">' + bar + '</span></div>';
+    }).join("");
+  }
+
+  // ---- CIS governance pane (the persisted source of truth) -----------------
+  function cisBase(s) { return API_CIS || ((s.cis && s.cis.base) || "").replace(/\/$/, ""); }
+
+  function renderCis(s) {
+    var pane = el("cis-pane");
+    if (!(s.cis && s.state === "completed")) { pane.hidden = true; return; }
+    var base = cisBase(s);
+    // URL overrides make it easy to test an arbitrary CIS record locally:
+    //   ?cis=<base>&project=<slug>&change=<key>&review=<key>
+    var project = qs.get("project") || s.cis.project || "";
+    var change = qs.get("change") || s.cis.change || "";
+    var review = qs.get("review") || s.cis.review || "";
+    // Inline record (demo/offline) only when no real CIS base is given. Passing
+    // ?cis=<base> forces a real fetch so you can test against a live CIS.
+    if (s.cis.record && !API_CIS) { paintCis(s.cis.record, base, s.cis); return; }
+    if (!base || !change || !review) { pane.hidden = true; return; }
+    var ptr = { project: project, change: change, review: review, review_url: s.cis.review_url };
+    var url = base + "/api/pipeline/review?" + new URLSearchParams({
+      project_key: project, change_key: change, review_key: review });
+    fetch(url, { headers: { Accept: "application/json" } })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (d) { paintCis(d, base, ptr); })
+      .catch(function () { paintCisPending(base, ptr); });
+  }
+
+  // ---- AI-assisted reconciliation -----------------------------------------
+  var RECON_TERMINAL = {
+    rejected_code:1, candidate_blocked:1, grounded_blocked:1,
+    no_supported_rule:1, candidate_rejected:1, promotion_approved:1, promoted:1
+  };
+
+  function reconStep(label, state, detail) {
+    return { label:label, state:state || "pending", detail:detail || "" };
+  }
+
+  function renderRecon(s) {
+    var pane = el("recon-pane"), r = s.reconciliation;
+    if (!s.reconciliation_proposal_id && !r) { pane.hidden = true; return; }
+    pane.hidden = false;
+    var status = (r && (r.status === "proposal_failed" ? r.status : (r.case_status || r.status))) || "awaiting_intent";
+    var intent = r && r.intent_approval;
+    var cls = r && r.classification;
+    var candidate = r && r.candidate;
+    var validation = r && r.validation;
+    var grounded = r && r.grounded_validation;
+    var approval = r && r.promotion_approval;
+    var aiBusy = r && ["proposal_queued", "proposal_running", "classified"].indexOf(r.status) >= 0;
+    var blocked = ["candidate_blocked", "grounded_blocked", "no_supported_rule", "candidate_rejected"].indexOf(status) >= 0;
+
+    var steps = [
+      reconStep("Approve application intent", intent ? "done" : "active",
+        intent ? "approved by @" + intent.actor : "human decision required in the GitHub check"),
+      reconStep("Choose reconciliation type", cls ? "done" : (intent ? "active" : "pending"),
+        cls ? cls.kind + (cls.rule_id ? " · " + cls.rule_id : "") : "rebind, revise, or add"),
+      reconStep("AI proposes rule change", candidate ? "done" : (aiBusy ? "active" : "pending"),
+        candidate ? (candidate.author || "AI") + " · " + candidate.outcome : (aiBusy ? "Claude is generating a typed proposal" : "not started")),
+      reconStep("Validate proposal", grounded ? (grounded.status === "passed" ? "done" : "skip")
+        : (validation ? (validation.status === "passed" ? "active" : "skip") : "pending"),
+        grounded ? "grounded validation " + grounded.status : validation ? "structural validation " + validation.status : "not started"),
+      reconStep("Approve exact candidate", approval ? "done" : (status === "candidate_validated" ? "active" : blocked ? "skip" : "pending"),
+        approval ? "approved by @" + approval.actor : status === "candidate_validated" ? "human catalog approval required" : "not available")
+    ];
+    renderRailInto("recon-rail", steps);
+
+    el("recon-badge").textContent = status.replace(/_/g, " ");
+    var titles = {
+      awaiting_intent:"Waiting for application intent approval",
+      intent_approved:"Choose how the rule should reconcile",
+      classified:"AI proposal is queued",
+      proposal_failed:"AI proposal failed; an operator needs to retry it",
+      grounding_required:"Structural validation passed; grounding remains",
+      candidate_validated:"AI proposal validated; human approval required",
+      candidate_blocked:"AI proposal was blocked",
+      grounded_blocked:"Grounded validation blocked the proposal",
+      no_supported_rule:"AI found no supportable reusable rule",
+      candidate_rejected:"AI proposal rejected",
+      promotion_approved:"Exact AI candidate approved"
+    };
+    el("recon-title").textContent = titles[status] || (aiBusy ? "Claude is proposing a rule update" : "Rule reconciliation in progress");
+    el("recon-note").textContent = "The model may suggest a change, but it cannot approve application intent or promote its own candidate.";
+
+    var card = el("ai-card");
+    if (!candidate) {
+      card.innerHTML = '<div class="pending-ai"><strong>No AI suggestion yet.</strong> ' +
+        (status === "proposal_failed" ? "The approved change is recorded, but candidate generation failed. No rule was changed."
+          : aiBusy ? "The Claude worker is generating one now."
+          : "Generation starts only after a human approves the behavior and selects Rebind, Revise, or Add.") + '</div>';
+      return;
+    }
+    var model = (r.provider || "AI") + (r.model ? " · " + r.model : "");
+    var changes = candidate.expected_instance_changes || [];
+    var changeHtml = changes.length ? changes.map(function (c) {
+      return '<div class="proposal-delta"><div class="delta-id">' + esc(c.identity) + '</div>' +
+        '<div class="delta-values"><div><span>before</span><pre>' + esc(c.before_parameters_json || "—") + '</pre></div>' +
+        '<div><span>after</span><pre>' + esc(c.after_parameters_json || "—") + '</pre></div></div></div>';
+    }).join("") : '<div class="validation-line">No instance-level delta was proposed.</div>';
+    var findings = [].concat((validation && validation.findings) || [], (grounded && grounded.findings) || []);
+    var findingHtml = findings.length ? '<ul class="finding-list">' + findings.map(function (f) {
+      return '<li><code>' + esc(f.code || "finding") + '</code> — ' + esc(f.message || "") + '</li>';
+    }).join("") + '</ul>' : "";
+    card.innerHTML = '<div class="ai-title"><span>Claude suggestion: ' + esc(candidate.outcome) + '</span>' +
+      '<span class="recon-badge">AI generated</span></div>' +
+      '<div class="ai-meta">' + esc(model) + ' · candidate ' + esc((candidate.sha256 || "").slice(0, 12)) + '</div>' +
+      '<div class="ai-rationale">' + esc(candidate.rationale || "No rationale supplied.") + '</div>' +
+      '<div class="ai-label">Proposed bound-value changes</div>' + changeHtml +
+      '<div class="validation-line"><strong>Structural validator:</strong> ' + esc((validation && validation.status) || "pending") +
+      ' &nbsp;·&nbsp; <strong>Grounded validator:</strong> ' + esc((grounded && grounded.status) || "pending") + '</div>' + findingHtml;
+  }
+
+  function renderRailInto(id, stages) {
+    var rail = el(id);
+    rail.innerHTML = (stages || []).map(function (st) {
+      var raw = st.state || "pending";
+      var cls = ({ running:"active", passed:"done", stopped:"skip",
+        blocked:"blocked", failed:"fail", error:"error" })[raw] || raw;
+      var icon = cls === "done" ? "✓" : cls === "skip" || cls === "blocked" ? "–"
+        : cls === "fail" ? "×" : cls === "error" ? "!" : "";
+      return '<div class="step ' + cls + '"><div class="node">' + icon + '</div>' +
+        '<div class="step-body"><div class="step-label">' + esc(st.label) + '</div>' +
+        '<div class="step-detail">' + esc(st.detail || "") + (cls === "active" ? '<span class="caret">&nbsp;</span>' : '') + '</div></div></div>';
+    }).join("");
+  }
+
+  function paintCis(d, base, ptr) {
+    var pane = el("cis-pane"); pane.hidden = false;
+    app.setAttribute("data-cis", d.outcome || "");
+    el("cis-badge").textContent = d.outcome || "—";
+    el("cis-status").textContent = d.status_line || "";
+    var meta = [];
+    if (d.policy_action) meta.push("Policy: " + (d.outcome || "") + " → " + d.policy_action);
+    if (d.baseline && d.baseline.version) meta.push("Baseline v" + d.baseline.version);
+    el("cis-meta").textContent = meta.join("  ·  ");
+    var reviewUrl = (ptr && ptr.review_url) || d.review_url || "";
+    el("cis-actions").innerHTML = reviewUrl
+      ? '<a class="btn primary" target="_blank" rel="noopener" href="' + esc(base + reviewUrl) + '">Open the governance record ↗</a>' : "";
+    el("cis-note").hidden = true;
+  }
+
+  function paintCisPending(base, ptr) {
+    var pane = el("cis-pane"); pane.hidden = false;
+    app.removeAttribute("data-cis");
+    el("cis-badge").textContent = "pending";
+    el("cis-status").textContent = "Awaiting the CodeIntent Studio governance record…";
+    el("cis-meta").textContent = "";
+    var reviewUrl = ptr && ptr.review_url;
+    el("cis-actions").innerHTML = reviewUrl
+      ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(base + reviewUrl) + '">Open in CodeIntent ↗</a>' : "";
+    var note = el("cis-note"); note.hidden = false;
+    note.textContent = "The governance record isn't readable yet (CIS not reachable from here).";
+  }
+
+  function render(s) {
+    app.setAttribute("data-state", s.state || "absent");
+    renderHeader(s);
+    renderRail(s.stages);
+    var h = HEAD[s.state];
+    var headline = (s.state === "completed" && s.verdict)
+      ? (h[s.verdict] || "Complete") : (typeof h === "string" ? h : "Analyzing…");
+    if (s.pipeline === "typesafe-checks-v1" && s.state === "completed" && s.verdict === "UNKNOWN") {
+      headline = "Change blocked: required checks unavailable";
+    }
+    el("headline").textContent = headline;
+    if (s.state === "in_progress") {
+      var active = (s.stages || []).filter(function (x) { return x.state === "active"; })[0];
+      el("subline").textContent = active ? active.label + (active.detail ? " — " + active.detail : "") : "Running the semantic-change engine…";
+    } else if (s.state === "completed") {
+      el("subline").textContent = s.reason || "";
+    }
+    renderVerdict(s);
+    renderRecon(s);
+    renderCis(s);
+    if (s.updated_at) el("foot-updated").textContent = "updated " + fmt(s.updated_at);
+  }
+  function fmt(iso) { try { return new Date(iso).toLocaleTimeString(); } catch (e) { return iso; } }
+
+  // ---- data sources --------------------------------------------------------
+  function poll() {
+    var url = API + "/status?sha=" + encodeURIComponent(SHA) +
+      (REPO ? "&repo=" + encodeURIComponent(REPO) : "");
+    fetch(url, { headers: { "Accept": "application/json" } })
+      .then(function (r) { return r.ok ? r.json() : { state: "absent" }; })
+      .then(function (s) {
+        render(s);
+        var r = s.reconciliation;
+        var reconActive = !!s.reconciliation_proposal_id && (!r || !RECON_TERMINAL[r.status === "proposal_failed" ? r.status : (r.case_status || r.status)]);
+        if (s.state !== "completed" || reconActive) setTimeout(poll, POLL_MS);
+      })
+      .catch(function () { render({ state: "absent", sha: SHA }); setTimeout(poll, POLL_MS * 2); });
+  }
+
+  // Preview: a canned run that advances one frame per tick, ending in VIOLATION.
+  function runMock() {
+    var files = "fineract-provider/…/teller/service/TellerWritePlatformServiceJpaImpl.java";
+    function stage(a, an, e) { return [
+      { id: "assemble", label: "Assemble both revisions", state: a[0], detail: a[1] },
+      { id: "analyze", label: "Analyze changed behaviors", state: an[0], detail: an[1] },
+      { id: "evaluate", label: "Evaluate governance", state: e[0], detail: e[1] } ]; }
+    var analysis = { files_analyzed: [files], n_behaviors: 3,
+      changes: [{ concept: "AUTHZ", file: files, line: 80, kind: "removed",
+        reason: "authenticatedUser() gate removed from createTeller" }] };
+    var frames = [
+      { state: "in_progress", stages: stage(["active", "cloning base + head…"], ["pending", ""], ["pending", ""]) },
+      { state: "in_progress", stages: stage(["done", "base 9f3a1b2, head 3c0fcb8"], ["active", "1 changed file to analyze"], ["pending", ""]) },
+      { state: "in_progress", stages: stage(["done", "base 9f3a1b2, head 3c0fcb8"], ["active", "TellerWritePlatformServiceJpaImpl.java (1/1)"], ["pending", ""]) },
+      { state: "in_progress", stages: stage(["done", "base 9f3a1b2, head 3c0fcb8"], ["active", "3 behaviors · 1 change(s)"], ["pending", ""]) },
+      { state: "in_progress", stages: stage(["done", "base 9f3a1b2, head 3c0fcb8"], ["done", "3 behaviors · 1 change(s)"], ["active", "rolling up governed rules…"]) },
+      { state: "completed", verdict: "VIOLATION", magnitude: "HIGH",
+        reason: "governed AUTHZ removed in TellerWritePlatformServiceJpaImpl.createTeller",
+        analysis: analysis, check_run_url: "#",
+        stages: stage(["done", "base 9f3a1b2, head 3c0fcb8"], ["done", "3 behaviors · 1 change(s)"], ["done", "1 governed rule violation"]) }
+    ];
+    var meta = { sha: "3c0fcb8", pr: PR || "5", repo: REPO || "scottswindell-hub/fineract" };
+    var i = 0;
+    (function tick() {
+      var f = Object.assign({}, meta, frames[i], { updated_at: new Date().toISOString() });
+      render(f);
+      if (i < frames.length - 1) { i++; setTimeout(tick, i < 3 ? 1400 : 1800); }
+    })();
+  }
+
+  // Full ~60s scripted "dummy run": streams a lot of realistic server status,
+  // then lands a VIOLATION. Reuses the real render() so it looks identical to a
+  // live run. A subtle footer marker keeps it honest (simulated, not real data).
+  function runDemo() {
+    var repo = REPO || "scottswindell-hub/fineract", pr = PR || "8";
+    var sha = "d3m0" + "a1b2c3d4e5f6";
+    var files = [
+      "organisation/office/service/OfficeWritePlatformServiceJpaImpl.java",
+      "portfolio/loanaccount/service/LoanApplicationWritePlatformServiceJpaImpl.java",
+      "organisation/teller/service/TellerWritePlatformServiceJpaImpl.java", // the violation
+      "portfolio/savings/service/SavingsAccountWritePlatformServiceJpaImpl.java",
+      "organisation/staff/service/StaffWritePlatformServiceJpaImpl.java",
+      "portfolio/client/service/ClientWritePlatformServiceJpaImpl.java"
+    ];
+    var perFileBeh = [7, 11, 8, 9, 5, 8];
+    var cur = {
+      schema: "drift-gate-status-v1", sha: sha, pr: pr, repo: repo, state: "in_progress",
+      stages: [
+        { id: "assemble", label: "Assemble both revisions", state: "pending", detail: null },
+        { id: "analyze", label: "Analyze changed behaviors", state: "pending", detail: null },
+        { id: "evaluate", label: "Evaluate governance", state: "pending", detail: null }
+      ]
+    };
+    var stg = function (id) { return cur.stages.filter(function (s) { return s.id === id; })[0]; };
+    var steps = [];
+    var add = function (delay, fn) { steps.push({ delay: delay, fn: fn }); };
+
+    add(400, function () { stg("assemble").state = "active"; stg("assemble").detail = "resolving base & head refs…"; });
+    add(2200, function () { stg("assemble").detail = "fetching base snapshot from S3 bundle…"; });
+    add(2400, function () { stg("assemble").detail = "cloning PR branch (partial, blob:none)…"; });
+    add(1600, function () {
+      stg("assemble").state = "done"; stg("assemble").detail = "base 9f3a1b2, head " + sha.slice(0, 7);
+      stg("analyze").state = "active"; stg("analyze").detail = files.length + " changed production .java files";
+    });
+
+    var beh = 0;
+    files.forEach(function (f, i) {
+      var bn = f.split("/").pop();
+      var n = i + 1, tot = files.length;
+      add(1200, function () { stg("analyze").detail = "reading " + bn + " (" + n + "/" + tot + ")"; });
+      add(2600, function () { stg("analyze").detail = "building HPG: " + bn; });
+      add(2100, function () { stg("analyze").detail = "matching idiom catalog in " + bn + " …"; });
+      add(1400, function () {
+        beh += perFileBeh[i] || 6;
+        var flag = (i === 2) ? "  ⚠ AUTHZ gate no longer present" : "";
+        stg("analyze").detail = beh + " behaviors recognized" + flag;
+      });
+    });
+
+    add(1200, function () {
+      stg("analyze").state = "done"; stg("analyze").detail = beh + " behaviors · 1 change(s)";
+      stg("evaluate").state = "active"; stg("evaluate").detail = "rolling up governed rules by (concept, scope)…";
+    });
+    add(2000, function () { stg("evaluate").detail = "22 governed · 21 preserved · 1 removed"; });
+    add(1800, function () { stg("evaluate").detail = "AUTHZ@createTeller — governed removal → resolving verdict…"; });
+    add(1400, function () {
+      stg("evaluate").state = "done"; stg("evaluate").detail = "1 governed rule violation";
+      cur.state = "completed"; cur.verdict = "VIOLATION"; cur.magnitude = "HIGH";
+      cur.reason = "governed AUTHZ removed in TellerWritePlatformServiceJpaImpl.createTeller";
+      cur.analysis = {
+        files_analyzed: files, n_behaviors: beh,
+        changes: [{
+          concept: "AUTHZ", idiom: "authz_gate",
+          file: "fineract-provider/.../organisation/teller/service/TellerWritePlatformServiceJpaImpl.java",
+          line: 81, kind: "removed",
+          reason: "authenticatedUser() authorization gate removed from createTeller"
+        }]
+      };
+      // demo diff-coverage: the violation file (createTeller) is under-tested,
+      // one file has no baseline — reinforcing where the risk sits.
+      cur.coverage_impact = {
+        total: { changed: 71, covered: 51, uncovered: 20, no_baseline: 5, pct_of_measured: 77 },
+        files: [
+          { file: files[0], changed: 11, covered: 9, uncovered: 2, status: "measured" },
+          { file: files[1], changed: 24, covered: 20, uncovered: 4, status: "measured" },
+          { file: files[2], changed: 14, covered: 6, uncovered: 8, status: "measured" },
+          { file: files[3], changed: 8, covered: 7, uncovered: 1, status: "measured" },
+          { file: files[4], changed: 5, covered: 0, uncovered: 5, status: "no_baseline" },
+          { file: files[5], changed: 9, covered: 9, uncovered: 0, status: "measured" }
+        ]
+      };
+      cur.check_run_url = "#";
+      cur.cis = {
+        base: "https://cis.example", project: "fineract-govern",
+        change: "2da59e0e-0bc1-46a7-9f06-5419f58449a1", review: "2dfdf120-cff2-4ce4-b319-2dbc518e191b",
+        review_url: "/projects/fineract-govern/changes/2da59e0e-0bc1-46a7-9f06-5419f58449a1/reviews/2dfdf120-cff2-4ce4-b319-2dbc518e191b",
+        record: { outcome: "VIOLATION", baseline: { version: 1 }, policy_action: "require_approval",
+          status_line: "CodeIntent: VIOLATION - deterministic conflict with governing authority (AUTHZ gate removed from createTeller)." }
+      };
+    });
+
+    var footer = el("foot-updated");
+    var t = 0;
+    steps.forEach(function (s) {
+      t += s.delay;
+      setTimeout(function () {
+        s.fn();
+        cur.updated_at = new Date().toISOString();
+        render({ // deep-ish copy so render sees fresh objects
+          schema: cur.schema, sha: cur.sha, pr: cur.pr, repo: cur.repo, state: cur.state,
+          verdict: cur.verdict, magnitude: cur.magnitude, reason: cur.reason,
+          analysis: cur.analysis, coverage_impact: cur.coverage_impact,
+          check_run_url: cur.check_run_url, cis: cur.cis,
+          updated_at: cur.updated_at,
+          stages: cur.stages.map(function (x) { return { id: x.id, label: x.label, state: x.state, detail: x.detail }; })
+        });
+        if (footer) footer.textContent = "simulated run · demo";
+      }, t);
+    });
+  }
+
+  // ---- boot ----------------------------------------------------------------
+  var DEMO = qs.get("demo") === "1";
+  render({ state: "absent", sha: SHA, pr: PR, repo: REPO });
+  if (API && SHA) { poll(); }                       // real run
+  else if (MOCK) { setTimeout(runMock, 500); }      // quick dev mock
+  else { setTimeout(runDemo, 600); }                // ?demo=1 or bare landing → full 60s dummy run
+})();
+</script>
