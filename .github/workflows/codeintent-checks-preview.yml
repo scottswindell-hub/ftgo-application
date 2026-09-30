@@ -1,0 +1,229 @@
+name: CodeIntent Checks (preview of this PR's workflow)
+
+# TEMPORARY - remove before merging. `pull_request_target` always runs the base
+# branch's workflow, so a PR cannot exercise its own changes to it. This copy
+# of the updated workflow runs on `pull_request` (the PR's own version; same-
+# repository branches only) and reports under a separate status id
+# (`<sha>-preview`), so it never overwrites the real check. It passes when the
+# coding_standards check passes; the overall verdict is reported, not enforced.
+
+# This trusted base-branch workflow never checks out or executes PR code.
+# It downloads the textual diff for TypeSafe and lets the Lambda run checks.
+#
+# Coding standards: the soft rules are governed in code-intent and bundled into
+# the Lambda image, so a PR cannot change the rules it is checked against. This
+# workflow only sends the changed Java files, fetched as text at the head SHA
+# through the API (never executed), so the Lambda can judge whole methods.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: codeintent-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      API_URL: ${{ vars.CODEINTENT_API_URL || 'https://qgd63ljozc.execute-api.us-east-1.amazonaws.com/demo/verify-checks' }}
+      STATUS_API_URL: ${{ vars.CODEINTENT_STATUS_API_URL || 'https://qgd63ljozc.execute-api.us-east-1.amazonaws.com/demo/status' }}
+      STATUS_PAGE_URL: ${{ vars.CODEINTENT_STATUS_PAGE_URL || 'https://scottswindell-hub.github.io/ftgo-application/' }}
+      API_KEY: ${{ secrets.DRIFT_GATE_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+      PR_OWNER: ${{ github.repository_owner }}
+      PR_REPO: ${{ github.event.repository.name }}
+      PR_FULL_REPO: ${{ github.repository }}
+      PR_SHA: ${{ github.event.pull_request.head.sha }}
+      STATUS_SHA: ${{ github.event.pull_request.head.sha }}-preview
+      PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+      PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+
+    steps:
+      - name: Preview status link
+        run: |
+          dashboard_url=$(python3 -c 'import os,urllib.parse; print(os.environ["STATUS_PAGE_URL"].rstrip("/") + "/?" + urllib.parse.urlencode({"sha":os.environ["STATUS_SHA"],"api":os.environ["STATUS_API_URL"].rsplit("/status",1)[0],"pr":os.environ["PR_NUMBER"],"repo":os.environ["PR_FULL_REPO"],"view":"review"}))')
+          echo "DASHBOARD_URL=$dashboard_url" >> "$GITHUB_ENV"
+          echo "Preview status page: $dashboard_url"
+
+      - name: Start dependency-aware checks
+        run: |
+          set -euo pipefail
+          if [ -z "$API_KEY" ]; then
+            echo "::error::Configure the DRIFT_GATE_API_KEY repository secret."
+            exit 1
+          fi
+
+          previous_started_at=$(curl -fsS --get "$STATUS_API_URL" \
+            --data-urlencode "sha=$STATUS_SHA" --data-urlencode "repo=$PR_FULL_REPO" \
+            | jq -r '.started_at // empty' || true)
+          echo "PREVIOUS_STARTED_AT=$previous_started_at" >> "$GITHUB_ENV"
+
+          gh api -H 'Accept: application/vnd.github.v3.diff' \
+            "repos/$PR_FULL_REPO/pulls/$PR_NUMBER" > /tmp/pr.diff
+
+          # Coding-standards input. Everything here is fetched as text through
+          # the API and only forwarded; nothing from the PR is executed.
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          from urllib.parse import quote
+
+          repo = os.environ["PR_FULL_REPO"]
+          sha = os.environ["PR_SHA"]
+          max_file = int(os.environ.get("STANDARDS_MAX_FILE_BYTES", "60000"))
+          # API Gateway invokes the Lambda asynchronously, so the whole request
+          # (diff included) must fit the much smaller async payload limit.
+          max_total = int(os.environ.get("STANDARDS_MAX_TOTAL_BYTES", "200000"))
+
+
+          class NotFound(Exception):
+              pass
+
+
+          def gh(*args):
+              run = subprocess.run(["gh", "api", *args], capture_output=True, text=True)
+              if run.returncode != 0:
+                  if "HTTP 404" in run.stderr:
+                      raise NotFound()
+                  sys.exit(f"::error::GitHub API request failed: {run.stderr.strip()[:200]}")
+              return run.stdout
+
+
+          def raw(path, ref):
+              return gh("-H", "Accept: application/vnd.github.raw",
+                        f"repos/{repo}/contents/{quote(path)}?ref={quote(ref, safe='')}")
+
+
+          files, omitted, total = {}, [], 0
+          changed = gh("--paginate", f"repos/{repo}/pulls/{os.environ['PR_NUMBER']}/files",
+                       "--jq", '.[] | select(.status != "removed") | .filename')
+          for path in changed.splitlines():
+              if not path.endswith(".java"):
+                  continue
+              try:
+                  text = raw(path, sha)
+              except NotFound:
+                  omitted.append(path)
+                  continue
+              size = len(text.encode("utf-8"))
+              if size > max_file or total + size > max_total:
+                  omitted.append(path)
+                  continue
+              files[path] = text
+              total += size
+
+          with open("/tmp/standards-input.json", "w", encoding="utf-8") as stream:
+              json.dump({"standards": {"files_omitted": omitted}, "files": files}, stream)
+          print(f"Standards input: {len(files)} changed Java file(s) sent, {len(omitted)} omitted.")
+          PY
+
+          python3 - <<'PY'
+          import json
+          import os
+
+          with open("/tmp/pr.diff", encoding="utf-8", errors="replace") as stream:
+              diff = stream.read()
+          with open("/tmp/standards-input.json", encoding="utf-8") as stream:
+              standards_input = json.load(stream)
+          payload = {
+              "pipeline": "typesafe-checks-v1",
+              "owner": os.environ["PR_OWNER"],
+              "repo": os.environ["PR_REPO"],
+              "sha": os.environ["STATUS_SHA"],
+              "diff": diff,
+              "base_ref": os.environ["PR_BASE_REF"],
+              "pr_ref": os.environ["PR_HEAD_REF"],
+              "pull_request_number": int(os.environ["PR_NUMBER"]),
+              "pull_request_title": os.environ["PR_TITLE"],
+              **standards_input,
+          }
+          with open("/tmp/codeintent-payload.json", "w", encoding="utf-8") as stream:
+              json.dump(payload, stream)
+          PY
+
+          for attempt in 1 2 3 4 5; do
+            code=$(curl -sS -o /tmp/codeintent-response.json -w '%{http_code}' \
+              -X POST "$API_URL" -H 'Content-Type: application/json' \
+              -H "x-api-key: $API_KEY" -d @/tmp/codeintent-payload.json)
+            case "$code" in
+              200|202)
+                echo "CodeIntent checks started."
+                break
+                ;;
+              403|429|5??)
+                if [ "$attempt" -lt 5 ]; then
+                  echo "Gateway returned HTTP $code; retrying ($attempt/5)..."
+                  sleep $((attempt * 2))
+                  continue
+                fi
+                ;;
+            esac
+            cat /tmp/codeintent-response.json
+            echo "HTTP $code"
+            exit 1
+          done
+
+      - name: Wait for check result
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 840))
+          while (( SECONDS < deadline )); do
+            document=$(curl -fsS --get "$STATUS_API_URL" \
+              --data-urlencode "sha=$STATUS_SHA" --data-urlencode "repo=$PR_FULL_REPO" || true)
+            if [ -z "$document" ]; then document='{}'; fi
+            state=$(jq -r '.state // "absent"' <<<"$document")
+            started_at=$(jq -r '.started_at // empty' <<<"$document")
+            pipeline=$(jq -r '.pipeline // empty' <<<"$document")
+
+            if { [ "$started_at" = "${PREVIOUS_STARTED_AT:-}" ] && [ -n "$started_at" ]; } || \
+               { [ "$state" = "completed" ] && [ "$pipeline" != "typesafe-checks-v1" ]; }; then
+              echo "Waiting for this run to replace the prior result..."
+            elif [ "$state" = "completed" ]; then
+              verdict=$(jq -r '.verdict // "UNKNOWN"' <<<"$document")
+              jq -r '.checks[]? | "\(.label): \(.state) — \(.detail // "")"' <<<"$document"
+              # Coding-standards findings never fail the job by themselves;
+              # they are listed so the author can respond.
+              findings=$(jq -r '.checks[]? | select(.id == "coding_standards") | .findings[]? |
+                "- **\(if .band == "finding" then "Finding" else "FYI" end)** [\(.severity)] \(.rule_id) v\(.rule_version) \(.name): `\(.file):\(.line)` \(.unit) (confidence \(.confidence))" +
+                (if .guidance != "" then "\n  Suggested fix: \(.guidance)" else "" end)' <<<"$document")
+              if [ -n "$findings" ]; then
+                printf '%s\n' "$findings"
+                {
+                  echo "### Coding standards"
+                  echo
+                  echo "Findings ask for a response (fix, intended, or false alarm); FYIs need none. They never block the merge on their own."
+                  echo
+                  printf '%s\n' "$findings"
+                  echo
+                } >> "$GITHUB_STEP_SUMMARY"
+              fi
+              echo "[Open the live report ↗]($DASHBOARD_URL)" >> "$GITHUB_STEP_SUMMARY"
+              standards=$(jq -r '.checks[]? | select(.id == "coding_standards") | "\(.state)|\(.detail // "")"' <<<"$document")
+              echo "Overall verdict: $verdict (improper_tests and intent_diff are fail-closed stubs)"
+              echo "coding_standards: $standards"
+              echo "Overall verdict: **$verdict**; coding_standards: **${standards%%|*}**, ${standards#*|}" >> "$GITHUB_STEP_SUMMARY"
+              if [ "${standards%%|*}" = "passed" ]; then
+                echo "The updated workflow delivered the standards input and the coding_standards check passed."
+                exit 0
+              fi
+              echo "::error::coding_standards did not pass: $standards"
+              exit 1
+            else
+              echo "CodeIntent state: $state — $DASHBOARD_URL"
+            fi
+            sleep 5
+          done
+          echo "::error::CodeIntent checks timed out."
+          exit 1
