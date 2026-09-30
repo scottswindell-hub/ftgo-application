@@ -61,7 +61,7 @@ public class OrderCommandHandlers {
       orderService.beginCancel(orderId);
       return withSuccess();
     } catch (UnsupportedStateTransitionException e) {
-      return withFailure();
+      return withSuccess();
     }
   }
 
