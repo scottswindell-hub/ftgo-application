@@ -3,7 +3,6 @@ import { decorativeCopy } from './decorativeCopy';
 import {
   actionLabel,
   deliveryHandoffContract,
-  type CourierAction,
 } from './semanticContract';
 
 type SemanticFieldProps = {
@@ -23,14 +22,11 @@ function SemanticField({ children, hint, label }: SemanticFieldProps) {
 }
 
 export function FulfillmentHandoffReview() {
-  const [nextAction, setNextAction] = useState<CourierAction>(
-    deliveryHandoffContract.nextCourierAction.default,
-  );
   const [reviewStatus, setReviewStatus] = useState(
     'Choose the handoff details, then prepare a local review.',
   );
 
-  const selectedActionLabel = actionLabel(nextAction);
+  const selectedActionLabel = actionLabel(deliveryHandoffContract.nextCourierAction.default);
 
   function prepareReview() {
     setReviewStatus(deliveryHandoffContract.reviewAction.outcome);
@@ -88,25 +84,6 @@ export function FulfillmentHandoffReview() {
                 >
                   {deliveryHandoffContract.courier.name} · {deliveryHandoffContract.courier.id}
                 </output>
-              </SemanticField>
-
-              <SemanticField
-                label="Next courier action"
-                hint="FTGO schedules pickup before drop-off."
-              >
-                <select
-                  aria-label="Next courier action"
-                  data-demo-role="semantic"
-                  data-semantic-key="next-courier-action"
-                  onChange={(event) => setNextAction(event.target.value as CourierAction)}
-                  value={nextAction}
-                >
-                  {deliveryHandoffContract.nextCourierAction.options.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
               </SemanticField>
 
               <SemanticField label="Ready by" hint="Restaurant handoff target">
