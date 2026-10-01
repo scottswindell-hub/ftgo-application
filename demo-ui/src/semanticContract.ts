@@ -23,7 +23,7 @@ export const deliveryHandoffContract = {
     },
   },
   nextCourierAction: {
-    default: 'PICKUP',
+    default: 'DROPOFF',
     options: [
       {
         value: 'PICKUP',

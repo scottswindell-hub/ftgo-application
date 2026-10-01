@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { FulfillmentHandoffReview } from './FulfillmentHandoffReview';
 
 describe('FulfillmentHandoffReview', () => {
-  it('defaults the courier to the pickup action', () => {
+  it('defaults the courier to the dropoff action', () => {
     render(<FulfillmentHandoffReview />);
 
-    expect(screen.getByLabelText('Next courier action')).toHaveValue('PICKUP');
-    expect(screen.getByLabelText('Selected next action')).toHaveTextContent('Pick up order');
+    expect(screen.getByLabelText('Next courier action')).toHaveValue('DROPOFF');
+    expect(screen.getByLabelText('Selected next action')).toHaveTextContent('Drop off order');
   });
 
   it('updates the local snapshot without submitting a dispatch change', () => {
