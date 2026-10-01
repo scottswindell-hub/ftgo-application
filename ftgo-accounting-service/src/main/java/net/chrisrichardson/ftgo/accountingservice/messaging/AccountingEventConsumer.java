@@ -21,7 +21,11 @@ public class AccountingEventConsumer {
   }
 
   private void createAccount(DomainEventEnvelope<ConsumerCreated> dee) {
-    accountingService.create(dee.getAggregateId());
+    try {
+      accountingService.create(dee.getAggregateId());
+    } catch (RuntimeException e) {
+      throw new IllegalStateException("cannot create account for consumer " + dee.getAggregateId(), e);
+    }
   }
 
 
