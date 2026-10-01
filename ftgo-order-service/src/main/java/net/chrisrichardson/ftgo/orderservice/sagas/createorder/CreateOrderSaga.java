@@ -4,13 +4,8 @@ import io.eventuate.tram.sagas.orchestration.SagaDefinition;
 import io.eventuate.tram.sagas.simpledsl.SimpleSaga;
 import net.chrisrichardson.ftgo.orderservice.sagaparticipants.*;
 import net.chrisrichardson.ftgo.kitchenservice.api.CreateTicketReply;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class CreateOrderSaga implements SimpleSaga<CreateOrderSagaState> {
-
-
-  private Logger logger = LoggerFactory.getLogger(getClass());
 
   private SagaDefinition<CreateOrderSagaState> sagaDefinition;
 
