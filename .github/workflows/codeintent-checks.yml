@@ -34,6 +34,7 @@ jobs:
       PR_REPO: ${{ github.event.repository.name }}
       PR_FULL_REPO: ${{ github.repository }}
       PR_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
       PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
       PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -111,10 +112,27 @@ jobs:
 
 
           files, omitted, total = {}, [], 0
-          changed = gh("--paginate", f"repos/{repo}/pulls/{os.environ['PR_NUMBER']}/files",
-                       "--jq", '.[] | select(.status != "removed") | .filename')
-          for path in changed.splitlines():
-              if not path.endswith(".java"):
+          raw_pages = json.loads(gh(
+              "--paginate", "--slurp",
+              f"repos/{repo}/pulls/{os.environ['PR_NUMBER']}/files?per_page=100",
+          ))
+          changed_rows = [row for page in raw_pages for row in page]
+          semantic_java = []
+          for row in changed_rows:
+              path = row["filename"]
+              status = row["status"]
+              if status == "renamed":
+                  previous = row.get("previous_filename")
+                  if previous and previous.endswith(".java"):
+                      semantic_java.append({"path": previous, "status": "removed"})
+                  if not path.endswith(".java"):
+                      continue
+                  status = "added"
+              elif not path.endswith(".java"):
+                  continue
+              status = {"changed": "modified", "copied": "added"}.get(status, status)
+              semantic_java.append({"path": path, "status": status})
+              if status == "removed":
                   continue
               try:
                   text = raw(path, sha)
@@ -129,7 +147,11 @@ jobs:
               total += size
 
           with open("/tmp/standards-input.json", "w", encoding="utf-8") as stream:
-              json.dump({"standards": {"files_omitted": omitted}, "files": files}, stream)
+              json.dump({
+                  "standards": {"files_omitted": omitted},
+                  "semantic_changes": {"java": semantic_java, "files_omitted": omitted},
+                  "files": files,
+              }, stream)
           print(f"Standards input: {len(files)} changed Java file(s) sent, {len(omitted)} omitted.")
           PY
 
@@ -146,6 +168,7 @@ jobs:
               "owner": os.environ["PR_OWNER"],
               "repo": os.environ["PR_REPO"],
               "sha": os.environ["PR_SHA"],
+              "base_sha": os.environ["PR_BASE_SHA"],
               "diff": diff,
               "base_ref": os.environ["PR_BASE_REF"],
               "pr_ref": os.environ["PR_HEAD_REF"],
