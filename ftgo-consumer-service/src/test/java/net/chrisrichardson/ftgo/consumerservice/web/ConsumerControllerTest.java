@@ -23,6 +23,7 @@ import java.nio.charset.Charset;
 import java.util.Optional;
 
 import static io.restassured.module.mockmvc.RestAssuredMockMvc.given;
+import static org.hamcrest.Matchers.equalTo;
 import static org.mockito.Mockito.mock;
 
 public class ConsumerControllerTest {
@@ -46,7 +47,8 @@ public class ConsumerControllerTest {
             when().
             get("/consumers/1").
             then().
-            statusCode(200)
+            statusCode(200).
+            body("consumerId", equalTo(1))
     ;
 
   }
