@@ -1,7 +1,6 @@
 package net.chrisrichardson.ftgo.kitchenservice.domain;
 
 import io.eventuate.tram.events.aggregates.ResultWithDomainEvents;
-import net.chrisrichardson.ftgo.common.NotYetImplementedException;
 import net.chrisrichardson.ftgo.common.RevisedOrderLineItem;
 import net.chrisrichardson.ftgo.common.UnsupportedStateTransitionException;
 import net.chrisrichardson.ftgo.kitchenservice.api.TicketDetails;
@@ -68,7 +67,14 @@ public class Ticket {
   }
 
   public List<TicketDomainEvent> cancelCreate() {
-    throw new NotYetImplementedException();
+    switch (state) {
+      case CREATE_PENDING:
+        // Downstream services use this event to compensate for the pending order.
+        state = TicketState.CANCELLED;
+        return singletonList(new TicketCancelled());
+      default:
+        throw new UnsupportedStateTransitionException(state);
+    }
   }
 
 
