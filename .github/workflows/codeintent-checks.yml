@@ -3,7 +3,7 @@ name: CodeIntent Checks
 # This trusted base-branch workflow never checks out or executes PR code.
 # It downloads the textual diff for TypeSafe and lets the Lambda run checks.
 #
-# Coding standards: the soft rules are governed in code-intent and bundled into
+# Coding standards: the soft rules are governed in hss_idiom_forge and bundled into
 # the Lambda image, so a PR cannot change the rules it is checked against. This
 # workflow only sends the changed Java files, fetched as text at the head SHA
 # through the API (never executed), so the Lambda can judge whole methods.
@@ -34,6 +34,7 @@ jobs:
       PR_REPO: ${{ github.event.repository.name }}
       PR_FULL_REPO: ${{ github.repository }}
       PR_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
       PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
       PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -65,6 +66,19 @@ jobs:
           if [ -z "$API_KEY" ]; then
             echo "::error::Configure the DRIFT_GATE_API_KEY repository secret."
             exit 1
+          fi
+
+          # A rerun of this exact workflow can finish an authorized review without
+          # running detectors or acquiring judgments again. The report link is read-only.
+          if [ "${GITHUB_RUN_ATTEMPT:-1}" -gt 1 ]; then
+            prior=$(curl -fsS --get "$STATUS_API_URL" \
+              --data-urlencode "sha=$PR_SHA" --data-urlencode "repo=$PR_FULL_REPO" || true)
+            if printf '%s' "$prior" | jq -e --arg sha "$PR_SHA" \
+                 '.state == "completed" and .pipeline == "typesafe-checks-v1" and
+                  .sha == $sha and (.governance_run_id | type == "string" and length > 0)' >/dev/null; then
+              echo "Resuming acceptance for the completed run; checks will not rerun."
+              exit 0
+            fi
           fi
 
           previous_started_at=$(curl -fsS --get "$STATUS_API_URL" \
@@ -111,10 +125,27 @@ jobs:
 
 
           files, omitted, total = {}, [], 0
-          changed = gh("--paginate", f"repos/{repo}/pulls/{os.environ['PR_NUMBER']}/files",
-                       "--jq", '.[] | select(.status != "removed") | .filename')
-          for path in changed.splitlines():
-              if not path.endswith(".java"):
+          raw_pages = json.loads(gh(
+              "--paginate", "--slurp",
+              f"repos/{repo}/pulls/{os.environ['PR_NUMBER']}/files?per_page=100",
+          ))
+          changed_rows = [row for page in raw_pages for row in page]
+          semantic_java = []
+          for row in changed_rows:
+              path = row["filename"]
+              status = row["status"]
+              if status == "renamed":
+                  previous = row.get("previous_filename")
+                  if previous and previous.endswith(".java"):
+                      semantic_java.append({"path": previous, "status": "removed"})
+                  if not path.endswith(".java"):
+                      continue
+                  status = "added"
+              elif not path.endswith(".java"):
+                  continue
+              status = {"changed": "modified", "copied": "added"}.get(status, status)
+              semantic_java.append({"path": path, "status": status})
+              if status == "removed":
                   continue
               try:
                   text = raw(path, sha)
@@ -129,7 +160,11 @@ jobs:
               total += size
 
           with open("/tmp/standards-input.json", "w", encoding="utf-8") as stream:
-              json.dump({"standards": {"files_omitted": omitted}, "files": files}, stream)
+              json.dump({
+                  "standards": {"files_omitted": omitted},
+                  "semantic_changes": {"java": semantic_java, "files_omitted": omitted},
+                  "files": files,
+              }, stream)
           print(f"Standards input: {len(files)} changed Java file(s) sent, {len(omitted)} omitted.")
           PY
 
@@ -146,6 +181,7 @@ jobs:
               "owner": os.environ["PR_OWNER"],
               "repo": os.environ["PR_REPO"],
               "sha": os.environ["PR_SHA"],
+              "base_sha": os.environ["PR_BASE_SHA"],
               "diff": diff,
               "base_ref": os.environ["PR_BASE_REF"],
               "pr_ref": os.environ["PR_HEAD_REF"],
@@ -196,11 +232,14 @@ jobs:
               echo "Waiting for this run to replace the prior result..."
             elif [ "$state" = "completed" ]; then
               verdict=$(jq -r '.verdict // "UNKNOWN"' <<<"$document")
+              revision=$(printf '%s' "$document" | sha256sum | cut -d ' ' -f 1)
+              if [ "$revision" != "${last_document_revision:-}" ]; then
+              last_document_revision=$revision
               jq -r '.checks[]? | "\(.label): \(.state) — \(.detail // "")"' <<<"$document"
               # Coding-standards findings never fail the job by themselves;
               # they are listed so the author can respond.
               findings=$(jq -r '.checks[]? | select(.id == "coding_standards") | .findings[]? |
-                "- **\(if .band == "finding" then "Finding" else "FYI" end)** [\(.severity)] \(.rule_id) v\(.rule_version) \(.name): `\(.file):\(.line)` \(.unit) (confidence \(.confidence))" +
+                "- **\(if .band == "finding" then "Finding" else "FYI" end)** [\(.severity)\(if (.category // "") == "" then "" elif (.category_parent // "") == "" then " · \(.category)" else " · \(.category_parent) › \(.category)" end)] \(.rule_id) v\(.rule_version) \(.name): `\(.file):\(.line)` \(.unit)" +
                 (if .guidance != "" then "\n  Suggested fix: \(.guidance)" else "" end)' <<<"$document")
               if [ -n "$findings" ]; then
                 printf '%s\n' "$findings"
@@ -214,6 +253,64 @@ jobs:
                 } >> "$GITHUB_STEP_SUMMARY"
               fi
               echo "[Open the live report ↗]($DASHBOARD_URL)" >> "$GITHUB_STEP_SUMMARY"
+              printf '%s' "$document" > /tmp/codeintent-status.json
+              python3 <<'PY' > /tmp/codeintent-comment.md
+          """One compact GitHub comment over native results and separate acceptance policy."""
+          from urllib.parse import urlsplit
+
+          MARKER = '<!-- codeintent-checks -->'
+          ICONS = {'passed':'✅','failed':'❌','error':'⚠️','stopped':'➖','blocked':'➖','pending':'⏳','running':'⏳'}
+
+
+          def inline(value):
+              return str(value or '').replace('\n',' ').replace('|','\\|').replace('<','&lt;').replace('>','&gt;')[:300]
+
+
+          def render_run_comment(document, report_url):
+              if urlsplit(report_url).scheme not in {'http','https'}:
+                  raise ValueError('Report URL must be HTTP(S)')
+              checks=document.get('checks') or document.get('stages') or []
+              verdict=document.get('verdict')
+              acceptance=document.get('acceptance') or {}
+              status=acceptance.get('status')
+              label={'ready':'✅ Ready','blocked':'❌ Blocked','review_required':'⚠️ Review required','incomplete':'⚠️ Assessment incomplete'}.get(status)
+              if not label:
+                  label='⏳ Running' if document.get('state')!='completed' else '✅ Passed' if verdict=='PASS' else '❌ Failed' if verdict=='VIOLATION' else '⚠️ Assessment incomplete'
+              rows=[MARKER,'### CodeIntent checks — '+label,'']
+              if acceptance.get('mode')=='shadow':
+                  rows+=['Shadow assessment; existing check conclusions remain authoritative.','']
+              for check in checks:
+                  state=check.get('state','pending');detail=check.get('detail','')
+                  icon='➖' if check.get('id')=='coding_standards' and detail.startswith('No standards adopted') else ICONS.get(state,'➖')
+                  suffix=' — response requested' if check.get('id')=='coding_standards' and check.get('findings') else ''
+                  rows.append(f"- {icon} **{inline(check.get('label') or check['id'])}**: {inline(state)}{suffix}")
+              risks=(acceptance.get('intent_risks') or {}).get('assessments',[])
+              if risks:
+                  rows+=['',f"🟡 Intent outside governed objectives: {len(risks)} change(s); {len(acceptance.get('required_reviews',[]))} awaiting risk review."]
+              rows+=['',f'[▶ Open the checks and review ↗]({report_url})']
+              return '\n'.join(rows)+'\n'
+
+          import json, os
+          with open('/tmp/codeintent-status.json') as stream:
+              doc=json.load(stream)
+          print(render_run_comment(doc, os.environ['DASHBOARD_URL']), end='')
+          PY
+              comment_id=$(gh api "repos/$PR_FULL_REPO/issues/$PR_NUMBER/comments" --paginate --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- codeintent-checks -->"))) | .id' | head -1 || true)
+              if [ -n "$comment_id" ]; then
+                gh api --method PATCH "repos/$PR_FULL_REPO/issues/comments/$comment_id" -F body=@/tmp/codeintent-comment.md >/dev/null || echo "::warning::Could not update governance comment."
+              fi
+              fi
+              acceptance=$(jq -r '.acceptance.status // "legacy"' <<<"$document")
+              mode=$(jq -r '.acceptance.mode // "shadow"' <<<"$document")
+              if [ "$mode" = "enforce" ] && { [ "$acceptance" = "incomplete" ] || [ "$acceptance" = "review_required" ]; }; then
+                echo "Waiting for required intent assessment or authorized review..."
+                sleep 5
+                continue
+              fi
+              if [ "$mode" = "enforce" ] && [ "$acceptance" != "ready" ]; then
+                echo "::error::Governance acceptance is $acceptance; review the report."
+                exit 1
+              fi
               [ "$verdict" = "PASS" ] && exit 0
               echo "::error::CodeIntent completed with $verdict"
               exit 1
