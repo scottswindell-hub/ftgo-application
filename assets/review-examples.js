@@ -57,7 +57,7 @@ window.REVIEW_EXAMPLES = [
           "behavior"
         ],
         "actions": [],
-        "details": "Illustrative TypeSafe probabilities: {\"equivalent\": 0.97, \"different\": 0.01, \"uncertain\": 0.02}",
+        "details": "Illustrative Analysis signals: {\"equivalent\": 0.97, \"different\": 0.01, \"uncertain\": 0.02}",
         "evidence_ids": [
           "changed-source",
           "relationship"
@@ -282,7 +282,7 @@ window.REVIEW_EXAMPLES = [
           "Request changes",
           "Dispute comparison"
         ],
-        "details": "Illustrative TypeSafe probabilities: {\"equivalent\": 0.01, \"different\": 0.98, \"uncertain\": 0.01}",
+        "details": "Illustrative Analysis signals: {\"equivalent\": 0.01, \"different\": 0.98, \"uncertain\": 0.01}",
         "evidence_ids": [
           "changed-source",
           "relationship"
@@ -513,7 +513,7 @@ window.REVIEW_EXAMPLES = [
           "Request changes",
           "Dispute comparison"
         ],
-        "details": "Illustrative TypeSafe probabilities: {\"equivalent\": 0.02, \"different\": 0.96, \"uncertain\": 0.02}",
+        "details": "Illustrative Analysis signals: {\"equivalent\": 0.02, \"different\": 0.96, \"uncertain\": 0.02}",
         "evidence_ids": [
           "changed-source",
           "relationship"
@@ -744,7 +744,7 @@ window.REVIEW_EXAMPLES = [
           "Request changes",
           "Dispute comparison"
         ],
-        "details": "Illustrative TypeSafe probabilities: {\"equivalent\": 0.01, \"different\": 0.98, \"uncertain\": 0.01}",
+        "details": "Illustrative Analysis signals: {\"equivalent\": 0.01, \"different\": 0.98, \"uncertain\": 0.01}",
         "evidence_ids": [
           "changed-source",
           "relationship"
@@ -975,7 +975,7 @@ window.REVIEW_EXAMPLES = [
           "Request changes",
           "Dispute comparison"
         ],
-        "details": "Illustrative TypeSafe probabilities: {\"equivalent\": 0.01, \"different\": 0.97, \"uncertain\": 0.02}",
+        "details": "Illustrative Analysis signals: {\"equivalent\": 0.01, \"different\": 0.97, \"uncertain\": 0.02}",
         "evidence_ids": [
           "changed-source",
           "relationship"
@@ -1206,7 +1206,7 @@ window.REVIEW_EXAMPLES = [
           "Request changes",
           "Dispute comparison"
         ],
-        "details": "Illustrative TypeSafe probabilities: {\"equivalent\": 0.01, \"different\": 0.98, \"uncertain\": 0.01}",
+        "details": "Illustrative Analysis signals: {\"equivalent\": 0.01, \"different\": 0.98, \"uncertain\": 0.01}",
         "evidence_ids": [
           "changed-source",
           "relationship"
@@ -1442,7 +1442,7 @@ window.REVIEW_EXAMPLES = [
           "Request changes",
           "Dispute comparison"
         ],
-        "details": "Illustrative TypeSafe probabilities: {\"equivalent\": 0.41, \"different\": 0.17, \"uncertain\": 0.42}",
+        "details": "Illustrative Analysis signals: {\"equivalent\": 0.41, \"different\": 0.17, \"uncertain\": 0.42}",
         "evidence_ids": [
           "changed-source",
           "relationship"
@@ -1675,7 +1675,7 @@ window.REVIEW_EXAMPLES = [
           "Request changes",
           "Dispute comparison"
         ],
-        "details": "Illustrative TypeSafe probabilities: {\"equivalent\": 0.1, \"different\": 0.12, \"uncertain\": 0.78}",
+        "details": "Illustrative Analysis signals: {\"equivalent\": 0.1, \"different\": 0.12, \"uncertain\": 0.78}",
         "evidence_ids": [
           "changed-source",
           "relationship"
@@ -1982,7 +1982,7 @@ window.REVIEW_EXAMPLES = [
         "label": "Analysis depth",
         "status": "PASS",
         "title": "Analysis selected",
-        "summary": "Deterministic scope check; TypeSafe skipped.",
+        "summary": "Deterministic scope check; Analysis skipped.",
         "region_ids": [
           "behavior",
           "context"
@@ -2125,7 +2125,7 @@ window.REVIEW_EXAMPLES = [
           "Request changes",
           "Dispute comparison"
         ],
-        "details": "Illustrative TypeSafe probabilities: {\"equivalent\": 0.01, \"different\": 0.96, \"uncertain\": 0.03}",
+        "details": "Illustrative Analysis signals: {\"equivalent\": 0.01, \"different\": 0.96, \"uncertain\": 0.03}",
         "evidence_ids": [
           "changed-source",
           "relationship"
@@ -2355,7 +2355,7 @@ window.REVIEW_EXAMPLES = [
           "behavior"
         ],
         "actions": [],
-        "details": "Illustrative TypeSafe probabilities: {\"equivalent\": 0.98, \"different\": 0.01, \"uncertain\": 0.01}",
+        "details": "Illustrative Analysis signals: {\"equivalent\": 0.98, \"different\": 0.01, \"uncertain\": 0.01}",
         "evidence_ids": [
           "changed-source",
           "relationship"
@@ -2587,7 +2587,7 @@ window.REVIEW_EXAMPLES = [
           "Request changes",
           "Dispute comparison"
         ],
-        "details": "Illustrative TypeSafe probabilities: {\"equivalent\": 0.01, \"different\": 0.98, \"uncertain\": 0.01}",
+        "details": "Illustrative Analysis signals: {\"equivalent\": 0.01, \"different\": 0.98, \"uncertain\": 0.01}",
         "evidence_ids": [
           "changed-source",
           "relationship"
@@ -2818,7 +2818,7 @@ window.REVIEW_EXAMPLES = [
           "Request changes",
           "Dispute comparison"
         ],
-        "details": "Illustrative TypeSafe probabilities: {\"equivalent\": 0.01, \"different\": 0.98, \"uncertain\": 0.01}",
+        "details": "Illustrative Analysis signals: {\"equivalent\": 0.01, \"different\": 0.98, \"uncertain\": 0.01}",
         "evidence_ids": [
           "changed-source",
           "relationship"
@@ -3055,7 +3055,7 @@ window.REVIEW_EXAMPLES = [
           "Request changes",
           "Dispute comparison"
         ],
-        "details": "Illustrative TypeSafe probabilities: {\"equivalent\": 0.02, \"different\": 0.96, \"uncertain\": 0.02}",
+        "details": "Illustrative Analysis signals: {\"equivalent\": 0.02, \"different\": 0.96, \"uncertain\": 0.02}",
         "evidence_ids": [
           "changed-source",
           "relationship"

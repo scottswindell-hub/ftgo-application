@@ -1,0 +1,12 @@
+diff --git a/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/sagas/createorder/CreateOrderSaga.java b/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/sagas/createorder/CreateOrderSaga.java
+index b7944ee..48d6c79 100644
+--- a/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/sagas/createorder/CreateOrderSaga.java
++++ b/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/sagas/createorder/CreateOrderSaga.java
+@@ -24,7 +24,6 @@ public class CreateOrderSaga implements SimpleSaga<CreateOrderSagaState> {
+             .step()
+               .invokeParticipant(kitchenService.create, CreateOrderSagaState::makeCreateTicketCommand)
+               .onReply(CreateTicketReply.class, CreateOrderSagaState::handleCreateTicketReply)
+-              .withCompensation(kitchenService.cancel, CreateOrderSagaState::makeCancelCreateTicketCommand)
+             .step()
+                 .invokeParticipant(accountingService.authorize, CreateOrderSagaState::makeAuthorizeCommand)
+             .step()

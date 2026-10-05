@@ -1,0 +1,40 @@
+diff --git a/ftgo-order-history-service/src/main/java/net/chrisrichardson/ftgo/cqrs/orderhistory/messaging/OrderHistoryEventHandlers.java b/ftgo-order-history-service/src/main/java/net/chrisrichardson/ftgo/cqrs/orderhistory/messaging/OrderHistoryEventHandlers.java
+index 96b7d04..a75e7ba 100644
+--- a/ftgo-order-history-service/src/main/java/net/chrisrichardson/ftgo/cqrs/orderhistory/messaging/OrderHistoryEventHandlers.java
++++ b/ftgo-order-history-service/src/main/java/net/chrisrichardson/ftgo/cqrs/orderhistory/messaging/OrderHistoryEventHandlers.java
+@@ -53,21 +53,26 @@ public class OrderHistoryEventHandlers {
+   }
+ 
+   public void handleOrderAuthorized(DomainEventEnvelope<OrderAuthorized> dee) {
+-    logger.debug("handleOrderAuthorized called {}", dee);
+-    boolean result = orderHistoryDao.updateOrderState(dee.getAggregateId(), OrderState.APPROVED, makeSourceEvent(dee));
+-    logger.debug("handleOrderAuthorized result {} {}", dee, result);
++    updateOrderState("handleOrderAuthorized", dee, OrderState.APPROVED);
+   }
+ 
+   public void handleOrderCancelled(DomainEventEnvelope<OrderCancelled> dee) {
+-    logger.debug("handleOrderCancelled called {}", dee);
+-    boolean result = orderHistoryDao.updateOrderState(dee.getAggregateId(), OrderState.CANCELLED, makeSourceEvent(dee));
+-    logger.debug("handleOrderCancelled result {} {}", dee, result);
++    updateOrderState("handleOrderCancelled", dee, OrderState.CANCELLED);
+   }
+ 
+   public void handleOrderRejected(DomainEventEnvelope<OrderRejected> dee) {
+-    logger.debug("handleOrderRejected called {}", dee);
+-    boolean result = orderHistoryDao.updateOrderState(dee.getAggregateId(), OrderState.REJECTED, makeSourceEvent(dee));
+-    logger.debug("handleOrderRejected result {} {}", dee, result);
++    updateOrderState("handleOrderRejected", dee, OrderState.REJECTED);
++  }
++
++  private void updateOrderState(String operation,
++                                DomainEventEnvelope<?> dee,
++                                OrderState state) {
++    logger.debug("{} called {}", operation, dee);
++    boolean result = orderHistoryDao.updateOrderState(
++            dee.getAggregateId(),
++            state,
++            makeSourceEvent(dee));
++    logger.debug("{} result {} {}", operation, dee, result);
+   }
+ 
+   private Order makeOrder(String orderId, OrderCreatedEvent event) {

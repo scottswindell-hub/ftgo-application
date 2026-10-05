@@ -1,0 +1,21 @@
+{
+  "schema": "semantic-pr-review-manifest-v1",
+  "repository": "scottswindell-hub/ftgo-application",
+  "generated": "2026-10-01",
+  "views": [
+    {"pr": 11, "kind": "gallagher", "artifact": "pr11.json"},
+    {"pr": 12, "kind": "gallagher", "artifact": "pr12.json"},
+    {"pr": 13, "kind": "controlled-boundary-break", "artifact": "pr13.json"},
+    {"pr": 14, "kind": "controlled-boundary-break", "artifact": "pr14.json"},
+    {"pr": 15, "kind": "controlled-boundary-break", "artifact": "pr15.json"},
+    {"pr": 16, "kind": "controlled-boundary-break", "artifact": "pr16.json"},
+    {"pr": 17, "kind": "controlled-safe", "artifact": "pr17.json"},
+    {"pr": 18, "kind": "controlled-safe", "artifact": "pr18.json"},
+    {"pr": 19, "kind": "controlled-safe", "artifact": "pr19.json"},
+    {"pr": 20, "kind": "controlled-safe", "artifact": "pr20.json"},
+    {"pr": 21, "kind": "gallagher", "artifact": "pr21.json"},
+    {"pr": 22, "kind": "gallagher", "artifact": "pr22.json"},
+    {"pr": 23, "kind": "gallagher-selector-miss", "artifact": "pr23.json"}
+  ],
+  "qualification": "Static review evidence for the named FTGO PR revisions. These artifacts are not current-head assertions and responses remain session-only."
+}
