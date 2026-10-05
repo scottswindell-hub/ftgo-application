@@ -17,12 +17,27 @@ function customerGraph(packet,graph){
 /* Generated packets and demo fixtures share the Review presentation. */
 (async function () {
  const params=new URLSearchParams(location.search);
- const dataPath=params.get('data');
+ let dataPath=params.get('data'),artifactReference=null;
+ if(!dataPath&&LIVE){
+  await new Promise(resolve=>{
+   window.onLiveStatusUpdate=doc=>{
+    const ref=doc?.review_artifact;
+    if(!ref||ref.schema!=='review-artifact-reference-v1'||ref.name!=='intent-flow.json')return;
+    artifactReference=ref;
+    const base=/\/status$/.test(LIVE_API)?LIVE_API:LIVE_API+'/status';
+    const url=new URL(base,location.href);
+    url.search=new URLSearchParams({sha:LIVE_SHA,repo:LIVE_REPO,detail:'review-artifact',name:ref.name});
+    dataPath=url.href;resolve();
+   };
+  });
+ }
  if(!dataPath)return;
  const content=document.querySelector('#content');if(!LIVE)content.innerHTML='<p>Loading generated review data…</p>';
  try{
   const artifactURL=new URL(dataPath,location.href);
-  if(artifactURL.origin!==location.origin)throw Error('Use a same-origin generated artifact.');
+  const apiURL=LIVE&&LIVE_API?new URL(LIVE_API,location.href):null;
+  const trustedArtifactURL=url=>url.origin===location.origin||Boolean(apiURL&&url.origin===apiURL.origin);
+  if(!trustedArtifactURL(artifactURL))throw Error('Use a same-origin or configured pipeline artifact.');
   let response;
   for(let attempt=0;attempt<120;attempt++){
    response=await fetch(artifactURL,{cache:'no-store'});
@@ -31,7 +46,11 @@ function customerGraph(packet,graph){
   }
   if(response.status===202)throw Error('Backend artifact is still pending.');
   if(!response.ok)throw Error('Artifact unavailable: '+response.status);
-  const raw=await response.text();if(new TextEncoder().encode(raw).length>524288)throw Error('View exceeds 512 KiB.');
+  const raw=await response.text(),rawBytes=new TextEncoder().encode(raw);if(rawBytes.length>524288)throw Error('View exceeds 512 KiB.');
+  if(artifactReference){
+   if(rawBytes.length!==artifactReference.size)throw Error('View size differs from the status pin.');
+   if(await reviewSha256(rawBytes)!==artifactReference.sha256)throw Error('View checksum differs from the status pin.');
+  }
   const packet=JSON.parse(raw);
   if(packet.schema!=='intent-flow-view-v1'||!Array.isArray(packet.flows))throw Error('Unsupported view schema.');
   if(LIVE&&(packet.head_commit!==LIVE_SHA||packet.repository!==LIVE_REPO))throw Error('Artifact repository/head differs from this pipeline run.');
@@ -47,7 +66,7 @@ function customerGraph(packet,graph){
   const summaryRef=packet.objective_summary_artifact;
   if(summaryRef){
    try{
-    const url=new URL(summaryRef.url,artifactURL);if(url.origin!==location.origin)throw Error('Use a same-origin summary.');
+    const url=new URL(summaryRef.url,artifactURL);if(!trustedArtifactURL(url))throw Error('Use a trusted summary.');
     const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw Error('Summary unavailable.');
     const bytes=await r.arrayBuffer();if(bytes.byteLength>262144)throw Error('Summary exceeds 256 KiB.');
     const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
@@ -61,7 +80,7 @@ function customerGraph(packet,graph){
   const mappingRef=packet.governed_objectives?.holon_map_artifact;
   if(mappingRef){
    const mappingURL=new URL(mappingRef.url,artifactURL);
-   if(mappingURL.origin!==location.origin)throw Error('Use a same-origin governance mapping.');
+   if(!trustedArtifactURL(mappingURL))throw Error('Use a trusted governance mapping.');
    const result=await fetch(mappingURL,{cache:'no-store'});
    if(!result.ok)throw Error('Governance mapping unavailable: '+result.status);
    const bytes=await result.arrayBuffer();
@@ -75,7 +94,7 @@ function customerGraph(packet,graph){
   const impactRef=packet.intent_impact_artifact;
   if(impactRef){
    const url=new URL(impactRef.url,artifactURL);
-   if(url.origin!==location.origin)throw Error('Use a same-origin intent impact view.');
+   if(!trustedArtifactURL(url))throw Error('Use a trusted intent impact view.');
    const result=await fetch(url,{cache:'no-store'});if(!result.ok)throw Error('Intent impact view unavailable.');
    const bytes=await result.arrayBuffer();if(bytes.byteLength>262144)throw Error('Intent impact view exceeds 256 KiB.');
    const digest=await reviewSha256(bytes);
@@ -85,7 +104,7 @@ function customerGraph(packet,graph){
   const terrainRef=packet.governed_objectives?.territory_artifact;
   if(terrainRef){
    const url=new URL(terrainRef.url,artifactURL);
-   if(url.origin!==location.origin)throw Error('Use a same-origin objective terrain.');
+   if(!trustedArtifactURL(url))throw Error('Use a trusted objective terrain.');
    const result=await fetch(url,{cache:'no-store'});if(!result.ok)throw Error('Objective terrain unavailable.');
    const bytes=await result.arrayBuffer();if(bytes.byteLength>262144)throw Error('Objective terrain exceeds 256 KiB.');
    const digest=await reviewSha256(bytes);
@@ -97,7 +116,7 @@ function customerGraph(packet,graph){
   const candidateRef=packet.governed_objectives?.candidate_impact_artifact;
   if(candidateRef){
    const url=new URL(candidateRef.url,artifactURL);
-   if(url.origin!==location.origin)throw Error('Use a same-origin candidate-impact view.');
+   if(!trustedArtifactURL(url))throw Error('Use a trusted candidate-impact view.');
    const result=await fetch(url,{cache:'no-store'});if(!result.ok)throw Error('Candidate-impact view unavailable.');
    const bytes=await result.arrayBuffer();if(bytes.byteLength>262144)throw Error('Candidate-impact view exceeds 256 KiB.');
    const digest=await reviewSha256(bytes);if(digest!==candidateRef.sha256)throw Error('Candidate-impact checksum mismatch.');
@@ -108,7 +127,7 @@ function customerGraph(packet,graph){
   const workflowRef=packet.governed_objectives?.customer_workflow_artifact;
   if(workflowRef){
    const url=new URL(workflowRef.url,artifactURL);
-   if(url.origin!==location.origin)throw Error('Use a same-origin customer-workflow view.');
+   if(!trustedArtifactURL(url))throw Error('Use a trusted customer-workflow view.');
    const result=await fetch(url,{cache:'no-store'});if(!result.ok)throw Error('Customer-workflow view unavailable.');
    const bytes=await result.arrayBuffer();if(bytes.byteLength>262144)throw Error('Customer-workflow view exceeds 256 KiB.');
    const digest=await reviewSha256(bytes);if(digest!==workflowRef.sha256)throw Error('Customer-workflow checksum mismatch.');
@@ -311,7 +330,7 @@ function customerGraph(packet,graph){
   let patchPromise;
   const loadPatch=()=>patchPromise||(patchPromise=(async()=>{
    if(!packet.source_diff?.url)return null;
-   const url=new URL(packet.source_diff.url,artifactURL);if(url.origin!==location.origin)throw Error('Source artifact must be same origin.');
+   const url=new URL(packet.source_diff.url,artifactURL);if(!trustedArtifactURL(url))throw Error('Source artifact must use a trusted origin.');
    const r=await fetch(url);if(!r.ok)throw Error('Source patch unavailable: '+r.status);
    const raw=await r.arrayBuffer();if(raw.byteLength>262144)throw Error('Source patch exceeds 256 KiB.');
    if(packet.source_diff.sha256){const actual=await reviewSha256(raw);if(actual!==packet.source_diff.sha256)throw Error('Source patch digest differs from the generated artifact.');}
@@ -329,13 +348,14 @@ function customerGraph(packet,graph){
   }
   window.groundedReviewData=packet.governance_review;
   entries.push(...groundedReviewEntries(packet.governance_review,qs.get('run_id')));
-  const options={scope:'generated-packet:'+String(qs.get('run_id')||packet.head_commit),lanes:true,entries,title:'Review findings',description:'Navigate check findings, intent changes, and source evidence.',baseline:packet.baseline_commit,head:packet.head_commit,freshness:LIVE?'Pinned PR head · attached to this local run':'Replay snapshot · current head not connected',qualification:LIVE?'Real backend artifacts and Lambda status from a local PR simulation. GitHub freshness and merge enforcement are not supplied.':'Generated from pipeline output. Current repository head and CI enforcement are not supplied.',sourceDetails};
+  const localRun=qs.get('local')==='1';
+  const options={scope:'generated-packet:'+String(qs.get('run_id')||packet.head_commit),lanes:true,entries,title:'Review findings',description:'Navigate check findings, intent changes, and source evidence.',baseline:packet.baseline_commit,head:packet.head_commit,freshness:LIVE?(localRun?'Pinned PR head · attached to this local run':'Pinned PR head · published by the deployed pipeline'):'Replay snapshot · current head not connected',qualification:LIVE?(localRun?'Real backend artifacts and Lambda status from a local PR simulation. GitHub freshness and merge enforcement are not supplied.':'Digest-verified artifact from the deployed Lambda status API for this repository and head.'):'Generated from pipeline output. Current repository head and CI enforcement are not supplied.',sourceDetails};
   document.querySelector('.layout').classList.add('packet-layout');
-  document.querySelector('.demo').textContent=LIVE?'LOCAL PR PIPELINE · Real backend artifacts and Lambda handlers. Responses are session-only; no GitHub publication or merge enforcement.':'GENERATED PIPELINE DATA · Recorded FTGO replay. Responses are session-only; missing check results stay explicit.';
+  document.querySelector('.demo').textContent=LIVE?(localRun?'LOCAL PR PIPELINE · Real backend artifacts and Lambda handlers. Responses are session-only; no GitHub publication or merge enforcement.':'LIVE CODEINTENT REVIEW · Digest-verified artifacts from the deployed pipeline. Responses are session-only.'):'GENERATED PIPELINE DATA · Recorded FTGO replay. Responses are session-only; missing check results stay explicit.';
   document.querySelector('h1').textContent='FTGO intent review'+(LIVE_PR?' · PR #'+LIVE_PR:'');
   document.querySelector('.meta').textContent=`${String(packet.baseline_commit||'Unknown baseline').slice(0,12)} → ${String(packet.head_commit||'Unknown candidate').slice(0,12)}`;
   const outcome=LIVE?({VIOLATION:'Blocked',UNKNOWN:'Incomplete',PASS:'Ready to merge'}[liveDoc?.verdict]||'Analysis in progress'):entries.some(e=>e.status==='action')?'Action needed':entries.some(e=>e.status==='gap')?'Evidence needed':'No review action identified';
-  document.querySelector('.right').innerHTML=`<div class="card packet-outcome"><h3>Outcome</h3><b id="packet-run-state">${esc(outcome)}</b><p>${LIVE?'Same decision as the Governance decision summary. No merge enforcement in this local run.':'Recorded analysis outcome. CI enforcement status was not supplied.'}</p><details><summary>Run provenance</summary><p>Backend result: ${esc(packet.backend_verdict||'Unknown')}</p><pre>${json(packet.provenance)}</pre><p>${esc(typeof packet.qualification==='string'?packet.qualification:JSON.stringify(packet.qualification))}</p></details></div>`;
+  document.querySelector('.right').innerHTML=`<div class="card packet-outcome"><h3>Outcome</h3><b id="packet-run-state">${esc(outcome)}</b><p>${LIVE?(localRun?'Same decision as the Governance decision summary. No merge enforcement in this local run.':'Same decision and exact head identity as the deployed governance check.'):'Recorded analysis outcome. CI enforcement status was not supplied.'}</p><details><summary>Run provenance</summary><p>Backend result: ${esc(packet.backend_verdict||'Unknown')}</p><pre>${json(packet.provenance)}</pre><p>${esc(typeof packet.qualification==='string'?packet.qualification:JSON.stringify(packet.qualification))}</p></details></div>`;
   document.querySelector('footer').textContent='Generated review presentation · responses remain session-only';
   const detailNotice=detailWarnings.map(message=>`<p class="empty">${esc(message)}</p>`).join('');
   let ledgerHistory=null,ledgerHistoryLoading=false,ledgerHistoryError='';
@@ -375,7 +395,7 @@ function customerGraph(packet,graph){
    sidebar.innerHTML=`<p class="eyebrow">Change walkthrough</p><button class="side-item ${file==='all'?'selected':''}" data-file="all">Overview (${entries.length})</button>${entries.map(e=>`<button class="side-item ${file===e.region?'selected':''}" data-file="${esc(e.region)}" style="overflow-wrap:anywhere">${esc(e.title)}<small>${esc(e.source.label?.split('/').pop())}</small></button>`).join('')}`;
    document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
    document.querySelector('#nav-count').textContent=entries.filter(e=>e.status==='action'&&!reviewState(options.scope).responses.has(e.id)).length+(window.reviewActionCounts?reviewActionCounts(liveDoc).total:0);
-   document.querySelector('[data-view="checks"] .count').textContent=LIVE?'local':'packet';
+   document.querySelector('[data-view="checks"] .count').textContent=LIVE?(localRun?'local':'live'):'packet';
    if(LIVE)document.querySelector('#packet-run-state').textContent=({VIOLATION:'Blocked',UNKNOWN:'Incomplete',PASS:'Ready to merge'}[liveDoc?.verdict]||'Analysis in progress');
    if(view==='checks')content.innerHTML=detailNotice+(LIVE&&liveDoc?.state!=='completed'?'':objectiveSummaryMarkup(objectiveSummary,packet))+(LIVE?liveChecks():`<article class="card"><div class="body"><h2>Checks & review prompts</h2><p>This artifact supplies intent episodes, not the CI check manifest. Missing check results are not passes. Episode findings are available in Review.</p>${gates.map(g=>`<div class="gate"><span class="icon warn">◉</span><div style="flex:1"><strong>${esc(g[1])}</strong><small>${esc(g[2])}<br>Dependency: ${esc(g[3]||'none')}</small></div><span class="pill">Not supplied</span></div>`).join('')}</div></article>`);
    else if(view==='governance'){if(window.requestedGovernedWorkflow){reviewState(options.scope).governedArea=window.requestedGovernedWorkflow;window.requestedGovernedWorkflow=null;}content.innerHTML=detailNotice+governedObjectivesMarkup(packet,options);if(window.renderGovernedMethodSource)renderGovernedMethodSource(content,loadPatch);}
