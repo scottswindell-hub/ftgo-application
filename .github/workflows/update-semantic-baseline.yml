@@ -1,0 +1,87 @@
+name: Update semantic baseline
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        options: [prepare, publish]
+        default: prepare
+        required: true
+      pull_request:
+        description: PR number targeting master
+        type: string
+        required: true
+      obligation_changes:
+        description: Optional JSON array of obligation_id, statement, rationale amendments to review with the candidate
+        type: string
+        default: '[]'
+  pull_request_target:
+    types: [closed]
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: semantic-baseline-${{ github.event.pull_request.number || inputs.pull_request }}
+  cancel-in-progress: false
+jobs:
+  update:
+    if: github.ref == 'refs/heads/master' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.merged)
+    environment: baseline-maintenance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      # No checkout: PR sources are fetched and parsed by the trusted backend.
+      - name: Prepare or publish the exact semantic candidate
+        env:
+          BASELINE_API_URL: https://usks4zwyp4.execute-api.us-east-1.amazonaws.com/prod/baseline-maintenance
+          BASELINE_API_KEY: ${{ secrets.BASELINE_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pull_request }}
+          OPERATION: ${{ inputs.operation || 'publish' }}
+          OBLIGATION_CHANGES: ${{ inputs.obligation_changes || '[]' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import html, json, os, re, subprocess, time, urllib.parse, urllib.request
+          repo = os.environ['REPOSITORY']
+          number = os.environ['PR_NUMBER']
+          if not re.fullmatch('[1-9][0-9]{0,7}', number):
+              raise SystemExit('Supply a PR number')
+          url, key = os.environ['BASELINE_API_URL'], os.environ['BASELINE_API_KEY']
+          if not url.startswith('https://') or not key:
+              raise SystemExit('Configure the baseline-maintenance endpoint and secret')
+          operation = os.environ['OPERATION']
+          payload = {'repository': repo, 'operation': 'semantic_' + operation, 'pull_request': int(number)}
+          if operation == 'prepare':
+              pr = json.loads(subprocess.check_output(['gh', 'api', 'repos/' + repo + '/pulls/' + number]))
+              payload['commit'] = pr['head']['sha']
+              payload['obligation_changes'] = json.loads(os.environ['OBLIGATION_CHANGES'])
+          def call(method, body):
+              endpoint = url if method == 'POST' else url + '?' + urllib.parse.urlencode(body)
+              request = urllib.request.Request(endpoint, method=method,
+                  data=json.dumps(body).encode() if method == 'POST' else None,
+                  headers={'x-api-key': key, 'Content-Type': 'application/json'})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+          queued = call('POST', payload)
+          for attempt in range(60):
+              result = call('GET', {'repository': repo, 'operation': 'semantic_status', 'job': queued['job']})
+              if result['status'] in ('candidate_ready', 'published', 'skipped'):
+                  text = json.dumps(result, indent=2)
+                  print(text)
+                  with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+                      summary.write('<h2>Semantic baseline ' + result['status'] + '</h2>\n')
+                      if 'review_instruction' in result:
+                          summary.write('<p>' + html.escape(result['review_instruction']) + '</p>\n')
+                      summary.write('<pre>' + html.escape(text[:150000]) + '</pre>\n')
+                      if len(text) > 150000:
+                          summary.write('Full candidate evidence is in this job’s log.\n')
+                  break
+              if result['status'] == 'failed':
+                  raise SystemExit('Semantic baseline failed: ' + result.get('error', 'unknown'))
+              time.sleep(10)
+          else:
+              raise SystemExit('Timed out. Retry the same request; no unreviewed baseline is accepted.')
+          PY
