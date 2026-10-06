@@ -272,6 +272,15 @@ function selectRows(hunks,{mode,line,region,method}){
   }
   return null;
 }
+async function githubSourceLink(file,anchor){
+ const repo=typeof LIVE_REPO==='string'?LIVE_REPO:'',pr=typeof LIVE_PR!=='undefined'?String(LIVE_PR):'';
+ if(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)||!/^\d+$/.test(pr)||!file)return '';
+ const bytes=new TextEncoder().encode(file);
+ const hash=typeof reviewSha256==='function'?await reviewSha256(bytes):Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
+ const line=anchor&&Number.isInteger(anchor.line)&&anchor.line>0?(anchor.deleted?'L':'R')+anchor.line:'';
+ const href='https://github.com/'+repo+'/pull/'+pr+'/files#diff-'+hash+line;
+ return `<p class="ii-ah"><a href="${e(href)}" target="_blank" rel="noopener noreferrer">${line?'Open method’s changed line in GitHub PR diff':'Open file diff in GitHub PR'} ↗</a></p>`;
+}
 window.renderGovernedMethodSource=async function(root,loadPatch){
  const nodes=[...root.querySelectorAll('[data-governed-source-file]')];
  if(!nodes.length)return;
@@ -280,10 +289,12 @@ window.renderGovernedMethodSource=async function(root,loadPatch){
   const hunks=parseHunks(patch,node.dataset.governedSourceFile);
   const anchors=JSON.parse(node.dataset.sourceAnchors||'[]');
   const matched=hunks.filter(rows=>anchors.some(a=>rows.some(r=>a.deleted?r.k==='-'&&r.o===a.line:r.k==='+'&&r.n===a.line)));
+  const link=await githubSourceLink(node.dataset.governedSourceFile,anchors.find(a=>hunks.some(rows=>rows.some(r=>a.deleted?r.k==='-'&&r.o===a.line:r.k==='+'&&r.n===a.line))));
   if(!hunks.length){node.innerHTML='<p class="note">No source changes for this file are present in the recorded patch.</p>';continue;}
   const rowsMarkup=rows=>rows.map(r=>`<div class="ii-dl ${r.k==='+'?'add':r.k==='-'?'del':''}"><span class="n">${r.o??''}</span><span class="n">${r.n??''}</span><span class="m">${r.k.trim()}</span><span class="t">${e(r.t)||' '}</span></div>`).join('');
   node.innerHTML=matched.length?'<p class="note">Patch hunks containing this method’s recorded changed lines. Surrounding context may include adjacent methods.</p>'+matched.map(rowsMarkup).join('<hr>'):'<p class="note">An exact changed-line anchor is unavailable for this method.</p>';
   node.innerHTML+=`<details${matched.length?'':' open'}><summary>Full file diff${matched.length?'':' (not method-specific)'}</summary>${hunks.map(rowsMarkup).join('<hr>')}</details>`;
+  node.innerHTML=link+node.innerHTML;
  }
 };
 window.renderIntentImpact=async function(root,loadPatch){
@@ -295,7 +306,8 @@ window.renderIntentImpact=async function(root,loadPatch){
       const sourceLabel=`<p class="ii-ah"><b>File:</b> <code style="overflow-wrap:anywhere">${e(d.file)}</code><br><b>Selected method:</b> <code style="overflow-wrap:anywhere">${e(d.method||'Not recorded')}</code></p>`;
       node.innerHTML=found?found.rows.map((r,i)=>`<div class="ii-dl ${r.k==='+'?'add':r.k==='-'?'del':''}${found.hits.has(i)?' hit':''}"><span class="n">${r.n??''}</span><span class="m">${r.k.trim()}</span><span class="t">${e(r.t)||' '}</span></div>`).join('')
         :hunks.length?'<p class="note">Exact method anchor unavailable. Showing the recorded file diff (not method-specific).</p>'+hunks.map(rows=>rows.map(r=>`<div class="ii-dl ${r.k==='+'?'add':r.k==='-'?'del':''}"><span class="n">${r.o??''}</span><span class="n">${r.n??''}</span><span class="m">${r.k.trim()}</span><span class="t">${e(r.t)||' '}</span></div>`).join('')).join('<hr>'):'<p class="note">This file has no changes in the recorded patch; it may be affected context rather than directly edited source.</p>';
-      node.innerHTML=sourceLabel+node.innerHTML;
+      const anchor=hunks.flat().find(r=>(d.mode==='deleted'||d.mode==='old')?r.k==='-'&&r.o===Number(d.line):r.k==='+'&&r.n===Number(d.line));
+      node.innerHTML=sourceLabel+await githubSourceLink(d.file,anchor?{line:anchor.k==='-'?anchor.o:anchor.n,deleted:anchor.k==='-'}:null)+node.innerHTML;
     }
   }
   renderReviewOutline(root);
