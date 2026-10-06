@@ -1,0 +1,61 @@
+name: Update baseline
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full merged master commit (blank uses the triggering master revision)
+        type: string
+        required: false
+  push:
+    branches: [master]
+    paths: ['.github/workflows/*.yml', '.github/workflows/*.yaml']
+permissions:
+  contents: read
+concurrency:
+  group: baseline-maintenance
+  cancel-in-progress: false
+jobs:
+  update:
+    if: github.ref == 'refs/heads/master'
+    environment: baseline-maintenance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Request and verify baseline publication
+        env:
+          BASELINE_API_URL: https://usks4zwyp4.execute-api.us-east-1.amazonaws.com/prod/baseline-maintenance
+          BASELINE_API_KEY: ${{ secrets.BASELINE_API_KEY }}
+          REPOSITORY: ${{ github.repository }}
+          TARGET_COMMIT: ${{ inputs.commit || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re, time, urllib.parse, urllib.request
+          url = os.environ['BASELINE_API_URL']
+          key = os.environ['BASELINE_API_KEY']
+          target = os.environ['TARGET_COMMIT']
+          if not re.fullmatch('[0-9a-f]{40}', target) or not key or not url.startswith('https://'):
+              raise SystemExit('Configure the baseline-maintenance environment and supply a full commit SHA')
+          payload = {'repository': os.environ['REPOSITORY'], 'commit': target}
+          def call(method):
+              endpoint = url if method == 'POST' else url + '?' + urllib.parse.urlencode(payload)
+              request = urllib.request.Request(endpoint,
+                  data=json.dumps(payload).encode() if method == 'POST' else None,
+                  headers={'x-api-key': key, 'Content-Type': 'application/json'}, method=method)
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+          call('POST')
+          for attempt in range(60):
+              result = call('GET')
+              if result['status'] in ('published', 'already_bundled'):
+                  print(json.dumps(result, indent=2))
+                  with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+                      summary.write('Baseline available for `' + target + '`\n')
+                  break
+              if result['status'] == 'failed':
+                  raise SystemExit('Baseline publication failed: ' + result.get('error', 'unknown error'))
+              time.sleep(10)
+          else:
+              raise SystemExit('Publication timed out; retry the same commit to check or resume it')
+          PY
