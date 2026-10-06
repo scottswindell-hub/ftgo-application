@@ -102,6 +102,7 @@
 
 /* Make the semantic explanation the first visual stop, above the action rows. */
 .workflow-impact-method.source_changed .workflow-method-dot{fill:#bc4c00;stroke:#803000}.workflow-impact-method.source_changed .workflow-pr-intersection-pulse{stroke:#bc4c00}.territory-legend .workflow-source-key{background:#bc4c00;border-color:#803000}
+.workflow-impact-method.added .workflow-method-dot{fill:#008678;stroke:#004c44;stroke-width:1.5}.workflow-impact-method.added .workflow-pr-intersection-pulse{stroke:#008678}.candidate-method-key{color:#008678;font-weight:600}
 .objective-summary.card{border-top:3px solid var(--purple)}
 .objective-summary .ask-intent-lead{margin:16px 0 20px;padding:16px 18px;border-left:3px solid var(--purple);border-radius:0 6px 6px 0;background:color-mix(in srgb,var(--purple) 10%,var(--panel));color:var(--ink);font-size:16px;font-weight:500;line-height:1.65}
 

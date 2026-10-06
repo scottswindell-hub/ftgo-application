@@ -189,21 +189,40 @@ function terrainSourceChanges(packet,terrain){
  const rows=new Map((terrain.methods||[]).map(row=>[row[0],row]));
  for(const flow of packet?.flows||[]){
   if(!['source_changed','added','removed'].includes(flow.change_kind))continue;
+  if(flow.change_kind==='added'&&rows.has('candidate:'+flow.id)){
+   mapped.set('candidate:'+flow.id,flow);continue;
+  }
   const ids=new Set([...(flow.observed_deltas||[]).filter(d=>d.kind==='method_capsule').map(d=>d.unit_id),...(flow.potential_impact||[]).filter(d=>d.kind==='method_capsule').map(d=>d.id)]);
   const matches=[...ids].filter(id=>rows.has(id)&&terrain.files?.[rows.get(id)[1]]===flow.source?.file);
   if(matches.length===1)mapped.set(matches[0],flow);else unmapped.push(flow);
  }
  return {mapped,unmapped};
 }
+function candidateMethodTerrain(terrain,packet){
+ if(!terrain)return terrain;
+ const t={...terrain,methods:[...terrain.methods],files:[...(terrain.files||[])],services:[...terrain.services]};
+ const additions=[...new Map((packet?.flows||[]).filter(f=>f.change_kind==='added'&&f.id&&f.method&&f.source?.file).map(f=>[f.source.file+'::'+f.method,f])).values()].sort((a,b)=>(a.source.file+'::'+a.method).localeCompare(b.source.file+'::'+b.method));
+ for(const [index,flow] of additions.entries()){
+  const id='candidate:'+flow.id;
+  if(t.methods.some(row=>row[0]===id))continue;
+  let file=t.files.indexOf(flow.source.file);if(file<0){file=t.files.length;t.files.push(flow.source.file);}
+  // Keep baseline points and memberships untouched. Candidate dots occupy an outer ring.
+  let service=t.services.findIndex(s=>s[0]==='candidate-unmapped');
+  if(service<0){service=t.services.length;t.services.push(['candidate-unmapped','Added in this PR (not baseline-mapped)']);}
+  const angle=2*Math.PI*index/Math.max(1,additions.length)-Math.PI/2;
+  t.methods.push([id,file,flow.method,service,360+345*Math.cos(angle),285+268*Math.sin(angle),0,0]);
+ }
+ return t;
+}
 function workflowMethodImpactMarkup(doc,selected,workflows,state){
- const t=doc.territory,map=doc.holon_map;
+ const t=candidateMethodTerrain(doc.territory,doc.source_packet),map=doc.holon_map;
  if(!t||!map)return '<p class="note">This evidence package does not include the method terrain and holon mappings.</p>';
  const methods=new Map(map.methods.map(row=>[row.id,row]));
  const sourceChanges=terrainSourceChanges(doc.source_packet,t);
  for(const [id,flow] of sourceChanges.mapped)if(!methods.has(id))methods.set(id,{id,method:flow.method,file:flow.source.file});
  const servicePoints=t.services.map((service,index)=>t.methods.filter(row=>row[3]===index).map(row=>[row[4],row[5]]));
  const architectureServices=new Set((doc.architecture||[]).flatMap(row=>row.anchors||[]));
- const contours=servicePoints.map((points,index)=>points.length>2?`<polygon points="${territoryHull(points).map(point=>point.join(',')).join(' ')}" class="territory-service ${architectureServices.has(t.services[index][0])?'governed':''}"/>`:'').join('');
+ const contours=servicePoints.map((points,index)=>points.length>2&&t.services[index][0]!=='candidate-unmapped'?`<polygon points="${territoryHull(points).map(point=>point.join(',')).join(' ')}" class="territory-service ${architectureServices.has(t.services[index][0])?'governed':''}"/>`:'').join('');
  const labels=servicePoints.map((points,index)=>{if(!points.length)return '';const x=points.reduce((sum,row)=>sum+row[0],0)/points.length,y=points.reduce((sum,row)=>sum+row[1],0)/points.length;return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" class="territory-service-label">${esc(t.services[index][1].replace(/^ftgo-/,''))}</text>`;}).join('');
  const evidenceRows=[];
  for(const workflow of workflows)for(const obligation of workflow.obligations)for(const evidence of obligation.evidence||[])evidenceRows.push({...evidence,workflow,obligation});
@@ -235,12 +254,12 @@ function workflowMethodImpactMarkup(doc,selected,workflows,state){
  }));
  const selectedWorkflowMethods=new Set(selected.obligations.flatMap(row=>(row.evidence||[]).filter(item=>item.classification!=='unaffected').map(item=>item.method_id)));
  const methodDots=t.methods.map((row,index)=>{
-  const rows=byMethod.get(row[0])||[],impact=rows.some(item=>['exact_fact_change','changed_witness_method'].includes(item.classification))?strongest(rows):sourceChanges.mapped.has(row[0])?'source_changed':rows.length?strongest(rows):'stable',selectedMethod=state.governedMethod===row[0],workflowFocus=selectedWorkflowMethods.has(row[0]),directPr=directMethodIds.has(row[0]);
+  const rows=byMethod.get(row[0])||[],impact=sourceChanges.mapped.get(row[0])?.change_kind==='added'?'added':rows.some(item=>['exact_fact_change','changed_witness_method'].includes(item.classification))?strongest(rows):sourceChanges.mapped.has(row[0])?'source_changed':rows.length?strongest(rows):'stable',selectedMethod=state.governedMethod===row[0],workflowFocus=selectedWorkflowMethods.has(row[0]),directPr=directMethodIds.has(row[0]);
   const workflowNames=[...new Set(rows.map(item=>item.workflow.name))];
   const title=`${row[2]}${rows.length?' · '+impact.replaceAll('_',' ')+' · affected workflows: '+workflowNames.join(', '):' · no workflow-bound PR impact'}`;
   const signature=terrainMethodSignature(row,methods.get(row[0]),t.argument_types),memberships=holonsByMethodIndex.get(index)||[];
   return `<g class="workflow-impact-method ${esc(impact)}${directPr?' direct-pr-intersection':''} ${groupedMethodIndices.has(index)?'has-holon':'ungrouped'} ${selectedMethod?'selected':''} ${workflowFocus?'workflow-focus':''}" data-method-id="${esc(row[0])}" data-method-label="${esc(signature.name)}" data-holon-ids="${esc(memberships.join(' '))}" data-related-workflow-ids="${esc(workflowNames.map(name=>rows.find(item=>item.workflow.name===name)?.workflow.id).filter(Boolean).join(' '))}" data-related-workflow-names="${esc(workflowNames.join(' | '))}" data-governed-method="${esc(row[0])}" tabindex="0" role="button" aria-label="${esc(signature.name)}, ${memberships.length} flow holon membership${memberships.length===1?'':'s'}${directPr?', direct PR intersection':''}"><title>${esc(signature.name)} · ${memberships.length} flow holon membership${memberships.length===1?'':'s'}${directPr?' · direct PR intersection':''}${rows.length?' · '+title.split(' · ').slice(1).join(' · '):''}</title><circle class="workflow-method-hit" cx="${row[4]}" cy="${row[5]}" r="7"/>${directPr?`<circle class="workflow-pr-intersection-pulse" cx="${row[4]}" cy="${row[5]}" r="6.5"/>`:''}<circle class="workflow-method-dot" cx="${row[4]}" cy="${row[5]}" r="2"/></g>`;
- }).join('');
+ }).join('')+(t.methods.length>doc.territory.methods.length?`<text x="12" y="14" class="candidate-method-key">Teal outer ring: ${t.methods.length-doc.territory.methods.length} added methods · candidate only</text>`:'');
  const membershipRings=nativeHolons.map(holon=>{const description=holonDescriptions.get(holon.id);return `<g data-holon-description-id="${esc(holon.id)}" data-holon-label="${esc(description.label)}"><title>${esc(description.label)} · ${esc(holon.id)}</title>${holon.indices.map(index=>{const method=t.methods[index];return `<circle class="workflow-method-holon-ring" data-holon-membership="${esc(holon.id)}" data-member-method="${esc(method[0])}" cx="${method[4]}" cy="${method[5]}" r="4"/>`;}).join('')}</g>`;}).join('');
  const selectedWorkflowHolons=new Set(evidenceRows.filter(row=>row.workflow.id===selected.id).flatMap(row=>row.intent_region_ids||[]));
  const orderedHolons=[...nativeHolons].sort((left,right)=>{const a=holonDescriptions.get(left.id).label,b=holonDescriptions.get(right.id).label;return a<b?-1:a>b?1:left.id<right.id?-1:1;});
@@ -269,7 +288,7 @@ function workflowMethodImpactMarkup(doc,selected,workflows,state){
  const selectedMemberships=selectedTerrainIndex===undefined?[]:(holonsByMethodIndex.get(selectedTerrainIndex)||[]);
  const selectedHolonDescription=selectedHolon?holonDescriptions.get(selectedHolon.id):null;
  const selectedMethodDirect=Boolean(state.governedMethod&&directMethodIds.has(state.governedMethod));
- const selectedMethodImpact=sourceChanges.mapped.has(state.governedMethod)&&!selectedRows.some(row=>['exact_fact_change','changed_witness_method'].includes(row.classification))?'source_changed':selectedRows.length?strongest(selectedRows):'stable';
+ const selectedMethodImpact=sourceChanges.mapped.get(state.governedMethod)?.change_kind==='added'?'Added in this PR — not accepted baseline content':sourceChanges.mapped.has(state.governedMethod)&&!selectedRows.some(row=>['exact_fact_change','changed_witness_method'].includes(row.classification))?'source_changed':selectedRows.length?strongest(selectedRows):'stable';
  const selectedFile=selectedTerrainMethod?(t.files?.[selectedTerrainMethod[1]]||methods.get(state.governedMethod)?.file||'Source file unavailable'):'';
  const relatedWorkflowMarkup=relatedWorkflows.length?relatedWorkflows.map(workflow=>{const rows=selectedBindingRows.filter(row=>row.workflow.id===workflow.id),changed=rows.some(row=>row.classification!=='unaffected');return `<button data-governed-area="${esc(workflow.id)}" class="${workflow.id===selected.id?'selected':''}"><span>${esc((doc.customer_workflows.workflow_sets||[]).find(set=>set.id===workflow.set_id)?.name||workflow.set_id)}</span><b>${esc(workflow.name)}</b><small>${rows.length} bound candidate${rows.length===1?'':'s'} · ${changed?'affected by this PR':'stable in this PR'}</small></button>`;}).join(''):'<p class="note">No baseline workflow evidence is bound here.</p>';
  const affectedMarkup=selectedAffectedRows.length?`<div class="holon-method-evidence">${selectedAffectedRows.map(row=>`<article><span class="pill ${row.classification==='exact_fact_change'?'red':'amber'}">${esc(row.classification.replaceAll('_',' '))}</span><b>${esc(row.workflow.name)} → ${esc(row.obligation.statement)}</b><div class="workflow-fact-delta"><span class="${row.replacement_parameters.length?'fact-before':''}">${row.replacement_parameters.length?'− ':''}${esc(workflowFactExpression(row.form,row.baseline_parameters))}</span>${row.replacement_parameters.map(value=>`<span class="fact-after">+ ${esc(workflowFactExpression(row.form,value))}</span>`).join('')}</div><small>${esc(row.source.path)}:${esc(row.source.line||'—')}</small></article>`).join('')}</div>`:'<p class="note">None of the bound workflow evidence is affected by this PR.</p>';
