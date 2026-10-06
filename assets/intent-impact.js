@@ -283,7 +283,7 @@ window.renderGovernedMethodSource=async function(root,loadPatch){
   if(!hunks.length){node.innerHTML='<p class="note">No source changes for this file are present in the recorded patch.</p>';continue;}
   const rowsMarkup=rows=>rows.map(r=>`<div class="ii-dl ${r.k==='+'?'add':r.k==='-'?'del':''}"><span class="n">${r.o??''}</span><span class="n">${r.n??''}</span><span class="m">${r.k.trim()}</span><span class="t">${e(r.t)||' '}</span></div>`).join('');
   node.innerHTML=matched.length?'<p class="note">Patch hunks containing this method’s recorded changed lines. Surrounding context may include adjacent methods.</p>'+matched.map(rowsMarkup).join('<hr>'):'<p class="note">An exact changed-line anchor is unavailable for this method.</p>';
-  node.innerHTML+=`<details><summary>Full file diff${matched.length?'':' (not method-specific)'}</summary>${hunks.map(rowsMarkup).join('<hr>')}</details>`;
+  node.innerHTML+=`<details${matched.length?'':' open'}><summary>Full file diff${matched.length?'':' (not method-specific)'}</summary>${hunks.map(rowsMarkup).join('<hr>')}</details>`;
  }
 };
 window.renderIntentImpact=async function(root,loadPatch){
@@ -291,9 +291,9 @@ window.renderIntentImpact=async function(root,loadPatch){
   if(nodes.length){
     let patch;try{patch=await loadPatch();}catch(err){nodes.forEach(n=>n.innerHTML=`<p class="note">${e(err.message)}</p>`);patch=null;}
     if(patch!==null)for(const node of nodes){
-      const d=node.dataset,found=selectRows(parseHunks(patch,d.file),{mode:d.mode,line:Number(d.line)||null,region:d.region,method:d.method});
+      const d=node.dataset,hunks=parseHunks(patch,d.file),found=selectRows(hunks,{mode:d.mode,line:Number(d.line)||null,region:d.region,method:d.method});
       node.innerHTML=found?found.rows.map((r,i)=>`<div class="ii-dl ${r.k==='+'?'add':r.k==='-'?'del':''}${found.hits.has(i)?' hit':''}"><span class="n">${r.n??''}</span><span class="m">${r.k.trim()}</span><span class="t">${e(r.t)||' '}</span></div>`).join('')
-        :'<p class="note">These lines are not part of the recorded patch.</p>';
+        :hunks.length?'<p class="note">Exact method anchor unavailable. Showing the recorded file diff (not method-specific).</p>'+hunks.map(rows=>rows.map(r=>`<div class="ii-dl ${r.k==='+'?'add':r.k==='-'?'del':''}"><span class="n">${r.o??''}</span><span class="n">${r.n??''}</span><span class="m">${r.k.trim()}</span><span class="t">${e(r.t)||' '}</span></div>`).join('')).join('<hr>'):'<p class="note">This file has no changes in the recorded patch; it may be affected context rather than directly edited source.</p>';
     }
   }
   renderReviewOutline(root);
