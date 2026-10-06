@@ -70,12 +70,15 @@ jobs:
 
           # A rerun of this exact workflow can finish an authorized review without
           # running detectors or acquiring judgments again. The report link is read-only.
+          # Unless an owner withdrew a finding since (recheck_requested, set by the
+          # webhook receiver): then the checks run again so the withdrawal counts.
           if [ "${GITHUB_RUN_ATTEMPT:-1}" -gt 1 ]; then
             prior=$(curl -fsS --get "$STATUS_API_URL" \
               --data-urlencode "sha=$PR_SHA" --data-urlencode "repo=$PR_FULL_REPO" || true)
             if printf '%s' "$prior" | jq -e --arg sha "$PR_SHA" \
                  '.state == "completed" and .pipeline == "typesafe-checks-v1" and
-                  .sha == $sha and (.governance_run_id | type == "string" and length > 0)' >/dev/null; then
+                  .sha == $sha and (.governance_run_id | type == "string" and length > 0) and
+                  (.recheck_requested | not)' >/dev/null; then
               echo "Resuming acceptance for the completed run; checks will not rerun."
               exit 0
             fi
@@ -240,7 +243,9 @@ jobs:
               # they are listed so the author can respond.
               findings=$(jq -r '.checks[]? | select(.id == "coding_standards") | .findings[]? |
                 "- **\(if .band == "finding" then "Finding" else "FYI" end)** [\(.severity)\(if (.category // "") == "" then "" elif (.category_parent // "") == "" then " · \(.category)" else " · \(.category_parent) › \(.category)" end)] \(.rule_id) v\(.rule_version) \(.name): `\(.file):\(.line)` \(.unit)" +
-                (if .guidance != "" then "\n  Suggested fix: \(.guidance)" else "" end)' <<<"$document")
+                (if .guidance != "" then "\n  Suggested fix: \(.guidance)" else "" end) +
+                (if .ref and $recorded then "\n  Disagree? Comment `/reject \(.ref) -- reason` on the PR." else "" end)' \
+                --argjson recorded "$(jq '(.governance_run_id // "") != ""' <<<"$document")" <<<"$document")
               if [ -n "$findings" ]; then
                 printf '%s\n' "$findings"
                 {
@@ -249,6 +254,19 @@ jobs:
                   echo "Findings ask for a response (fix, intended, or false alarm); FYIs need none. They never block the merge on their own."
                   echo
                   printf '%s\n' "$findings"
+                  echo
+                } >> "$GITHUB_STEP_SUMMARY"
+              fi
+              # Any other check's findings, including a failed check's own verdict, can be rejected too.
+              others=$(jq -r 'select((.governance_run_id // "") != "") | .checks[]? | select(.id != "coding_standards") | . as $check | .findings[]? | select(.ref) |
+                "- **\($check.label // $check.id)**: \(.name // .title // .observation // "finding") — reject with `/reject \(.ref) -- reason`"' <<<"$document")
+              if [ -n "$others" ]; then
+                {
+                  echo "### Disagree with a result?"
+                  echo
+                  echo "Comment the line on the PR with your reason. The finding's owner withdraws or upholds it; until then it still counts."
+                  echo
+                  printf '%s\n' "$others"
                   echo
                 } >> "$GITHUB_STEP_SUMMARY"
               fi
@@ -264,6 +282,20 @@ jobs:
 
           def inline(value):
               return str(value or '').replace('\n',' ').replace('|','\\|').replace('<','&lt;').replace('>','&gt;')[:300]
+
+
+          def finding_lines(check, limit=10):
+              """One line per published finding, with the reference a reviewer quotes to reject it."""
+              lines=[]
+              findings=[f for f in (check.get('findings') or [])+(check.get('withdrawn_findings') or []) if isinstance(f,dict) and f.get('ref')]
+              for finding in findings[:limit]:
+                  what=finding.get('rule_id') or finding.get('name') or finding.get('title') or finding.get('observation') or 'finding'
+                  where=f" at `{inline(finding['file'])}:{inline(finding.get('line'))}`" if finding.get('file') else ''
+                  status={'disputed':' (disputed)','withdrawn':' (withdrawn)'}.get(finding.get('dispute_status'),'')
+                  lines.append(f"  - `{finding['ref']}` {inline(what)}{where}{status}")
+              if len(findings)>limit:
+                  lines.append(f"  - …and {len(findings)-limit} more on the report")
+              return lines
 
 
           def render_run_comment(document, report_url):
@@ -284,9 +316,13 @@ jobs:
                   icon='➖' if check.get('id')=='coding_standards' and detail.startswith('No standards adopted') else ICONS.get(state,'➖')
                   suffix=' — response requested' if check.get('id')=='coding_standards' and check.get('findings') else ''
                   rows.append(f"- {icon} **{inline(check.get('label') or check['id'])}**: {inline(state)}{suffix}")
+                  # References and the reject command only when the run is recorded: otherwise a rejection cannot be.
+                  rows+=finding_lines(check) if document.get('governance_run_id') else []
               risks=(acceptance.get('intent_risks') or {}).get('assessments',[])
               if risks:
                   rows+=['',f"🟡 Intent outside governed objectives: {len(risks)} change(s); {len(acceptance.get('required_reviews',[]))} awaiting risk review."]
+              if document.get('governance_run_id') and any(finding_lines(check) for check in checks):
+                  rows+=['','Disagree with a result? Reply `/reject F-xxxxxxxx -- reason`. Its owner answers `/withdraw F-xxxxxxxx -- reason` or `/uphold F-xxxxxxxx -- reason`; until then it still counts.']
               rows+=['',f'[▶ Open the checks and review ↗]({report_url})']
               return '\n'.join(rows)+'\n'
 
