@@ -86,6 +86,7 @@ public class Order {
 
   public List<OrderDomainEvent> cancel() {
     switch (state) {
+      case APPROVAL_PENDING:
       case APPROVED:
         this.state = OrderState.CANCEL_PENDING;
         return emptyList();
@@ -208,4 +209,3 @@ public class Order {
     return consumerId;
   }
 }
-
