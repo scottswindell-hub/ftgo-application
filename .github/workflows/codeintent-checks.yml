@@ -305,12 +305,15 @@ jobs:
               verdict=document.get('verdict')
               acceptance=document.get('acceptance') or {}
               status=acceptance.get('status')
-              label={'ready':'✅ Ready','blocked':'❌ Blocked','review_required':'⚠️ Review required','incomplete':'⚠️ Assessment incomplete'}.get(status)
+              shadow=acceptance.get('mode')=='shadow'
+              # A shadow assessment is reported, never authoritative: the headline stays the checks' own result.
+              label=None if shadow else {'ready':'✅ Ready','blocked':'❌ Blocked','review_required':'⚠️ Review required','incomplete':'⚠️ Assessment incomplete'}.get(status)
               if not label:
                   label='⏳ Running' if document.get('state')!='completed' else '✅ Passed' if verdict=='PASS' else '❌ Failed' if verdict=='VIOLATION' else '⚠️ Assessment incomplete'
               rows=[MARKER,'### CodeIntent checks — '+label,'']
-              if acceptance.get('mode')=='shadow':
-                  rows+=['Shadow assessment; existing check conclusions remain authoritative.','']
+              if shadow:
+                  reason=f" ({inline(acceptance['reason'])})" if acceptance.get('reason') else ''
+                  rows+=[f"Governance acceptance (shadow, not enforced): {inline(status or 'not assessed')}{reason}. The checks below decide this PR.",'']
               for check in checks:
                   state=check.get('state','pending');detail=check.get('detail','')
                   icon='➖' if check.get('id')=='coding_standards' and detail.startswith('No standards adopted') else ICONS.get(state,'➖')
