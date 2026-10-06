@@ -26,7 +26,7 @@ function reviewResponseState(action) {
   if(governance[action])return governance[action];
   return action === 'fix-submitted' ? 'Fix submitted · awaiting analysis' : action === 'context-supplied' ? 'Context supplied · awaiting analysis' : action === 'dispute' ? 'Disputed · awaiting review' : action === 'request-changes' ? 'Changes requested · awaiting author' : 'Response recorded · awaiting owner';
 }
-function reviewEntryStatus(e) { return e.statusLabel||(e.status==='not_applicable'?'Not configured':e.status==='clear'?'No action needed':e.status==='gap'?'Evidence needed':'Action needed'); }
+function reviewEntryStatus(e) { return e.statusLabel||(e.status==='not_applicable'?'Not configured':e.status==='clear'?'No action needed':e.status==='gap'?'Missing review input':'Action needed'); }
 function reviewEntryActions(e) {
   if (e.status==='clear'||e.status==='not_applicable') return [];
   if(e.governanceDecision)return [['governance-existing','Request existing-rule mapping'],['governance-new','Request new governance'],['governance-none','Request ungoverned scope']];
@@ -80,7 +80,7 @@ function intentChangeMap(entries,options,state){
   ['gaps',{key:'gaps',area:'Evidence gaps',entries:[]}]
  ]);
  for(const entry of entries){
-  const key=entry.governanceDecision?'new':entry.story?'diffs':entry.category==='Evidence coverage'||entry.id==='intent-unresolved-call-group'||entry.statusLabel==='Evidence mapping needed'?'gaps':'related';
+  const key=entry.governanceDecision?'new':entry.story?'diffs':entry.category==='Evidence coverage'||entry.id==='intent-unresolved-call-group'||entry.statusLabel==='Production behavior link missing'?'gaps':'related';
   groups.get(key).entries.push(entry);
  }
  if(options.intentImpactHtml){groups.delete('diffs');for(const [key,g] of groups)if(!g.entries.length)groups.delete(key);if(!groups.size)return '';}

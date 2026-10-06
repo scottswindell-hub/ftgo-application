@@ -11,7 +11,7 @@
  try{
   const dataPath=params.get('data');
   if(!dataPath)throw Error('No graph artifact selected.');
-  const packetURL=new URL(dataPath,location.href),packet=parse(await bytes(packetURL,524288));
+  const packetURL=new URL(dataPath,location.href),packet=parse(await bytes(packetURL,1048576));
   if(packet.schema!=='intent-flow-view-v1'||!packet.objective_summary_artifact)throw Error('No cached graph explanation attached.');
   if(params.get('sha')&&packet.head_commit!==params.get('sha')||params.get('repo')&&packet.repository!==params.get('repo')||params.get('run_id')&&packet.simulation?.run_id!==params.get('run_id'))throw Error('Graph does not match this review.');
   const ref=packet.objective_summary_artifact,raw=await bytes(new URL(ref.url,packetURL));

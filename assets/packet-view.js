@@ -46,7 +46,7 @@ function customerGraph(packet,graph){
   }
   if(response.status===202)throw Error('Backend artifact is still pending.');
   if(!response.ok)throw Error('Artifact unavailable: '+response.status);
-  const raw=await response.text(),rawBytes=new TextEncoder().encode(raw);if(rawBytes.length>524288)throw Error('View exceeds 512 KiB.');
+  const raw=await response.text(),rawBytes=new TextEncoder().encode(raw);if(rawBytes.length>1048576)throw Error('View exceeds 1 MiB.');
   if(artifactReference){
    if(rawBytes.length!==artifactReference.size)throw Error('View size differs from the status pin.');
    if(await reviewSha256(rawBytes)!==artifactReference.sha256)throw Error('View checksum differs from the status pin.');
@@ -186,7 +186,7 @@ function customerGraph(packet,graph){
    const testAnchor=/\/src\/(?:test|integration-test)\//.test(flow.source?.file||'');
    if(testAnchor){
     entry.title='Test evidence needs a governance connection';
-    entry.statusLabel='Evidence mapping needed';
+    entry.statusLabel='Production behavior link missing';
     entry.summary='The recorded anchor is test code. This does not establish new production intent or a new service dependency.';
     entry.nextStep='Connect these tests to the production behavior they exercise before deciding its governance scope.';
     delete entry.before;delete entry.after;
@@ -293,17 +293,19 @@ function customerGraph(packet,graph){
    if(!check)return [];
    const active=check.findings||check.output?.public_findings||[];
    const watch=check.watch_only_findings||check.output?.public_watch_only||[];
-   const findingEntry=(finding,index,watchOnly)=>({
+   const findingEntry=(finding,index,watchOnly)=>{const label=value=>String(value||'').replace(/-/g,' ').replace(/^./,c=>c.toUpperCase());
+    const collection=finding.category_parent?`${label(finding.category_parent)} · ${label(finding.category)}`:label(finding.category||'Repository standards');
+    return {
     id:`coding-standards-${watchOnly?'watch':'finding'}-${finding.rule_id||index}-${finding.file||index}`,
     region:'coding-standards',category:'Coding standards',status:watchOnly||finding.band!=='finding'?'clear':'action',
-    owner:finding.owner||'Owner not supplied',concept:finding.rule_id||'Repository standard',
+    owner:finding.owner||'Owner not supplied',concept:`${collection} · ${finding.rule_id||'Repository standard'}`,
     title:finding.name||'Coding standard result',
     source:{label:finding.file||'Source anchor not supplied',file:finding.file,symbol:finding.unit||null,qualification:finding.line?`Recorded anchor line ${finding.line}`:'Exact source line not supplied.'},
-    summary:watchOnly?'This watch-only result is recorded for evaluation and does not request a response.':finding.band==='finding'?'The native standards check judged this changed unit to violate an active repository standard.':'The native standards check published this result for information.',
+    summary:watchOnly?'This watch-only result is recorded for evaluation and does not request a response.':finding.band==='finding'?'The standards check reported this changed unit against an active repository standard.':'The standards check published this result for information.',
     nextStep:watchOnly||finding.band!=='finding'?'No response required.':finding.guidance||'Review the changed unit against the governed standard.',
-    details:`<p><b>Rule:</b> ${esc(finding.rule_id||'Not supplied')} v${esc(finding.rule_version||'Not supplied')}</p><p><b>Band:</b> ${esc(finding.band||'Not supplied')} · <b>Severity:</b> ${esc(finding.severity||'Not supplied')}</p>${finding.guidance?`<p><b>Guidance:</b> ${esc(finding.guidance)}</p>`:''}`,
+    details:`<p><b>Standards collection:</b> ${esc(collection)}</p><p><b>Rule:</b> ${esc(finding.rule_id||'Not supplied')} v${esc(finding.rule_version||'Not supplied')}</p><p><b>Band:</b> ${esc(finding.band||'Not supplied')} · <b>Severity:</b> ${esc(finding.severity||'Not supplied')}</p>${finding.guidance?`<p><b>Guidance:</b> ${esc(finding.guidance)}</p>`:''}`,
     checks:['Coding standards']
-   });
+   };};
    const published=[...active.map((finding,index)=>findingEntry(finding,index,false)),...watch.map((finding,index)=>findingEntry(finding,index,true))];
    if(published.length)return published;
    if(check.state==='error')return [{
@@ -360,7 +362,7 @@ function customerGraph(packet,graph){
   document.querySelector('.demo').textContent=LIVE?(localRun?'LOCAL PR PIPELINE · Real backend artifacts and Lambda handlers. Responses are session-only; no GitHub publication or merge enforcement.':'LIVE CODEINTENT REVIEW · Digest-verified artifacts from the deployed pipeline. Responses are session-only.'):'GENERATED PIPELINE DATA · Recorded FTGO replay. Responses are session-only; missing check results stay explicit.';
   document.querySelector('h1').textContent='FTGO intent review'+(LIVE_PR?' · PR #'+LIVE_PR:'');
   document.querySelector('.meta').textContent=`${String(packet.baseline_commit||'Unknown baseline').slice(0,12)} → ${String(packet.head_commit||'Unknown candidate').slice(0,12)}`;
-  const outcome=LIVE?({VIOLATION:'Blocked',UNKNOWN:'Incomplete',PASS:'Ready to merge'}[liveDoc?.verdict]||'Analysis in progress'):entries.some(e=>e.status==='action')?'Action needed':entries.some(e=>e.status==='gap')?'Evidence needed':'No review action identified';
+  const outcome=LIVE?({VIOLATION:'Blocked',UNKNOWN:'Incomplete',PASS:'Ready to merge'}[liveDoc?.verdict]||'Analysis in progress'):entries.some(e=>e.status==='action')?'Action needed':entries.some(e=>e.status==='gap')?'Assessment incomplete':'No review action identified';
   document.querySelector('.right').innerHTML=`<div class="card packet-outcome"><h3>Outcome</h3><b id="packet-run-state">${esc(outcome)}</b><p>${LIVE?(localRun?'Same decision as the Governance decision summary. No merge enforcement in this local run.':'Same decision and exact head identity as the deployed governance check.'):'Recorded analysis outcome. CI enforcement status was not supplied.'}</p><details><summary>Run provenance</summary><p>Backend result: ${esc(packet.backend_verdict||'Unknown')}</p><pre>${json(packet.provenance)}</pre><p>${esc(typeof packet.qualification==='string'?packet.qualification:JSON.stringify(packet.qualification))}</p></details></div>`;
   document.querySelector('footer').textContent='Generated review presentation · responses remain session-only';
   const detailNotice=detailWarnings.map(message=>`<p class="empty">${esc(message)}</p>`).join('');
@@ -407,7 +409,7 @@ function customerGraph(packet,graph){
    else if(view==='governance'){if(window.requestedGovernedWorkflow){reviewState(options.scope).governedArea=window.requestedGovernedWorkflow;window.requestedGovernedWorkflow=null;}content.innerHTML=detailNotice+governedObjectivesMarkup(packet,options);if(window.renderGovernedMethodSource)renderGovernedMethodSource(content,loadPatch);}
    else if(view==='intent'){renderLedgerHistory();if(!ledgerHistory&&!ledgerHistoryLoading&&!ledgerHistoryError)fetchLedgerHistory();}
    else if(view==='flow')content.innerHTML=detailNotice+`<h2>Intent Flow</h2><p>Source → changed intent → potential impact. Select a change node to inspect its evidence.</p>${intentGraphMarkup(customerGraph(packet,focusedObjective?focusedGraph():packet.graph||{nodes:[],edges:[]}))}${groundedConnectionsMarkup(packet.governance_review)}`;
-   else {const impact=packet.intent_impact&&window.intentImpactSection?intentImpactSection(packet,liveDoc):'';const R=window;const decision=R.decisionSection?decisionSection(liveDoc):'';const actions=R.reviewActionCounts?reviewActionCounts(liveDoc):{total:0,per:{}};const checkBodies=R.improperTestsSection?{severity:severitySection(liveDoc),coding_standards:standardsSection(liveDoc),improper_tests:improperTestsSection(liveDoc),rule_impact:ruleImpactSection(liveDoc,packet),connected_evidence:connectedSection(liveDoc,packet),governance_decision:decision?'<p class="note">Summarized at the top of this page. <a href="#rt-decision" data-outline-target="rt-decision">Go to the decision</a></p>':''}:{};content.innerHTML=detailWarnings.map(message=>`<p class="empty">${esc(message)}</p>`).join('')+decision+objectiveRejectedMarkup(objectiveSummary)+reviewBoard({...options,intentImpactHtml:impact,checkBodies,decisionShown:Boolean(decision),extraNeeds:actions.total,checkActions:actions.per,checks:liveDoc?.checks||liveDoc?.stages,entries:[...entries,...codingStandardsEntries(),...improperTestsEntries()],region:file});attachObjectiveFeedback(content,objectiveSummary);renderTestAnchors(content);renderIntentSources(content,options);if(window.renderIntentImpact)renderIntentImpact(content,loadPatch);}
+   else {const impact=packet.intent_impact&&window.intentImpactSection?intentImpactSection(packet,liveDoc):'';const R=window;const decision=R.decisionSection?decisionSection(liveDoc,packet):'';const actions=R.reviewActionCounts?reviewActionCounts(liveDoc):{total:0,per:{}};const checkBodies=R.improperTestsSection?{severity:severitySection(liveDoc),coding_standards:standardsSection(liveDoc),improper_tests:improperTestsSection(liveDoc),rule_impact:ruleImpactSection(liveDoc,packet),connected_evidence:connectedSection(liveDoc,packet),governance_decision:decision?'<p class="note">Summarized at the top of this page. <a href="#rt-decision" data-outline-target="rt-decision">Go to the decision</a></p>':''}:{};content.innerHTML=detailWarnings.map(message=>`<p class="empty">${esc(message)}</p>`).join('')+decision+objectiveRejectedMarkup(objectiveSummary)+reviewBoard({...options,intentImpactHtml:impact,checkBodies,decisionShown:Boolean(decision),extraNeeds:actions.total,checkActions:actions.per,checks:liveDoc?.checks||liveDoc?.stages,entries:[...entries,...codingStandardsEntries(),...improperTestsEntries()],region:file});attachObjectiveFeedback(content,objectiveSummary);renderTestAnchors(content);renderIntentSources(content,options);if(window.renderIntentImpact)renderIntentImpact(content,loadPatch);}
    if(view==='flow')drawIntentGraph();
   };
   function focusedGraph(){
