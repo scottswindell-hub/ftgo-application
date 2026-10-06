@@ -61,7 +61,7 @@ public class Ticket {
     switch (state) {
       case CREATE_PENDING:
         state = TicketState.AWAITING_ACCEPTANCE;
-        return singletonList(new TicketCreatedEvent(id, new TicketDetails()));
+        return singletonList(new TicketCreatedEvent(id, new TicketDetails(lineItems)));
       default:
         throw new UnsupportedStateTransitionException(state);
     }
