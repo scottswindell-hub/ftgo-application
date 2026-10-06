@@ -103,6 +103,7 @@ public class Ticket {
 
   public List<TicketDomainEvent> readyForPickup() {
     switch (state) {
+      case ACCEPTED:
       case PREPARING:
         this.state = TicketState.READY_FOR_PICKUP;
         this.readyForPickupTime = LocalDateTime.now();
