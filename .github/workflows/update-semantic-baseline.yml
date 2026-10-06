@@ -15,17 +15,21 @@ on:
         description: Optional JSON array of obligation_id, statement, rationale amendments to review with the candidate
         type: string
         default: '[]'
+  # Opened or updated PRs prepare a candidate automatically; a merged PR publishes it.
   pull_request_target:
-    types: [closed]
+    types: [opened, synchronize, reopened, closed]
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write   # the candidate's review line is posted as a PR comment
+  issues: write
 concurrency:
   group: semantic-baseline-${{ github.event.pull_request.number || inputs.pull_request }}
   cancel-in-progress: false
 jobs:
   update:
-    if: github.ref == 'refs/heads/master' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.merged)
+    if: >-
+      github.ref == 'refs/heads/master' && (github.event_name == 'workflow_dispatch'
+      || github.event.action != 'closed' || github.event.pull_request.merged)
     environment: baseline-maintenance
     runs-on: ubuntu-24.04
     timeout-minutes: 12
@@ -38,15 +42,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pull_request }}
-          OPERATION: ${{ inputs.operation || 'publish' }}
+          OPERATION: ${{ inputs.operation || (github.event.action == 'closed' && 'publish' || 'prepare') }}
+          # An automatic prepare informs; it never fails a PR that is not eligible for this lane.
+          AUTOMATIC: ${{ github.event_name == 'pull_request_target' && github.event.action != 'closed' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           OBLIGATION_CHANGES: ${{ inputs.obligation_changes || '[]' }}
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import html, json, os, re, subprocess, time, urllib.parse, urllib.request
+          import html, json, os, re, subprocess, time, urllib.error, urllib.parse, urllib.request
           repo = os.environ['REPOSITORY']
           number = os.environ['PR_NUMBER']
+          automatic = os.environ['AUTOMATIC'] == 'true'
           if not re.fullmatch('[1-9][0-9]{0,7}', number):
               raise SystemExit('Supply a PR number')
           url, key = os.environ['BASELINE_API_URL'], os.environ['BASELINE_API_KEY']
@@ -65,7 +73,34 @@ jobs:
                   headers={'x-api-key': key, 'Content-Type': 'application/json'})
               with urllib.request.urlopen(request, timeout=30) as response:
                   return json.load(response)
-          queued = call('POST', payload)
+          MARKER = '<!-- codeintent-semantic-baseline -->'
+          def pr_comment(text):
+              # One comment per PR, updated on every push, so reviewers always see the current candidate.
+              body = MARKER + '\n' + text
+              ids = subprocess.check_output(['gh', 'api', '--paginate', f'repos/{repo}/issues/{number}/comments',
+                  '--jq', f'.[] | select(.user.login == "github-actions[bot]" and (.body | contains("{MARKER}"))) | .id'],
+                  text=True).split()
+              args = (['gh', 'api', '--method', 'PATCH', f'repos/{repo}/issues/comments/{ids[0]}'] if ids
+                      else ['gh', 'api', '--method', 'POST', f'repos/{repo}/issues/{number}/comments'])
+              if subprocess.run(args + ['-f', 'body=' + body], stdout=subprocess.DEVNULL).returncode:
+                  print('::warning::Could not post the semantic baseline comment.')
+          def not_eligible(reason):
+              text = ('### Semantic baseline: no candidate for this commit\n\n' + reason + '\n\n'
+                      'This PR keeps its normal checks. If it is merged, a new baseline is needed: changes that '
+                      'add, remove or rename Java units, or touch non-Java build files, require full regeneration. '
+                      f'[Details]({os.environ["RUN_URL"]})')
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+                  summary.write('<h2>Semantic baseline: not eligible</h2>\n<p>' + html.escape(reason) + '</p>\n')
+              print('Not eligible for the semantic baseline lane: ' + reason)
+              pr_comment(text)
+              raise SystemExit(0)
+          try:
+              queued = call('POST', payload)
+          except urllib.error.HTTPError as exc:
+              detail = exc.read().decode(errors='replace')[:2000]
+              if automatic:
+                  not_eligible('The baseline service refused the request: ' + detail)
+              raise SystemExit(f'Baseline service returned HTTP {exc.code}: {detail}')
           for attempt in range(60):
               result = call('GET', {'repository': repo, 'operation': 'semantic_status', 'job': queued['job']})
               if result['status'] in ('candidate_ready', 'published', 'skipped'):
@@ -78,10 +113,22 @@ jobs:
                       summary.write('<pre>' + html.escape(text[:150000]) + '</pre>\n')
                       if len(text) > 150000:
                           summary.write('Full candidate evidence is in this job’s log.\n')
+                  if result['status'] == 'candidate_ready':
+                      pr_comment('### Semantic baseline candidate ready\n\n'
+                          f'Candidate `{result["candidate"]}` for commit `{result["commit"]}`.\n\n'
+                          'To accept the baseline this PR produces, someone other than its author submits an '
+                          '**Approve** review on this exact commit containing this line:\n\n'
+                          f'```\nAccept baseline {result["candidate"]}\n```\n\n'
+                          'A new push prepares a new candidate and replaces this comment. When the PR merges, '
+                          f'the approved candidate is published. [Candidate evidence]({os.environ["RUN_URL"]})')
                   break
               if result['status'] == 'failed':
+                  if automatic:
+                      not_eligible(result.get('error', 'unknown error'))
                   raise SystemExit('Semantic baseline failed: ' + result.get('error', 'unknown'))
               time.sleep(10)
           else:
+              if automatic:
+                  not_eligible('Candidate preparation timed out; push again or run this workflow manually.')
               raise SystemExit('Timed out. Retry the same request; no unreviewed baseline is accepted.')
           PY
