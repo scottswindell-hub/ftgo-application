@@ -182,7 +182,7 @@ function governedMethodSourceMarkup(packet,method,direct){
  const impact=packet?.intent_impact;
  const concepts=impact?.baseline_commit===packet?.baseline_commit&&impact?.head_commit===packet?.head_commit?impact?.concepts||[]:[];
  const anchors=concepts.filter(c=>c.changed?.file===method.file&&owner.endsWith(c.changed?.method||'\0')&&Number.isInteger(c.changed.line)).map(c=>({line:c.changed.line,deleted:Boolean(c.changed.deleted)}));
- return `<section class="governed-method-source"><h4>Source changes</h4><p class="note">− removed · + added · line numbers: baseline / PR</p><div class="ii-code" data-governed-source-file="${esc(method.file)}" data-source-anchors="${esc(JSON.stringify(anchors))}"><p class="note">Loading source changes…</p></div></section>`;
+ return `<section class="governed-method-source"><h4>Source changes</h4><p class="ii-ah"><b>File:</b> <code style="overflow-wrap:anywhere">${esc(method.file)}</code><br><b>Selected method:</b> <code style="overflow-wrap:anywhere">${esc(method.method||'Not recorded')}</code></p><p class="note">− removed · + added · line numbers: baseline / PR</p><div class="ii-code" data-governed-source-file="${esc(method.file)}" data-source-anchors="${esc(JSON.stringify(anchors))}"><p class="note">Loading source changes…</p></div></section>`;
 }
 function terrainSourceChanges(packet,terrain){
  const mapped=new Map(),unmapped=[];
