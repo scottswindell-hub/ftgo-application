@@ -329,7 +329,13 @@ function customerGraph(packet,graph){
   };
   let patchPromise;
   const loadPatch=()=>patchPromise||(patchPromise=(async()=>{
-   if(!packet.source_diff?.url)return null;
+   if(typeof packet.source_diff?.content==='string'){
+    const raw=new TextEncoder().encode(packet.source_diff.content);
+    if(raw.byteLength>262144)throw Error('Source patch exceeds 256 KiB.');
+    if(!packet.source_diff.sha256||await reviewSha256(raw)!==packet.source_diff.sha256)throw Error('Source patch digest differs from the generated artifact.');
+    return packet.source_diff.content;
+   }
+   if(!packet.source_diff?.url)throw Error(packet.source_diff?.status==='omitted_too_large'?'Source patch exceeds the review size limit.':'No source patch was supplied for this run. Rerun after updating the pipeline.');
    const url=new URL(packet.source_diff.url,artifactURL);if(!trustedArtifactURL(url))throw Error('Source artifact must use a trusted origin.');
    const r=await fetch(url);if(!r.ok)throw Error('Source patch unavailable: '+r.status);
    const raw=await r.arrayBuffer();if(raw.byteLength>262144)throw Error('Source patch exceeds 256 KiB.');
