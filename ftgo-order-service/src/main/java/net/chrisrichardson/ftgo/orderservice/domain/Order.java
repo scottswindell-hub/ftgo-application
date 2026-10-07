@@ -127,6 +127,7 @@ public class Order {
 
   public List<OrderDomainEvent> noteRejected() {
     switch (state) {
+      case APPROVED:
       case APPROVAL_PENDING:
         this.state = REJECTED;
         return singletonList(new OrderRejected());
@@ -208,4 +209,3 @@ public class Order {
     return consumerId;
   }
 }
-
