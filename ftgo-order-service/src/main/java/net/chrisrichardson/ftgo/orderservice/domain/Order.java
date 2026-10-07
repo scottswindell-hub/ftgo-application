@@ -98,7 +98,7 @@ public class Order {
   public List<OrderDomainEvent> undoPendingCancel() {
     switch (state) {
       case CANCEL_PENDING:
-        this.state = OrderState.APPROVED;
+        this.state = OrderState.APPROVAL_PENDING;
         return emptyList();
       default:
         throw new UnsupportedStateTransitionException(state);
@@ -109,7 +109,7 @@ public class Order {
     switch (state) {
       case CANCEL_PENDING:
         this.state = OrderState.CANCELLED;
-        return singletonList(new OrderCancelled());
+        return emptyList();
       default:
         throw new UnsupportedStateTransitionException(state);
     }

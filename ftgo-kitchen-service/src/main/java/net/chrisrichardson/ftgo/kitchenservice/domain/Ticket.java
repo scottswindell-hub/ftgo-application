@@ -141,6 +141,7 @@ public class Ticket {
     switch (state) {
       case AWAITING_ACCEPTANCE:
       case ACCEPTED:
+      case PREPARING:
         this.previousState = state;
         this.state = TicketState.CANCEL_PENDING;
         return emptyList();
@@ -166,7 +167,7 @@ public class Ticket {
   public List<TicketDomainEvent> undoCancel() {
     switch (state) {
       case CANCEL_PENDING:
-        this.state = this.previousState;
+        this.state = TicketState.AWAITING_ACCEPTANCE;
         return emptyList();
       default:
         throw new UnsupportedStateTransitionException(state);
