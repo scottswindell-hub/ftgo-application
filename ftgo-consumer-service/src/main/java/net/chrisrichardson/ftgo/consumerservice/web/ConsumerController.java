@@ -27,6 +27,6 @@ public class ConsumerController {
   public ResponseEntity<GetConsumerResponse> get(@PathVariable long consumerId) {
     return consumerService.findById(consumerId)
             .map(consumer -> new ResponseEntity<>(new GetConsumerResponse(consumer.getName()), HttpStatus.OK))
-            .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
+            .orElseGet(() -> new ResponseEntity<>(HttpStatus.OK));
   }
 }
