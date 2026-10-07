@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
+import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
 import static net.chrisrichardson.ftgo.orderservice.OrderDetailsMother.*;
 import static net.chrisrichardson.ftgo.orderservice.RestaurantMother.AJANTA_RESTAURANT;
@@ -50,6 +51,12 @@ public class OrderTest {
     List<OrderDomainEvent> events = order.noteApproved();
     assertEquals(singletonList(new OrderAuthorized()), events);
     assertEquals(OrderState.APPROVED, order.getState());
+  }
+
+  @Test
+  public void shouldAllowCancellationWhileApprovalIsPending() {
+    assertEquals(emptyList(), order.cancel());
+    assertEquals(OrderState.CANCEL_PENDING, order.getState());
   }
 
   @Test
