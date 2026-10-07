@@ -114,6 +114,7 @@ public class Ticket {
 
   public List<TicketDomainEvent> pickedUp() {
     switch (state) {
+      case ACCEPTED:
       case READY_FOR_PICKUP:
         this.state = TicketState.PICKED_UP;
         this.pickedUpTime = LocalDateTime.now();
