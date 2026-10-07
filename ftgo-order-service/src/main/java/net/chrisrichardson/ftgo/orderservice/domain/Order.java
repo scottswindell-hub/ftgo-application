@@ -145,6 +145,7 @@ public class Order {
   public ResultWithDomainEvents<LineItemQuantityChange, OrderDomainEvent> revise(OrderRevision orderRevision) {
     switch (state) {
 
+      case APPROVAL_PENDING:
       case APPROVED:
         LineItemQuantityChange change = orderLineItems.lineItemQuantityChange(orderRevision);
         if (change.newOrderTotal.isGreaterThanOrEqual(orderMinimum)) {
@@ -208,4 +209,3 @@ public class Order {
     return consumerId;
   }
 }
-
