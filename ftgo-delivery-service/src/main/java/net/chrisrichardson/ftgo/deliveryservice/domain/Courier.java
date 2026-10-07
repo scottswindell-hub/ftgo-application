@@ -28,6 +28,7 @@ public class Courier {
   }
 
   public void noteAvailable() {
+    // Availability continues to be represented by the existing true value.
     this.available = true;
 
   }
@@ -37,6 +38,7 @@ public class Courier {
   }
 
   public void cancelDelivery(long deliveryId) {
+    // Cancellation continues to remove only actions for this delivery.
     plan.removeDelivery(deliveryId);
   }
 

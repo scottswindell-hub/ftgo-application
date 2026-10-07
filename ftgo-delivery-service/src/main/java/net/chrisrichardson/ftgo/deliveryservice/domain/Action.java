@@ -29,10 +29,12 @@ public class Action {
   }
 
   public boolean actionFor(long deliveryId) {
+    // Action ownership remains an exact delivery identifier comparison.
     return this.deliveryId == deliveryId;
   }
 
   public static Action makePickup(long deliveryId, Address pickupAddress, LocalDateTime pickupTime) {
+    // Pickup construction retains its action type, address, and time.
     return new Action(DeliveryActionType.PICKUP, deliveryId, pickupAddress, pickupTime);
   }
 

@@ -34,6 +34,7 @@ public class KitchenService {
   }
 
   public Ticket createTicket(long restaurantId, Long ticketId, TicketDetails ticketDetails) {
+    // Ticket creation continues to persist and publish the same result.
     ResultWithDomainEvents<Ticket, TicketDomainEvent> rwe = Ticket.create(restaurantId, ticketId, ticketDetails);
     ticketRepository.save(rwe.result);
     domainEventPublisher.publish(rwe.result, rwe.events);
@@ -42,6 +43,7 @@ public class KitchenService {
 
   @Transactional
   public void accept(long ticketId, LocalDateTime readyBy) {
+    // The supplied readiness time continues unchanged into the aggregate.
     Ticket ticket = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
     List<TicketDomainEvent> events = ticket.accept(readyBy);

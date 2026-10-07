@@ -62,6 +62,7 @@ public class Delivery {
   }
 
   public void schedule(LocalDateTime readyBy, long assignedCourier) {
+    // Scheduling retains the supplied readiness time and courier identity.
     this.readyBy = readyBy;
     this.assignedCourier = assignedCourier;
     this.state = DeliveryState.SCHEDULED;
@@ -69,6 +70,7 @@ public class Delivery {
   }
 
   public void cancel() {
+    // Cancellation continues to clear the existing courier assignment.
     this.state = DeliveryState.CANCELLED;
     this.assignedCourier = null;
   }

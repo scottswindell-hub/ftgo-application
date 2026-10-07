@@ -73,6 +73,7 @@ public class Ticket {
 
 
   public List<TicketDomainEvent> accept(LocalDateTime readyBy) {
+    // Ticket acceptance retains its existing timing and state checks.
     switch (state) {
       case AWAITING_ACCEPTANCE:
         // Verify that readyBy is in the futurestate = TicketState.ACCEPTED;
@@ -138,6 +139,7 @@ public class Ticket {
   }
 
   public List<TicketDomainEvent> cancel() {
+    // Ticket cancellation retains the established eligible states.
     switch (state) {
       case AWAITING_ACCEPTANCE:
       case ACCEPTED:

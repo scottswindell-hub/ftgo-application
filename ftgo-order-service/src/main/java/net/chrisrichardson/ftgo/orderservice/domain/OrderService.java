@@ -68,6 +68,7 @@ public class OrderService {
   @Transactional
   public Order createOrder(long consumerId, long restaurantId, DeliveryInformation deliveryInformation,
                            List<MenuItemIdAndQuantity> lineItems) {
+    // The service continues to coordinate the existing order creation workflow.
     Restaurant restaurant = restaurantRepository.findById(restaurantId)
             .orElseThrow(() -> new RestaurantNotFoundException(restaurantId));
 
@@ -114,6 +115,7 @@ public class OrderService {
 
   @Transactional
   public Order cancel(Long orderId) {
+    // Cancellation continues to be delegated to the existing saga.
     Order order = orderRepository.findById(orderId)
             .orElseThrow(() -> new OrderNotFoundException(orderId));
     CancelOrderSagaData sagaData = new CancelOrderSagaData(order.getConsumerId(), orderId, order.getOrderTotal());

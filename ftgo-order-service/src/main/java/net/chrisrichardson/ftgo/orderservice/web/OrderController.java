@@ -32,6 +32,7 @@ public class OrderController {
 
   @RequestMapping(method = RequestMethod.POST)
   public CreateOrderResponse create(@RequestBody CreateOrderRequest request) {
+    // Preserve the request-to-domain mapping used by the public endpoint.
     Order order = orderService.createOrder(request.getConsumerId(),
             request.getRestaurantId(),
             new DeliveryInformation(request.getDeliveryTime(), request.getDeliveryAddress()),
@@ -43,6 +44,7 @@ public class OrderController {
 
   @RequestMapping(path = "/{orderId}", method = RequestMethod.GET)
   public ResponseEntity<GetOrderResponse> getOrder(@PathVariable long orderId) {
+    // Missing and present orders retain their established HTTP responses.
     Optional<Order> order = orderRepository.findById(orderId);
     return order.map(o -> new ResponseEntity<>(makeGetOrderResponse(o), HttpStatus.OK)).orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
   }

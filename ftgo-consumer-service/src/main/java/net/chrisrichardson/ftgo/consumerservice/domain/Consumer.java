@@ -33,6 +33,7 @@ public class Consumer {
 
 
   public void validateOrderByConsumer(Money orderTotal) {
+    // Validation remains intentionally unchanged in this control branch.
     // implement some business logic
   }
 
@@ -45,6 +46,7 @@ public class Consumer {
   }
 
   public static ResultWithEvents<Consumer> create(PersonName name) {
+    // Creation retains the same aggregate and ConsumerCreated event.
     return new ResultWithEvents<>(new Consumer(name), new ConsumerCreated());
   }
 }

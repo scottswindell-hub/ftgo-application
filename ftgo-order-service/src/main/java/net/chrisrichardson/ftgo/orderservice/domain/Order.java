@@ -85,6 +85,7 @@ public class Order {
   }
 
   public List<OrderDomainEvent> cancel() {
+    // Cancellation remains restricted to the accepted order state.
     switch (state) {
       case APPROVED:
         this.state = OrderState.CANCEL_PENDING;
@@ -115,6 +116,7 @@ public class Order {
   }
 
   public List<OrderDomainEvent> noteApproved() {
+    // Approval records the accepted transition and its existing domain event.
     switch (state) {
       case APPROVAL_PENDING:
         this.state = APPROVED;
@@ -208,4 +210,3 @@ public class Order {
     return consumerId;
   }
 }
-

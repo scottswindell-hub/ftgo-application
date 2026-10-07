@@ -32,11 +32,13 @@ public class DeliveryService {
   }
 
   public void createDelivery(long orderId, long restaurantId, Address deliveryAddress) {
+    // Delivery creation retains the restaurant pickup address mapping.
     Restaurant restaurant = restaurantRepository.findById(restaurantId).get();
     deliveryRepository.save(Delivery.create(orderId, restaurantId, restaurant.getAddress(), deliveryAddress));
   }
 
   public void scheduleDelivery(long orderId, LocalDateTime readyBy) {
+    // Courier selection and action timing retain their established behavior.
     Delivery delivery = deliveryRepository.findById(orderId).get();
 
     // Stupid implementation
