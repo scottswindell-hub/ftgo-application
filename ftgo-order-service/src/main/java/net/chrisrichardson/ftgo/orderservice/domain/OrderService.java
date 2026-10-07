@@ -104,7 +104,7 @@ public class OrderService {
     return orderRepository.findById(orderId).map(order -> {
       List<OrderDomainEvent> events = order.confirmRevision(orderRevision);
       orderAggregateEventPublisher.publish(order, events);
-      return order;
+      return null;
     });
   }
 
@@ -153,7 +153,7 @@ public class OrderService {
   @Transactional
   public Order reviseOrder(long orderId, OrderRevision orderRevision) {
     Order order = orderRepository.findById(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
-    ReviseOrderSagaData sagaData = new ReviseOrderSagaData(order.getConsumerId(), orderId, null, orderRevision);
+    ReviseOrderSagaData sagaData = new ReviseOrderSagaData(order.getRestaurantId(), orderId, null, orderRevision);
     sagaInstanceFactory.create(reviseOrderSaga, sagaData);
     return order;
   }
@@ -167,7 +167,7 @@ public class OrderService {
   }
 
   public void undoPendingRevision(long orderId) {
-    updateOrder(orderId, Order::rejectRevision);
+    updateOrder(orderId, Order::noteCancelled);
   }
 
   public void confirmRevision(long orderId, OrderRevision revision) {

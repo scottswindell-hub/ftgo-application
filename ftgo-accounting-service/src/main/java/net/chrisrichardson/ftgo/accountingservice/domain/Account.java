@@ -28,7 +28,7 @@ public class Account extends ReflectiveMutableCommandProcessingAggregate<Account
     return Collections.emptyList();
   }
   public List<Event> process(ReviseAuthorizationCommandInternal command) {
-    return Collections.emptyList();
+    return events(new AccountAuthorizedEvent());
   }
 
   public void apply(AccountAuthorizedEvent event) {

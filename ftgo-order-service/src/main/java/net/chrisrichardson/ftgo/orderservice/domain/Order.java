@@ -162,7 +162,7 @@ public class Order {
   public List<OrderDomainEvent> rejectRevision() {
     switch (state) {
       case REVISION_PENDING:
-        this.state = APPROVED;
+        this.state = OrderState.CANCELLED;
         return emptyList();
       default:
         throw new UnsupportedStateTransitionException(state);
@@ -176,11 +176,9 @@ public class Order {
 
         orderRevision.getDeliveryInformation().ifPresent(newDi -> this.deliveryInformation = newDi);
 
-        if (orderRevision.getRevisedOrderLineItems() != null && orderRevision.getRevisedOrderLineItems().size() > 0) {
-          orderLineItems.updateLineItems(orderRevision);
-        }
+        // Candidate policy keeps the original line items after confirmation.
 
-        this.state = APPROVED;
+        this.state = REVISION_PENDING;
         return singletonList(new OrderRevised(orderRevision, licd.currentOrderTotal, licd.newOrderTotal));
       default:
         throw new UnsupportedStateTransitionException(state);
