@@ -1,10 +1,13 @@
-name: CodeIntent disputes
+name: CodeIntent violations
 
-# `/reject F-xxxxxxxx -- reason`, `/withdraw ...` and `/uphold ...` PR comments.
+# Decide a rule violation on a PR, by one person with write access:
+#   /reject -- reason                          the violation is real: the PR is closed
+#   /false-positive F-xxxxxxxx -- reason       the rule fired wrongly: a rule fix is requested
+#   /false-positive F-xxxxxxxx match="text" -- reason
 # Runs from the default branch: it never checks out PR code, and the comment text
 # reaches the script only through an environment variable (it is untrusted input).
-# The CodeIntent API records the dispute in the governance ledger; this workflow
-# posts its reply and re-runs the checks after a withdrawal. No GitHub App needed.
+# The CodeIntent API records the decision in the governance ledger; this workflow
+# posts its reply and closes the PR when it was rejected. No GitHub App needed.
 on:
   issue_comment:
     types: [created]
@@ -14,26 +17,24 @@ on:
 permissions:
   contents: read
   issues: write          # reply in the PR conversation
-  pull-requests: write   # reply in a review thread
-  actions: write         # re-run the CodeIntent checks after a withdrawal
+  pull-requests: write   # reply in a review thread, and close a rejected PR
 
 concurrency:
-  group: codeintent-disputes-${{ github.event.issue.number || github.event.pull_request.number }}
+  group: codeintent-violations-${{ github.event.issue.number || github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
-  dispute:
+  decide:
     if: >-
       github.event.comment.user.type != 'Bot'
       && (github.event_name == 'pull_request_review_comment' || github.event.issue.pull_request)
-      && (contains(github.event.comment.body, '/reject') || contains(github.event.comment.body, '/withdraw')
-          || contains(github.event.comment.body, '/uphold'))
+      && (contains(github.event.comment.body, '/reject') || contains(github.event.comment.body, '/false-positive'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Record the dispute and reply
+      - name: Record the decision and reply
         env:
-          API_URL: ${{ vars.CODEINTENT_DISPUTES_URL || 'https://qgd63ljozc.execute-api.us-east-1.amazonaws.com/demo/disputes' }}
+          API_URL: ${{ vars.CODEINTENT_DECISIONS_URL || 'https://qgd63ljozc.execute-api.us-east-1.amazonaws.com/demo/disputes' }}
           API_KEY: ${{ secrets.DRIFT_GATE_API_KEY }}
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -44,7 +45,6 @@ jobs:
           COMMENT_URL: ${{ github.event.comment.html_url }}
           ACTOR: ${{ github.event.comment.user.login }}
           COMMENT_BODY: ${{ github.event.comment.body }}
-          CHECKS_WORKFLOW: ${{ vars.CODEINTENT_CHECKS_WORKFLOW || 'codeintent-checks.yml' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -58,7 +58,7 @@ jobs:
               return run.stdout if run.returncode == 0 else None
 
           head = env.get('REVIEW_HEAD_SHA') or json.loads(gh(f'repos/{repo}/pulls/{number}'))['head']['sha']
-          # The commenter's access decides who may withdraw or uphold (@repo-writers).
+          # Only someone with write access decides a violation.
           permission = (gh(f'repos/{repo}/collaborators/{actor}/permission', '--jq', '.permission') or 'none').strip()
           if permission not in {'admin', 'maintain', 'write', 'triage', 'read', 'none'}:
               permission = 'none'
@@ -73,26 +73,18 @@ jobs:
               with urllib.request.urlopen(request, timeout=60) as response:
                   result = json.load(response)
           except urllib.error.HTTPError as exc:
-              raise SystemExit(f'::error::CodeIntent disputes API returned HTTP {exc.code}: '
+              raise SystemExit(f'::error::CodeIntent decisions API returned HTTP {exc.code}: '
                                + exc.read().decode(errors='replace')[:500])
           print(json.dumps({k: v for k, v in result.items() if k != 'reply'}))
           if not result.get('reply'):
               raise SystemExit(0)   # an ordinary comment that only mentions a command
 
-          def reply(text):
-              if env['EVENT_NAME'] == 'pull_request_review_comment':
-                  target = f'repos/{repo}/pulls/{number}/comments/{env["COMMENT_ID"]}/replies'
-              else:
-                  target = f'repos/{repo}/issues/{number}/comments'
-              if gh('--method', 'POST', target, '-f', 'body=' + text) is None:
-                  print('::warning::Could not post the dispute reply:\n' + text)
-
-          reply(result['reply'])
-          if result.get('rerun'):
-              # The API marked this head for a fresh run, so a re-run runs the checks again.
-              runs = json.loads(gh(f'repos/{repo}/actions/workflows/{env["CHECKS_WORKFLOW"]}/runs'
-                                   f'?head_sha={head}&per_page=1') or '{}').get('workflow_runs') or []
-              if not runs or runs[0].get('status') != 'completed' \
-                      or gh('--method', 'POST', f'repos/{repo}/actions/runs/{runs[0]["id"]}/rerun') is None:
-                  reply('Could not re-run the CodeIntent checks automatically; push or re-run them to update this PR.')
+          if env['EVENT_NAME'] == 'pull_request_review_comment':
+              target = f'repos/{repo}/pulls/{number}/comments/{env["COMMENT_ID"]}/replies'
+          else:
+              target = f'repos/{repo}/issues/{number}/comments'
+          if gh('--method', 'POST', target, '-f', 'body=' + result['reply']) is None:
+              print('::warning::Could not post the reply:\n' + result['reply'])
+          if result.get('close') and gh('--method', 'PATCH', f'repos/{repo}/pulls/{number}', '-f', 'state=closed') is None:
+              raise SystemExit('::error::The rejection was recorded, but the pull request could not be closed.')
           PY
