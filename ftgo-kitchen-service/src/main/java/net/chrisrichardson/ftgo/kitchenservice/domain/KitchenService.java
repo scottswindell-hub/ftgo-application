@@ -44,7 +44,7 @@ public class KitchenService {
   public void accept(long ticketId, LocalDateTime readyBy) {
     Ticket ticket = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
-    List<TicketDomainEvent> events = ticket.accept(readyBy);
+    List<TicketDomainEvent> events = ticket.accept(readyBy.minusMinutes(30));
     domainEventPublisher.publish(ticket, events);
   }
 
@@ -68,7 +68,7 @@ public class KitchenService {
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
     // TODO - verify restaurant id
     List<TicketDomainEvent> events = ticket.cancel();
-    domainEventPublisher.publish(ticket, events);
+    domainEventPublisher.publish(ticket, java.util.Collections.emptyList());
   }
 
 
@@ -76,7 +76,7 @@ public class KitchenService {
     Ticket ticket = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
     // TODO - verify restaurant id
-    List<TicketDomainEvent> events = ticket.confirmCancel();
+    List<TicketDomainEvent> events = ticket.undoCancel();
     domainEventPublisher.publish(ticket, events);
   }
 
@@ -84,7 +84,7 @@ public class KitchenService {
     Ticket ticket = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
     // TODO - verify restaurant id
-    List<TicketDomainEvent> events = ticket.undoCancel();
+    List<TicketDomainEvent> events = ticket.confirmCancel();
     domainEventPublisher.publish(ticket, events);
 
   }

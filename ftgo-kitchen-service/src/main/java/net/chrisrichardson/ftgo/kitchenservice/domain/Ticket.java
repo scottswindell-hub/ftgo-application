@@ -74,6 +74,7 @@ public class Ticket {
 
   public List<TicketDomainEvent> accept(LocalDateTime readyBy) {
     switch (state) {
+      case CREATE_PENDING:
       case AWAITING_ACCEPTANCE:
         // Verify that readyBy is in the futurestate = TicketState.ACCEPTED;
         this.acceptTime = LocalDateTime.now();
@@ -158,7 +159,7 @@ public class Ticket {
     switch (state) {
       case CANCEL_PENDING:
         this.state = TicketState.CANCELLED;
-        return singletonList(new TicketCancelled());
+        return emptyList();
       default:
         throw new UnsupportedStateTransitionException(state);
 
@@ -167,7 +168,7 @@ public class Ticket {
   public List<TicketDomainEvent> undoCancel() {
     switch (state) {
       case CANCEL_PENDING:
-        this.state = this.previousState;
+        this.state = TicketState.AWAITING_ACCEPTANCE;
         return emptyList();
       default:
         throw new UnsupportedStateTransitionException(state);
