@@ -9,7 +9,7 @@ on:
         type: choice
         options: [author, validate, approve, activate]
       arguments:
-        description: JSON object accepted by the selected governance-ledger command
+        description: Command arguments; validate uses {"evidence":{...},"validation":{...}}
         required: true
         type: string
 
@@ -48,6 +48,25 @@ jobs:
           test -n "$GOVERNANCE_LEDGER_API_URL"
           test -n "$GOVERNANCE_RULE_API_KEY"
           jq -e 'type == "object"' <<<"$ARGUMENTS_JSON" >/dev/null
+          if [[ "$COMMAND" == validate ]]; then
+            jq -e '(.evidence | type == "object") and (.validation | type == "object")' \
+              <<<"$ARGUMENTS_JSON" >/dev/null
+            jq -n \
+              --arg application "${{ github.repository }}" \
+              --arg command record_evidence \
+              --arg idempotency_key "$IDEMPOTENCY_KEY-evidence" \
+              --argjson arguments "$(jq -c '{evidence: .evidence}' <<<"$ARGUMENTS_JSON")" \
+              '{application: $application, command: $command, arguments: $arguments,
+                idempotency_key: $idempotency_key}' > evidence-request.json
+            curl --fail-with-body --silent --show-error \
+              -H 'content-type: application/json' \
+              -H "x-api-key: $GOVERNANCE_RULE_API_KEY" \
+              --data-binary @evidence-request.json \
+              "$GOVERNANCE_LEDGER_API_URL/v1/ledger/commands" > evidence-response.json
+            evidence_revision="$(jq -er '.evidence' evidence-response.json)"
+            ARGUMENTS_JSON="$(jq -c --arg revision "$evidence_revision" \
+              '.validation + {evidence: [$revision]}' <<<"$ARGUMENTS_JSON")"
+          fi
           jq -n \
             --arg application "${{ github.repository }}" \
             --arg command "$COMMAND" \
