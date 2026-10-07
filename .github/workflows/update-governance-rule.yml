@@ -1,0 +1,63 @@
+name: Update governed rules
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Rule lifecycle step; each step uses its own protected environment secret
+        required: true
+        type: choice
+        options: [author, validate, approve, activate]
+      arguments:
+        description: JSON object accepted by the selected governance-ledger command
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  update-rule:
+    runs-on: ubuntu-latest
+    environment: governance-rules-${{ inputs.operation }}
+    env:
+      GOVERNANCE_LEDGER_API_URL: https://pnbiguovftpmrkck4mz3ey6fau0zawob.lambda-url.us-east-1.on.aws
+      GOVERNANCE_RULE_API_KEY: ${{ secrets.GOVERNANCE_RULE_API_KEY }}
+      ARGUMENTS_JSON: ${{ inputs.arguments }}
+    steps:
+      - name: Select scoped ledger command
+        id: command
+        shell: bash
+        run: |
+          case "${{ inputs.operation }}" in
+            author) command=propose ;;
+            validate) command=validate ;;
+            approve) command=decide ;;
+            activate) command=activate ;;
+            *) exit 2 ;;
+          esac
+          echo "command=$command" >> "$GITHUB_OUTPUT"
+
+      - name: Submit authenticated rule operation
+        shell: bash
+        env:
+          COMMAND: ${{ steps.command.outputs.command }}
+          IDEMPOTENCY_KEY: github-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.operation }}
+        run: |
+          set -euo pipefail
+          test -n "$GOVERNANCE_LEDGER_API_URL"
+          test -n "$GOVERNANCE_RULE_API_KEY"
+          jq -e 'type == "object"' <<<"$ARGUMENTS_JSON" >/dev/null
+          jq -n \
+            --arg application "${{ github.repository }}" \
+            --arg command "$COMMAND" \
+            --arg idempotency_key "$IDEMPOTENCY_KEY" \
+            --argjson arguments "$ARGUMENTS_JSON" \
+            '{application: $application, command: $command, arguments: $arguments,
+              idempotency_key: $idempotency_key}' > request.json
+          curl --fail-with-body --silent --show-error \
+            -H 'content-type: application/json' \
+            -H "x-api-key: $GOVERNANCE_RULE_API_KEY" \
+            --data-binary @request.json \
+            "$GOVERNANCE_LEDGER_API_URL/v1/ledger/commands" > response.json
+          jq . response.json
