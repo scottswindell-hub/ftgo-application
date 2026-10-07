@@ -32,8 +32,12 @@ public class Consumer {
   }
 
 
+  private static final Money MAX_ORDER_TOTAL = new Money(500);
+
   public void validateOrderByConsumer(Money orderTotal) {
-    // implement some business logic
+    if (!MAX_ORDER_TOTAL.isGreaterThanOrEqual(orderTotal)) {
+      throw new ConsumerVerificationFailedException();
+    }
   }
 
   public Long getId() {
