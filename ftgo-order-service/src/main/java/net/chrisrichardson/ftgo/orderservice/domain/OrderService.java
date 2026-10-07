@@ -116,6 +116,7 @@ public class OrderService {
   public Order cancel(Long orderId) {
     Order order = orderRepository.findById(orderId)
             .orElseThrow(() -> new OrderNotFoundException(orderId));
+    order.cancel();
     CancelOrderSagaData sagaData = new CancelOrderSagaData(order.getConsumerId(), orderId, order.getOrderTotal());
     sagaInstanceFactory.create(cancelOrderSaga, sagaData);
     return order;
