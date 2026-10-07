@@ -34,8 +34,6 @@ public class ReviseOrderSaga implements SimpleSaga<ReviseOrderSagaData> {
             .onReply(BeginReviseOrderReply.class, this::handleBeginReviseOrderReply)
             .withCompensation(this::undoBeginReviseOrder)
             .step()
-            .invokeParticipant(this::reviseAuthorization)
-            .step()
             .invokeParticipant(this::beginReviseTicket)
             .withCompensation(this::undoBeginReviseTicket)
             .step()
