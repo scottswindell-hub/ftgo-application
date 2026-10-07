@@ -175,7 +175,7 @@ function row(item,kind){
  const answer=decision(item.id),submitted=state.submitted.has(item.id);
  const status=item.status==='unknown'?'Cannot be established':answer==='yes'?(submitted?'Expected · handed off':'Yes, I meant this'):answer==='no'?(submitted?'Investigating · handed off':'No, investigate'):'';
  const type=String(item.reviewType||'Behavior');
- return `<div class="rx-select-row">${item.status!=='unknown'&&item.status!=='watch'?`<input type="checkbox" data-select="${esc(item.id)}" aria-label="Select ${esc(item.title)}" ${state.bulk.has(item.id)?'checked':''}>`:''}<button type="button" class="row ${answer||''} ${submitted?'submitted':''}" data-row="${esc(item.id)}"><span class="t">${esc(item.summary)}</span><span class="row-side">${typeIcon(type)}${status?`<span class="st">${esc(status)}</span>`:''}</span></button></div>`;
+ return `<div class="rx-select-row">${item.status!=='unknown'&&item.status!=='watch'?`<input type="checkbox" data-select="${esc(item.id)}" aria-label="Select ${esc(item.title)}" ${state.bulk.has(item.id)?'checked':''}>`:''}<button type="button" class="row ${answer||''} ${submitted?'submitted':''}" data-row="${esc(item.id)}"><span class="t"><b>${esc(item.title||item.summary)}</b><small class="meta">${esc(item.concept||item.file||item.groundingLabel||'Recorded review evidence')}${item.objective?' · accepted constraint':''}</small></span><span class="row-side"><span class="type-name">${esc(type)}</span>${typeIcon(type)}${status?`<span class="st">${esc(status)}</span>`:''}</span></button></div>`;
 }
 function coverage(){return reviewExplorer.coverage(state.packet,state.summary,checks());}
 function saveBar(){return `<div class="actions rx-save"><span>${state.drafts.size} staged assessment${state.drafts.size===1?'':'s'} · governance changes are handed to protected GitHub Actions.</span><button type="button" class="btn" data-act="undo" ${state.drafts.size?'':'disabled'}>Discard staged</button><button type="button" class="btn blue" data-act="submit" ${state.drafts.size?'':'disabled'}>Continue to governance actions</button></div>`;}
@@ -185,13 +185,13 @@ function listScreen(){
  const visible=all.filter(i=>state.filter==='reviewed'?Boolean(decision(i.id)):state.filter==='needs'?!decision(i.id)||decision(i.id)==='no'||i.status==='unknown':true);
  const complete=state.model.semanticStatus==='no_changes'&&verdict()==='PASS';
  const empty=complete?'No change to evaluated governed behavior was established.':'Review evidence is incomplete. An empty list does not establish unchanged behavior.';
- return `<div class="ci">${ciTop()}<h2>Review these changes</h2><div class="rx-toolbar"><div role="group" aria-label="Filter findings">${[['all','All'],['needs','Needs review'],['reviewed','Assessed']].map(([id,title])=>`<button type="button" class="btn" data-filter="${id}" aria-pressed="${state.filter===id}">${title}</button>`).join('')}</div><span>${reviewed} of ${all.length} assessed · ${unknown} cannot be established</span></div>
- <div class="rx-toolbar"><button type="button" class="btn" data-act="select-visible">Select assessable items</button><button type="button" class="btn" data-act="bulk-yes" ${state.bulk.size?'':'disabled'}>Mark ${state.bulk.size} selected as expected</button><span>J/K move · Enter opens · Y/N assess</span></div>
+ return `<div class="ci">${ciTop()}<h2>Review these changes</h2><p class="review-lede">Review the recorded behavior changes and their supporting evidence.</p><details class="review-tools"><summary>Filter and assess multiple items</summary><div class="rx-toolbar"><div role="group" aria-label="Filter findings">${[['all','All'],['needs','Needs review'],['reviewed','Assessed']].map(([id,title])=>`<button type="button" class="btn" data-filter="${id}" aria-pressed="${state.filter===id}">${title}</button>`).join('')}</div><span>${reviewed} of ${all.length} assessed · ${unknown} cannot be established</span></div>
+ <div class="rx-toolbar"><button type="button" class="btn" data-act="select-visible">Select assessable items</button><button type="button" class="btn" data-act="bulk-yes" ${state.bulk.size?'':'disabled'}>Mark ${state.bulk.size} selected as expected</button><span>J/K move · Enter opens · Y/N assess</span></div></details>
  ${!all.length?`<p class="empty-list">${empty}</p>`:''}
- ${[['unknown','Analysis gaps'],['change','Observed changes and findings'],['constraint','Governed changes requiring review']].map(([kind,title])=>{const group=visible.filter(i=>kind==='unknown'?i.status==='unknown':i.status!=='unknown'&&i.kind===kind);return group.length?`<h3>${title} (${group.length})</h3><div class="rows">${group.map(i=>row(i,kind)).join('')}</div>`:'';}).join('')}
- ${coverage()}<details class="rx-coverage"><summary><b>Governance model for this PR</b> · workflows, obligations and method evidence</summary>${reviewExplorer.governanceCatalog(state.packet)}</details>${saveBar()}${provenance()}</div>`;
+ ${[['change','Behavioral changes and findings'],['constraint','Constraint violations']].map(([kind,title])=>{const group=visible.filter(i=>kind==='unknown'?i.status==='unknown':i.status!=='unknown'&&i.kind===kind);return group.length?`<h3>${title} (${group.length})</h3><div class="rows">${group.map(i=>row(i,kind)).join('')}</div>`:'';}).join('')}
+ ${unknown?`<details class="rx-coverage review-gaps"><summary><b>Analysis coverage · ${unknown} unresolved items</b></summary><p>These are incomplete analyses or unresolved evidence, not established findings. They cannot be assessed as expected.</p>${all.filter(i=>i.status==='unknown').map(i=>row(i,'unknown')).join('')}</details>`:''}${coverage()}<details class="rx-coverage"><summary><b>Governance model for this PR</b> · workflows, obligations and method evidence</summary>${reviewExplorer.governanceCatalog(state.packet)}</details>${saveBar()}${provenance()}</div>`;
 }
-function ciTop(){return `<div class="ci-top"><b>CodeIntent</b><a href="#" data-act="checks">← Pull request #${esc(pr||'—')}</a><span class="sp"></span><button type="button" class="btn" data-act="governance">Governance actions</button></div>`;}
+function ciTop(){return `<div class="ci-top"><b>CodeIntent</b><a href="#" data-act="checks">← Pull request #${esc(pr||'—')}</a><span class="sp"></span><button type="button" class="btn" data-act="checks">Pipeline checks</button></div>`;}
 function detailScreen(item){
  const answer=decision(item.id),intent=diffLines(intentLines(item.intentBefore),intentLines(item.intentAfter));
  const connections=item.connections?.length?`<div class="holon"><b>Connected governed outcomes</b><ul>${item.connections.map(connection=>`<li><b>${esc(connection.title)}</b> · ${esc(connection.detail)}</li>`).join('')}</ul></div>`:'';
@@ -200,12 +200,16 @@ function detailScreen(item){
  const question='Did you mean this?';
  const yes='Yes, I meant this',no='No, investigate';
  return `<div class="ci">${ciTop()}<button type="button" class="back" data-act="list">← All changes</button><article class="tile">
-  <div class="tile-head"><h3>${esc(item.title)}</h3>${typeIcon(item.reviewType||'Behavior')}</div>
+  <div class="tile-head"><h3>${esc(item.title)}</h3><span class="tile-type">${esc(item.reviewType||'Behavior')}${typeIcon(item.reviewType||'Behavior')}</span></div>
   <div class="tile-sub"><code>${esc(item.method||short(item.file))}</code></div>
-  ${item.objective?`<div class="rule"><small>ACCEPTED CONSTRAINT</small><p>${esc(item.objective)}</p></div>`:''}
-  <div class="ba"><div><small>BEFORE</small>${esc(item.before)}</div><div class="after"><small>AFTER</small>${esc(item.after)}</div></div>
+  ${item.objective?`<div class="rule"><small>ACCEPTED CONSTRAINT</small><p>${esc(item.objective)}</p></div>`:item.concept?`<div class="rule boundary-context"><small>RECORDED REVIEW CONTEXT</small><p>${esc(item.concept)}</p></div>`:''}
+  <div class="ba"><div><small>BEFORE</small>${esc(item.before)}</div><div class="after"><small>WITH THIS PR</small>${esc(item.after)}</div></div>
   ${interpretation}
-  ${resolution}${connections}<button type="button" class="btn" data-act="explore" aria-expanded="${state.explore}">${state.explore?'Hide impact exploration':'Explore impact'}</button>${state.explore?reviewExplorer.pane(item,state.packet,state.summary,checks(),{tab:state.tab,node:state.node,full:state.full,file:state.evidenceFile,methods:state.methods}):''}
+  <div class="diffs">
+   <section class="pane"><header><b>Intent</b><span>${esc(label(item.concept))}</span></header>${intent.length?`<pre>${lines(intent)}</pre>`:'<p class="evidence-empty">No intent comparison recorded for this item.</p>'}</section>
+   <section class="pane"><header><b>Code</b><span>${esc(short(item.file))}</span></header>${item.comparison?.before?.text!=null&&item.comparison?.after?.text!=null?`<pre>${lines(sourceLines(item))}</pre>${item.comparison.complete?'':'<p class="evidence-empty">Recorded source excerpt; open more evidence for context.</p>'}`:'<p class="evidence-empty">No source comparison recorded for this item. Check the source evidence view for available patches.</p>'}</section>
+  </div>
+  <div class="compact-evidence"><button type="button" class="btn" data-act="explore" aria-expanded="${state.explore}" aria-controls="recorded-evidence">${state.explore?'Hide recorded evidence':'More recorded evidence'}</button>${state.explore?`<div id="recorded-evidence">${resolution}${connections}${reviewExplorer.pane(item,state.packet,state.summary,checks(),{tab:state.tab,node:state.node,full:state.full,file:state.evidenceFile,methods:state.methods})}</div>`:''}</div>
   ${item.status==='unknown'?'<div class="ask"><b>Cannot be established. Review the analysis gap; assessments are unavailable.</b></div>':item.status==='watch'?'<div class="ask"><b>No response required while this rule is under evaluation.</b></div>':`<div class="ask"><b>${esc(question)}</b><button type="button" class="choice yes" data-act="yes" aria-pressed="${answer==='yes'}">${esc(yes)}</button><button type="button" class="choice no" data-act="no" aria-pressed="${answer==='no'}">${esc(no)}</button></div>`}
  ${saveBar()}</article></div>`;
 }
@@ -237,7 +241,7 @@ document.addEventListener('click',event=>{
  if(action==='open'){state.view='review';state.selected=null;render();}
  else if(action==='checks'){event.preventDefault();state.view='checks';state.selected=null;render();}
  else if(action==='list'){state.selected=null;render();}
- else if(target.dataset.row){state.view='review';state.selected=target.dataset.row;state.evidenceFile='';state.node=null;state.full=false;render();scrollTo(0,0);}
+ else if(target.dataset.row){state.view='review';state.selected=target.dataset.row;state.explore=false;state.evidenceFile='';state.node=null;state.full=false;render();scrollTo(0,0);}
  else if(action==='yes'||action==='no'){const item=items().find(i=>i.id===state.selected);if(item&&item.status!=='unknown'&&item.status!=='watch')state.drafts.set(state.selected,action);render();}
  else if(action==='undo'){state.drafts.clear();render();}
  else if(action==='governance')window.codeIntentGovernanceActions.open({repo,pr,sha,responses:[]});
