@@ -1,6 +1,7 @@
 package net.chrisrichardson.ftgo.deliveryservice.domain;
 
 import net.chrisrichardson.ftgo.common.Address;
+import net.chrisrichardson.ftgo.common.UnsupportedStateTransitionException;
 import net.chrisrichardson.ftgo.deliveryservice.api.web.DeliveryState;
 
 import javax.persistence.*;
@@ -62,6 +63,9 @@ public class Delivery {
   }
 
   public void schedule(LocalDateTime readyBy, long assignedCourier) {
+    if (state != DeliveryState.PENDING) {
+      throw new UnsupportedStateTransitionException(state);
+    }
     this.readyBy = readyBy;
     this.assignedCourier = assignedCourier;
     this.state = DeliveryState.SCHEDULED;

@@ -1,5 +1,6 @@
 package net.chrisrichardson.ftgo.deliveryservice.domain;
 
+import net.chrisrichardson.ftgo.common.UnsupportedStateTransitionException;
 import net.chrisrichardson.ftgo.deliveryservice.api.web.DeliveryActionType;
 import net.chrisrichardson.ftgo.deliveryservice.api.web.DeliveryState;
 import org.junit.Before;
@@ -92,6 +93,14 @@ public class DeliveryServiceTest {
     assertEquals(DeliveryServiceTestData.PICKUP_ADDRESS, actions.get(0).getAddress());
     assertEquals(DeliveryActionType.DROPOFF, actions.get(1).getType());
     assertEquals(DeliveryServiceTestData.DELIVERY_ADDRESS, actions.get(1).getAddress());
+  }
+
+  @Test(expected = UnsupportedStateTransitionException.class)
+  public void shouldRejectReschedulingDelivery() {
+    Delivery delivery = Delivery.create(ORDER_ID, RESTAURANT_ID, DeliveryServiceTestData.PICKUP_ADDRESS, DeliveryServiceTestData.DELIVERY_ADDRESS);
+
+    delivery.schedule(READY_BY, COURIER_ID);
+    delivery.schedule(READY_BY.plusMinutes(5), COURIER_ID);
   }
 
 }
