@@ -145,13 +145,27 @@ function modelFromEntries(entries){
  }));
 }
 
-function modelFromGovernedFlows(packet){
+function publicJudgment(flow,checks){
+ const embedded=flow?.behavior_judgment||{};
+ if(embedded.question_id&&/^supported_boundary_/.test(embedded.status||''))return embedded;
+ const boundary=flow?.boundary_id||flow?.title;
+ const regions=new Set((flow?.concepts||[]).map(row=>row.unit_id).filter(Boolean));
+ const rows=(checks||[]).find(check=>check.id==='intent_diff')?.judgments||[];
+ const match=rows.find(row=>row.question_id&&row.boundary_id===boundary&&
+  (!regions.size||(row.intent_region_ids||[]).some(id=>regions.has(id)))&&
+  ['violated','preserved','equivalent'].includes(row.answer));
+ if(!match)return embedded;
+ return {...match,choice:match.answer,status:match.answer==='violated'?
+  'supported_boundary_violation':'supported_boundary_preservation'};
+}
+
+function modelFromGovernedFlows(packet,checks){
  const grouped=new Map();
  for(const flow of packet?.flows||[]){
-  const judgment=flow?.behavior_judgment||{};
+  const judgment=publicJudgment(flow,checks);
   if(!judgment.question_id||!/^supported_boundary_/.test(judgment.status||''))continue;
   if(!grouped.has(judgment.question_id))grouped.set(judgment.question_id,[]);
-  grouped.get(judgment.question_id).push(flow);
+  grouped.get(judgment.question_id).push({...flow,behavior_judgment:judgment});
  }
  const objectiveViolations=packet?.acceptance?.layers?.core_objectives?.violations||[];
  return [...grouped].map(([id,flows])=>{
@@ -242,7 +256,7 @@ function codeIntentReviewModel(packet,summary,entries=[],checks=[]){
  const usingNarrative=!items.length&&!confirmedNoChange&&Boolean(narrativeItems.length);
  const entryItems=modelFromEntries(entries);
  const effective=items.length||confirmedNoChange?items:usingNarrative?narrativeItems:
-  entryItems.length?entryItems:modelFromGovernedFlows(packet);
+  entryItems.length?entryItems:modelFromGovernedFlows(packet,checks);
  const unique=[];const seen=new Set();
  for(const item of effective){if(seen.has(item.id))continue;seen.add(item.id);unique.push(item);}
  for(const item of reviewFindingItems(packet,summary,unique,checks)){if(!seen.has(item.id)){seen.add(item.id);unique.push(item);}}
@@ -293,7 +307,7 @@ function violationMarkup(item){
  if(!finding)return '';
  const ref=escapeHtml(finding.ref);
  const body=finding.decision==='rule_change_requested'
-  ?'<p>Reported as a false detection: a rule change is requested. This pull request stays blocked until the changed rule is live.</p>'
+  ?'<p>Reported as a false detection: a rule exception is committed to this pull request, and the checks re-run.</p>'
   :`<p>Someone with write access decides, in a PR comment:</p><ul><li><b>Real violation:</b> <code>/reject -- reason</code> closes this pull request.</li><li><b>False detection:</b> <code>/false-positive ${ref} -- reason</code> requests a fix to the rule.</li></ul>`;
  return `<section class="rr-violation"><small>RULE VIOLATION · ${ref}</small>${body}</section>`;
 }

@@ -10,7 +10,7 @@ const sha=qs.get('sha')||'';
 const pr=qs.get('pr')||'';
 const runId=qs.get('run_id')||'';
 const api=(qs.get('api')||'').replace(/\/+$/,'');
-const dataPath=qs.get('data')||'';
+let dataPath=qs.get('data')||'';
 const {ANALYSIS,REVIEW}=walkthroughPipeline;
 const state={status:null,packet:null,summary:null,model:null,view:qs.get('view')==='review'?'review':'checks',selected:null,drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
 let pollTimer=null;
@@ -49,7 +49,9 @@ async function loadArtifacts(){
  if(state.loadingArtifact||state.packet||!dataPath)return;
  state.loadingArtifact=true;
  try{
-  const packet=await loadJson(dataPath,1024*1024,null);if(!packet)return;
+  const reference=state.status?.review_artifact;
+  const digest=reference?.name==='intent-flow.json'?reference.sha256:null;
+  const packet=await loadJson(dataPath,1024*1024,digest);if(!packet)return;
   if(packet.schema!=='intent-flow-view-v1'||!Array.isArray(packet.flows))throw Error('Unsupported CodeIntent artifact.');
   if(packet.repository!==repo||packet.head_commit!==sha)throw Error('Artifact identity differs from this pull request.');
   if(runId&&packet.simulation?.run_id!==runId)throw Error('Artifact belongs to another local run.');
@@ -76,6 +78,12 @@ async function poll(){
   if(!api||!repo||!sha)throw Error('This link is missing api, repo, or sha.');
   const response=await fetch(statusUrl(),{cache:'no-store'});if(!response.ok)throw Error('Status returned HTTP '+response.status+'.');
   state.status=await response.json();state.error='';
+  const reference=state.status?.review_artifact;
+  if(!dataPath&&reference?.schema==='review-artifact-reference-v1'&&reference.name==='intent-flow.json'){
+   const artifact=new URL(statusUrl());
+   artifact.searchParams.set('detail','review-artifact');artifact.searchParams.set('name',reference.name);
+   dataPath=artifact.href;
+  }
   if(state.packet)state.model=codeIntentReviewModel(state.packet,state.summary||{},[],checks());
   else await loadArtifacts();
  }catch(error){state.error='Live pipeline unavailable: '+error.message;}
