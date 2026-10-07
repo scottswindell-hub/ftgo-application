@@ -52,15 +52,42 @@ function governedBoundaryAreas(packet){
  return [...groups.values()].map(a=>({...a,method_ids:[...new Set(a.method_ids)],region_ids:[...new Set(a.region_ids)],violation_method_ids:[...new Set(a.violation_method_ids)],unbound_method_ids:[...new Set(a.unbound_method_ids)]}));
 }
 
-// Governed concepts this PR changed, so the tab agrees with the decision before showing workflow territories.
+// Describe recorded substitutions independently of the semantic judgment.
+function governedChangeExplanation(packet,concept){
+ const words=name=>String(name).replace(/([a-z0-9])([A-Z])/g,'$1 $2').toLowerCase().replace(/\bid\b/g,'ID');
+ const valueLabel=value=>{
+  const match=/^get([A-Z]\w*)\(\)(?:\.get([A-Z]\w*)\(\))?$/.exec(value);
+  return match?words(match[2]||match[1])+(match[2]?` from ${words(match[1])}`:''):value;
+ };
+ const bindings=[];
+ for(const flow of packet.flows||[]){
+  if(flow.title!==concept.boundary_id||flow.source?.file!==concept.changed?.file)continue;
+  const owner=String(flow.method||'').split('::').pop().replace(/#([^/]+)\/\d+$/,'.$1()');
+  if(!owner.endsWith(concept.changed?.method||'\0'))continue;
+  for(const delta of flow.observed_deltas||[]){
+   if(delta.kind!=='normalized_boundary_fact')continue;
+   const parse=rows=>(rows||[]).flatMap(row=>{try{return row.startsWith('value_binding ')?[JSON.parse(row.slice(14))]:[];}catch{return [];}});
+   const before=parse(delta.fields?.fact?.before),after=parse(delta.fields?.fact?.after);
+   for(const b of before)for(const a of after)if(a.slot===b.slot&&a.value!==b.value&&typeof a.value==='string'&&typeof b.value==='string')bindings.push({before:b,after:a});
+  }
+ }
+ if(bindings.length!==1)return concept.sentence?`<p class="governed-change-description">${esc(concept.sentence.replace(/<[^>]*>/g,''))}</p>`:'';
+ const {before,after}=bindings[0],field=words(after.slot.replace(/^(with|set)/,''));
+ const receiver=concept.affected;
+ const service=/^ftgo-(.+?)-service\//.exec(receiver?.file||'');
+ const command=/CommandMessage<(\w+)>/.exec((receiver?.lines||[]).join('\n'))?.[1];
+ const subject=service&&command?`${words(service[1]).replace(/^./,c=>c.toUpperCase())}’s ${command}`:'The command';
+ return `<p class="governed-change-description">${esc(subject)} now carries the ${esc(valueLabel(after.value))} in its ${esc(field)} field. Previously, it carried the ${esc(valueLabel(before.value))}.</p><dl class="governed-change-values"><dt>Previously</dt><dd><code>${esc(before.slot)} ← ${esc(before.value)}</code></dd><dt>This PR</dt><dd><code>${esc(after.slot)} ← ${esc(after.value)}</code></dd></dl>${receiver?`<p class="note">Receiving handler: <code>${esc(receiver.label)}</code> · <code>${esc(receiver.file.split('/').pop())}:${esc(receiver.anchor)}</code></p>`:''}`;
+}
+// Put the deterministic explanation before the workflow territories.
 function changedConceptsCard(packet){
- const concepts=packet.intent_impact?.concepts||[];
- const judged=Object.fromEntries(((typeof liveDoc!=='undefined'&&liveDoc?.checks)||[]).find(c=>c.id==='intent_diff')?.judgments?.filter(j=>j.question_id).map(j=>[j.question_id,j])||[]);
- const changed=concepts.filter(c=>['changed','review'].includes(judged[c.question_id]?.verdict));
+ const impact=packet.intent_impact;
+ const concepts=impact?.baseline_commit===packet.baseline_commit&&impact?.head_commit===packet.head_commit?impact?.concepts||[]:[];
+ const changed=concepts;
  const directMethods=new Set((packet.governed_objectives?.customer_workflows?.workflows||[]).flatMap(workflow=>workflow.obligations||[]).flatMap(obligation=>obligation.evidence||[]).filter(row=>['exact_fact_change','changed_witness_method'].includes(row.classification)).map(row=>row.method_id));
  if(!changed.length)return `<div class="governance-changed-card clear"><b>No governed concept was judged changed.</b><span>${directMethods.size?`${directMethods.size} implementation method${directMethods.size===1?'':'s'} directly intersect${directMethods.size===1?'s':''} this PR and remain visible in the map.`:'No governed workflow evidence directly intersects this PR.'}</span></div>`;
  const short=p=>String(p||'').split('/').pop();
- return `<div class="governance-changed-card"><b>${changed.length} governed concept${changed.length===1?'':'s'} changed in this PR</b><ul>${changed.map(c=>{const v=judged[c.question_id];return `<li><span class="pill ${v.verdict==='changed'?'red':'amber'}">${v.verdict==='changed'?'Behavior changed':'Needs review'}</span> <b>${esc(c.concept)}</b> · <code>${esc(short(c.changed?.file))}:${esc(c.changed?.line??'')}</code>${(c.services||[]).length?` · reaches ${esc(c.services.join(', '))}`:''}</li>`;}).join('')}</ul><button data-view="review">Open in Review</button><p class="note">The workflow map below locates those changes within the accepted governance baseline.</p></div>`;
+ return `<div class="governance-changed-card"><b>What this PR changes</b>${changed.map(c=>`<article class="governed-change">${governedChangeExplanation(packet,c)}<p class="note">Changed in <code>${esc(c.changed?.method)}</code> · <code>${esc(short(c.changed?.file))}:${esc(c.changed?.line??'')}</code></p></article>`).join('')}<button data-view="review">Open source evidence in Review</button><p class="note">Descriptions come from recorded boundary facts and source mappings.</p></div>`;
 }
 function candidateImpactMarkup(doc){
  const impact=doc.candidate_impact;
@@ -232,7 +259,7 @@ function acceptedObjectivesMarkup(doc,options){
  return `<section data-review-scope="${esc(options.scope)}" class="governed-objectives"><h2>Governed objectives</h2><p>Accepted architecture and business objectives, their recorded results, and their mapped code regions.</p><div class="governance-mapping-layout"><nav class="governance-description-list" aria-label="Accepted objectives">${buttons}</nav><div class="governance-mapping-panel"><header><span class="pill ${status.tone==='clear'?'green':status.tone==='violation'?'red':'amber'}">${esc(status.label)}</span><h3>${esc(selected.statement||selected.id)}</h3><p class="note">${mapping?(mapping.scope_method_ids||mapping.method_ids||[]).length+' mapped methods · '+(mapping.holon_ids||[]).length+' related intent areas':'Exact objective mapping unavailable.'}</p></header>${terrain}<details class="objective-inspect"><summary>${obligations.length} accepted obligations for this objective</summary>${obligations.map(row=>`<p><strong>${esc(row.statement||row.id)}</strong><br><code>${esc(row.id)}</code> · ${esc(row.status)}</p>`).join('')||'<p>No accepted obligation evidence was supplied.</p>'}</details></div></div></section>`;
 }
 function governedObjectivesMarkup(packet,options){
- const doc=packet.governed_objectives?{...packet.governed_objectives,boundaries:governedBoundaryAreas(packet)}:null;
+ const doc=packet.governed_objectives?{...packet.governed_objectives,boundaries:governedBoundaryAreas(packet),source_packet:packet}:null;
  if(!doc)return '<article class="card"><div class="body"><h2>Governed objectives unavailable</h2><p>This run did not supply its accepted governance snapshot.</p></div></article>';
  if(doc.baseline_commit!==packet.baseline_commit||doc.head_commit!==packet.head_commit)throw Error('Governance snapshot differs from this revision');
  reviewBoards.set(options.scope,options);
@@ -251,7 +278,7 @@ function governedObjectivesMarkup(packet,options){
  const architecture=data.architecture;
  const directlyAffected=workflows.filter(row=>row.impact_status==='direct_change'),contextAffected=workflows.filter(row=>row.impact_status==='context_only');
  const browser=`<div class="workflow-set-browser"><section class="workflow-pr-overview"><span>PR workflow impact</span><strong>${directlyAffected.length} workflow${directlyAffected.length===1?'':'s'} affected by this PR</strong><p>${directlyAffected.length?esc(directlyAffected.map(row=>row.name).join(' · ')):'No workflow-bound evidence directly intersects this PR.'}${contextAffected.length?` · ${contextAffected.length} additional context-only`:''}</p></section><section class="workflow-architecture"><span class="pill green">${esc(architecture.status)} architecture objective</span><strong>${esc(architecture.statement)}</strong></section>${sets.map(set=>{const rows=workflows.filter(row=>(row.set_id||'customer')===set.id),affected=rows.filter(row=>row.impact_status!=='unaffected').length,related=rows.some(row=>relatedWorkflowIds.has(row.id)),open=rows.some(row=>row.id===selected.id)||related;return `<details class="workflow-set ${related?'holon-related':''}" ${open?'open':''}><summary><span><b>${esc(set.name)}</b><small>${esc(set.description||'')} · ${affected}/${rows.length} affected or context-related</small></span></summary><div class="workflow-set-items">${rows.map(row=>`<button data-governed-area="${esc(row.id)}" class="${row.id===selected.id?'selected':''} ${relatedWorkflowIds.has(row.id)?'holon-related':''} ${row.impact_status==='direct_change'?'pr-affected':''}"><span>${esc(row.name)}</span><small>${esc(workflowImpactStatus(row).label)}</small></button>`).join('')}</div></details>`;}).join('')}</div>`;
- return `<section data-review-scope="${esc(options.scope)}" class="governed-objectives"><h2>Workflow impact</h2><p>Select a workflow to highlight its affected methods, or select a highlighted method to open the workflow categories and obligations connected to that PR change.</p>${changedConceptsCard(packet)}<div class="governance-mapping-layout workflow-impact-layout"><nav aria-label="Workflow catalog">${browser}</nav><div class="governance-mapping-panel">${workflowMethodImpactMarkup(doc,selected,workflows,state)}</div></div><details class="governance-coverage"><summary>Governance and candidate coverage</summary><p>${data.candidate_inventory.unique_assigned_candidates} distinct candidates assigned across ${workflows.length} workflows · ${data.candidate_inventory.unassigned_candidates} candidates not yet classified into a workflow.</p><p>Baseline ${esc(doc.baseline_commit.slice(0,12))} → revision ${esc(doc.head_commit.slice(0,12))}</p><p>${esc(data.qualification)}</p></details></section>`;
+ return `<section data-review-scope="${esc(options.scope)}" class="governed-objectives"><h2>Workflow impact</h2><p>Select a highlighted method to inspect its changed source lines and connected workflow obligations.</p><div class="governance-mapping-layout workflow-impact-layout"><nav aria-label="Workflow catalog">${browser}</nav><div class="governance-mapping-panel">${workflowMethodImpactMarkup(doc,selected,workflows,state)}</div></div><details class="governance-coverage"><summary>Governance and candidate coverage</summary><p>${data.candidate_inventory.unique_assigned_candidates} distinct candidates assigned across ${workflows.length} workflows · ${data.candidate_inventory.unassigned_candidates} candidates not yet classified into a workflow.</p><p>Baseline ${esc(doc.baseline_commit.slice(0,12))} → revision ${esc(doc.head_commit.slice(0,12))}</p><p>${esc(data.qualification)}</p></details></section>`;
 }
 function governanceHolonMap(map,mapping,area,state){
  const holons=map.holons.filter(h=>mapping.holon_ids.includes(h.id));
@@ -286,7 +313,7 @@ function clearMethodHolonHover(terrain,skipPinnedRestore=false){
  if(!skipPinnedRestore&&terrain.dataset.pinnedMethod){const pinned=[...terrain.querySelectorAll('.workflow-impact-method')].find(node=>node.dataset.methodId===terrain.dataset.pinnedMethod);if(pinned){showMethodHolonHover(pinned,true);return;}}
  if(!skipPinnedRestore&&terrain.dataset.pinnedHolon){const pinned=[...terrain.querySelectorAll('[data-holon-viewer-id]')].find(node=>node.dataset.holonViewerId===terrain.dataset.pinnedHolon);if(pinned){showHolonViewerPreview(pinned,true);return;}}
  const status=terrain.querySelector('[data-holon-hover-status]');
- if(status)status.textContent='Blue identifies active-workflow methods; purple identifies the previewed holon; red and amber bullseyes identify direct PR intersections.';
+ if(status)status.textContent='Hover a method to inspect its holon memberships; click to open its source changes.';
 }
 function showMethodHolonHover(method,pinned=false){
  const terrain=method?.closest('[data-method-terrain]');if(!terrain)return;
@@ -294,13 +321,13 @@ function showMethodHolonHover(method,pinned=false){
  const holonIds=String(method.dataset.holonIds||'').split(/\s+/).filter(Boolean),label=method.dataset.methodLabel||method.dataset.methodId;
  method.classList.add('holon-origin');
  const status=terrain.querySelector('[data-holon-hover-status]');
- if(!holonIds.length){if(status)status.textContent=`${pinned?'Selected: ':'Preview: '}${label} is not assigned to a flow holon.`;return;}
+ if(!holonIds.length){if(status)status.textContent=`${label} is not assigned to a flow holon.`;return;}
  const active=new Map(holonIds.map((id,index)=>[id,index]));
  const holonLabels=new Map([...terrain.querySelectorAll('[data-holon-description-id]')].map(node=>[node.dataset.holonDescriptionId,node.dataset.holonLabel]));
  terrain.classList.add('is-holon-hovering');
  terrain.querySelectorAll('.workflow-impact-method').forEach(node=>{const memberships=String(node.dataset.holonIds||'').split(/\s+/);node.classList.toggle('holon-peer',memberships.some(id=>active.has(id)));});
  terrain.querySelectorAll('.workflow-method-holon-ring').forEach(node=>{const index=active.get(node.dataset.holonMembership);if(index===undefined)return;node.classList.add('is-active');node.style.setProperty('--holon-color',METHOD_HOLON_COLORS[index%METHOD_HOLON_COLORS.length]);node.setAttribute('r',String(4+index*1.8));});
- if(status){status.textContent='';const prefix=document.createElement('span');prefix.className='method-holon-status-prefix';prefix.textContent=`${pinned?'Selected: ':'Preview: '}${label} belongs to`;prefix.title=prefix.textContent;status.append(prefix);holonIds.forEach((id,index)=>{const chip=document.createElement('span');chip.className='holon-color-chip';chip.style.setProperty('--holon-color',METHOD_HOLON_COLORS[index%METHOD_HOLON_COLORS.length]);chip.textContent=holonLabels.get(id)||id;chip.title=id;status.append(chip);});}
+ if(status){status.textContent='';const prefix=document.createElement('span');prefix.className='method-holon-status-prefix';prefix.textContent=`${label} belongs to`;prefix.title=prefix.textContent;status.append(prefix);holonIds.forEach((id,index)=>{const chip=document.createElement('span');chip.className='holon-color-chip';chip.style.setProperty('--holon-color',METHOD_HOLON_COLORS[index%METHOD_HOLON_COLORS.length]);chip.textContent=holonLabels.get(id)||id;chip.title=id;status.append(chip);});}
 }
 function resetHolonViewerDetail(terrain){
  const detail=terrain?.querySelector('[data-holon-viewer-detail]');
@@ -317,7 +344,7 @@ function showHolonViewerPreview(button,pinned=false){
  members.forEach(node=>node.classList.add('holon-peer'));
  terrain.querySelectorAll('.workflow-method-holon-ring').forEach(node=>{if(node.dataset.holonMembership!==holonId)return;node.classList.add('is-active');node.style.setProperty('--holon-color',color);node.setAttribute('r','4');});
  const status=terrain.querySelector('[data-holon-hover-status]');
- if(status){status.textContent='';const prefix=document.createElement('span');prefix.className='method-holon-status-prefix';prefix.textContent=pinned?'Selected holon:':'Preview holon:';status.append(prefix);const chip=document.createElement('span');chip.className='holon-color-chip';chip.style.setProperty('--holon-color',color);chip.textContent=label;chip.title=holonId;status.append(chip);}
+ if(status){status.textContent='';const prefix=document.createElement('span');prefix.className='method-holon-status-prefix';prefix.textContent='Holon:';status.append(prefix);const chip=document.createElement('span');chip.className='holon-color-chip';chip.style.setProperty('--holon-color',color);chip.textContent=label;chip.title=holonId;status.append(chip);}
  const relationship=terrain.querySelector('[data-holon-relationship]');if(relationship)relationship.textContent=button.dataset.holonRelationship||label;
  const detail=terrain.querySelector('[data-holon-viewer-detail]');if(!detail)return;
  detail.textContent='';
@@ -330,8 +357,25 @@ function showHolonViewerPreview(button,pinned=false){
  addGroup('Direct PR intersections',direct);addGroup('Structural context',context);
  if(stable.length){const disclosure=document.createElement('details');disclosure.className='holon-stable-methods';const disclosureLabel=document.createElement('summary');disclosureLabel.textContent=`${stable.length} stable member method${stable.length===1?'':'s'}`;const list=document.createElement('div');list.className='holon-viewer-methods';stable.forEach(method=>list.append(methodButton(method)));disclosure.append(disclosureLabel,list);detail.append(disclosure);}
 }
+function nearestTerrainMethod(event){
+ // Keyboard activation keeps its focused method. Pointer targeting uses SVG
+ // coordinates so zoom and responsive scaling cannot change the nearest dot.
+ if(event.type==='click'&&event.detail===0)return null;
+ const svg=event.target.closest?.('svg.workflow-holon-brain');
+ const matrix=svg?.getScreenCTM?.();
+ if(!matrix||!Number.isFinite(event.clientX)||!Number.isFinite(event.clientY))return null;
+ const point=svg.createSVGPoint();point.x=event.clientX;point.y=event.clientY;
+ const local=point.matrixTransform(matrix.inverse());
+ let nearest=null,distance=14*14;
+ for(const method of svg.querySelectorAll('.workflow-impact-method')){
+  const dot=method.querySelector('.workflow-method-dot');if(!dot)continue;
+  const dx=Number(dot.getAttribute('cx'))-local.x,dy=Number(dot.getAttribute('cy'))-local.y,d=dx*dx+dy*dy;
+  if(d<distance||(d===distance&&nearest&&method.dataset.methodId<nearest.dataset.methodId)){nearest=method;distance=d;}
+ }
+ return nearest;
+}
 document.addEventListener('click',event=>{
- const button=event.target.closest('button,[data-terrain-method],[data-terrain-holon],[data-governed-holon],[data-governed-method]');if(!button)return;
+ const button=nearestTerrainMethod(event)||event.target.closest('button,[data-terrain-method],[data-terrain-holon],[data-governed-holon],[data-governed-method]');if(!button)return;
  const scope=button.closest('[data-review-scope]')?.dataset.reviewScope;if(!scope)return;
  const state=reviewState(scope);
  if(button.hasAttribute('data-open-holon-viewer')){state.holonViewerOpen=true;button.closest('[data-method-terrain]')?.querySelector('[data-holon-viewer-dialog]')?.show?.();}
@@ -350,7 +394,7 @@ let holonViewerDrag=null;
 document.addEventListener('pointerdown',event=>{const header=event.target.closest?.('[data-holon-viewer-dialog]>header');if(!header||event.target.closest?.('button,input'))return;const viewer=header.parentElement,rect=viewer.getBoundingClientRect();holonViewerDrag={viewer,dx:event.clientX-rect.left,dy:event.clientY-rect.top};viewer.style.margin='0';viewer.style.right='auto';viewer.style.bottom='auto';viewer.style.left=`${rect.left}px`;viewer.style.top=`${rect.top}px`;viewer.classList.add('dragging');event.preventDefault();});
 document.addEventListener('pointermove',event=>{if(!holonViewerDrag)return;const {viewer,dx,dy}=holonViewerDrag,rect=viewer.getBoundingClientRect(),left=Math.max(0,Math.min(window.innerWidth-rect.width,event.clientX-dx)),top=Math.max(0,Math.min(window.innerHeight-rect.height,event.clientY-dy));viewer.style.left=`${left}px`;viewer.style.top=`${top}px`;});
 document.addEventListener('pointerup',()=>{holonViewerDrag?.viewer.classList.remove('dragging');holonViewerDrag=null;});
-document.addEventListener('mouseover',event=>{const method=event.target.closest?.('.workflow-impact-method[data-method-id]');if(method&&!method.contains(event.relatedTarget))showMethodHolonHover(method);});
+document.addEventListener('mousemove',event=>{const method=nearestTerrainMethod(event);if(method)showMethodHolonHover(method);});
 document.addEventListener('mouseout',event=>{const method=event.target.closest?.('.workflow-impact-method[data-method-id]');if(method&&!method.contains(event.relatedTarget))clearMethodHolonHover(method.closest('[data-method-terrain]'));});
 document.addEventListener('focusin',event=>{const method=event.target.closest?.('.workflow-impact-method[data-method-id]');if(method)showMethodHolonHover(method);});
 document.addEventListener('focusout',event=>{const method=event.target.closest?.('.workflow-impact-method[data-method-id]');if(method&&!method.contains(event.relatedTarget))clearMethodHolonHover(method.closest('[data-method-terrain]'));});

@@ -150,7 +150,10 @@ function row(item,kind){
 function listScreen(){
  if(!state.model)return `<div class="ci">${ciTop()}<div class="loading">Waiting for the semantic review artifact…</div></div>`;
  const all=items();
- if(!all.length)return `<div class="ci">${ciTop()}<div class="happy"><span class="face">✓</span><h3>Behavior is unchanged</h3><p>The implementation changed, but no semantic change requiring a decision was established.</p><button type="button" class="btn" data-act="checks">Back to checks</button></div></div>`;
+ if(!all.length){
+  if(state.model.confirmedNoChange)return `<div class="ci">${ciTop()}<div class="happy"><span class="face">✓</span><h3>Behavior is unchanged</h3><p>The implementation changed, but no semantic change requiring a decision was established.</p><button type="button" class="btn" data-act="checks">Back to checks</button></div></div>`;
+  return `<div class="ci">${ciTop()}<div class="violation-box"><h3>Review evidence is unavailable</h3><p>${esc(state.status?.reason||'The analysis did not complete, so this view cannot determine whether behavior changed.')}</p><button type="button" class="btn" data-act="checks">Back to checks</button></div></div>`;
+ }
  return `<div class="ci">${ciTop()}<h2>Review these changes</h2>
   <div class="rows">${state.model.changes.map(item=>row(item,'change')).join('')||'<div class="empty-list">No ungoverned behavioral changes need a decision.</div>'}</div>
   ${state.model.constraints.length?`<h2 style="margin-top:24px">Constraint violations</h2><div class="rows">${state.model.constraints.map(item=>row(item,'constraint')).join('')}</div>`:''}

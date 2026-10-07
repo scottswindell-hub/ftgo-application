@@ -145,6 +145,34 @@ function modelFromEntries(entries){
  }));
 }
 
+function modelFromGovernedFlows(packet){
+ const grouped=new Map();
+ for(const flow of packet?.flows||[]){
+  const judgment=flow?.behavior_judgment||{};
+  if(!judgment.question_id||!/^supported_boundary_/.test(judgment.status||''))continue;
+  if(!grouped.has(judgment.question_id))grouped.set(judgment.question_id,[]);
+  grouped.get(judgment.question_id).push(flow);
+ }
+ const objectiveViolations=packet?.acceptance?.layers?.core_objectives?.violations||[];
+ return [...grouped].map(([id,flows])=>{
+  const flow=flows[0],judgment=flow.behavior_judgment||{};
+  const file=flows.map(value=>value.source?.file).find(Boolean)||'';
+  const objective=objectiveViolations.length===1?objectiveViolations[0].statement||'':'';
+  const violated=judgment.status==='supported_boundary_violation'||judgment.choice==='violated';
+  return {id,kind:objective?'constraint':'change',status:violated?'violation':'preserved',
+   title:words(judgment.boundary_id||flow.title)||'Governed boundary change',
+   concept:judgment.boundary_id||flow.title||'Governed boundary',method:shortMethod(flow.method),file,owner:'',objective,
+   before:'The accepted baseline recorded the governed boundary behavior shown below.',
+   after:violated?'This pull request changes that governed boundary and the recorded judgment reports a violation.':'The recorded judgment reports that this pull request preserves the governed boundary.',
+   summary:violated?'The deterministic boundary comparison and recorded judgment establish a governed semantic violation.':'The deterministic boundary comparison and recorded judgment establish preservation.',
+   detailSummary:'',intentBefore:flows.flatMap(value=>flowFacts(value,'before')),
+   intentAfter:flows.flatMap(value=>flowFacts(value,'after')),connections:[],
+   comparison:patchComparison(packet,file),reviewType:objective?'Business':'Behavior',
+   groundingLabel:'RECORDED GOVERNED BOUNDARY JUDGMENT',
+   qualification:'Projected directly from the digest-pinned intent-flow facts and recorded governed-boundary judgment; no optional semantic prose was available.'};
+ });
+}
+
 function reviewFindings(checks){
  const rows=[];
  const standards=(checks||[]).find(check=>check.id==='coding_standards');
@@ -212,7 +240,9 @@ function codeIntentReviewModel(packet,summary,entries=[],checks=[]){
  const intentCheck=(checks||[]).find(check=>check.id==='intent_diff');
  const confirmedNoChange=semanticStatus==='no_changes'&&intentCheck?.state==='passed';
  const usingNarrative=!items.length&&!confirmedNoChange&&Boolean(narrativeItems.length);
- const effective=items.length||confirmedNoChange?items:usingNarrative?narrativeItems:modelFromEntries(entries);
+ const entryItems=modelFromEntries(entries);
+ const effective=items.length||confirmedNoChange?items:usingNarrative?narrativeItems:
+  entryItems.length?entryItems:modelFromGovernedFlows(packet);
  const unique=[];const seen=new Set();
  for(const item of effective){if(seen.has(item.id))continue;seen.add(item.id);unique.push(item);}
  for(const item of reviewFindingItems(packet,summary,unique,checks)){if(!seen.has(item.id)){seen.add(item.id);unique.push(item);}}
@@ -222,7 +252,7 @@ function codeIntentReviewModel(packet,summary,entries=[],checks=[]){
  const usefulUncertainty=(summary?.intent_semantics?.uncertainty||[]).filter(value=>
   !/no (?:accepted outcome|governed obligation|governance|objective).*(?:connected|supplied|mapped)/i.test(value));
  return {schema:'readable-intent-review-v1',changes,constraints,preserved,
-  semanticStatus,
+  semanticStatus,confirmedNoChange,
   omitted:summary?.intent_semantics?.omitted_change_ids?.length||0,
   additionalRecorded:usingNarrative?(summary?.behavior_narrative?.unexplained_change_ids?.length||0):0,
   uncertainty:usefulUncertainty,
@@ -284,7 +314,10 @@ function detailMarkup(item,state){
 function codeIntentReviewMarkup(model,scope){
  const state=reviewState(scope),items=allItems(model),selected=items.find(item=>item.id===state.selected);
  if(selected)return detailMarkup(selected,state);
- if(!items.length)return `<section class="rr-empty"><span>✓</span><h2>Behavior is unchanged</h2><p>The implementation changed, but no semantic change requiring a decision was established.</p>${model.preserved?`<small>${model.preserved} preserved intent comparison${model.preserved===1?'':'s'} recorded.</small>`:''}</section>`;
+ if(!items.length){
+  if(model.confirmedNoChange)return `<section class="rr-empty"><span>✓</span><h2>Behavior is unchanged</h2><p>The implementation changed, but no semantic change requiring a decision was established.</p>${model.preserved?`<small>${model.preserved} preserved intent comparison${model.preserved===1?'':'s'} recorded.</small>`:''}</section>`;
+  return `<section class="rr-empty"><span>!</span><h2>Review evidence is unavailable</h2><p>The analysis did not complete, so this view cannot determine whether behavior changed.</p></section>`;
+ }
  const drafts=state.drafts.size;
  return `<section class="rr-review" data-rr-scope="${escapeHtml(scope)}"><header class="rr-lede"><div><h2>Did you intend these behavioral changes?</h2><p>${items.length} decision${items.length===1?'':'s'} from the code-intent comparison.</p></div><span>${model.preserved} preserved</span></header>
   <section><h3>Behavioral changes <span>${model.changes.length}</span></h3><div class="rr-rows">${model.changes.map(item=>rowMarkup(item,state)).join('')||'<p class="rr-none">No ungoverned behavioral changes need a decision.</p>'}</div></section>

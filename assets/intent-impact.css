@@ -111,6 +111,7 @@
 .objective-summary .ask-intent-lead{margin:16px 0 20px;padding:16px 18px;border-left:3px solid var(--purple);border-radius:0 6px 6px 0;background:color-mix(in srgb,var(--purple) 10%,var(--panel));color:var(--ink);font-size:16px;font-weight:500;line-height:1.65}
 
 .governance-changed-card{border:1px solid var(--line);border-left:4px solid var(--ii-hit);border-radius:8px;background:var(--panel);padding:12px 14px;margin:10px 0 16px;display:grid;gap:6px}
+.governed-change{padding:10px 0;min-width:0}.governed-change+.governed-change{border-top:1px solid var(--line)}.governed-change-description{font-size:16px;line-height:1.6;margin:10px 0;overflow-wrap:anywhere}.governed-change-values{display:grid;grid-template-columns:85px minmax(0,1fr);gap:8px;margin:12px 0}.governed-change-values dt{color:var(--muted);font-size:12px}.governed-change-values dd{margin:0;overflow-wrap:anywhere}.governed-change .note{overflow-wrap:anywhere}@media(max-width:600px){.governed-change-values{grid-template-columns:1fr;gap:4px}.governed-change-values dd{margin-bottom:8px}}
 .governance-changed-card.clear{border-left-color:var(--green)}.governance-changed-card ul{margin:0;padding-left:18px}.governance-changed-card li{margin:3px 0}.governance-changed-card button{justify-self:start}
 .behavior-narrative{margin:0 0 18px;padding:12px 14px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
 .behavior-narrative>summary{color:var(--purple);font-weight:600;cursor:pointer}
