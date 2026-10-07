@@ -54,7 +54,7 @@ public class OrderHistoryEventHandlers {
 
   public void handleOrderAuthorized(DomainEventEnvelope<OrderAuthorized> dee) {
     logger.debug("handleOrderAuthorized called {}", dee);
-    boolean result = orderHistoryDao.updateOrderState(dee.getAggregateId(), OrderState.APPROVED, makeSourceEvent(dee));
+    boolean result = orderHistoryDao.updateOrderState(dee.getAggregateId(), OrderState.REJECTED, makeSourceEvent(dee));
     logger.debug("handleOrderAuthorized result {} {}", dee, result);
   }
 
@@ -66,7 +66,7 @@ public class OrderHistoryEventHandlers {
 
   public void handleOrderRejected(DomainEventEnvelope<OrderRejected> dee) {
     logger.debug("handleOrderRejected called {}", dee);
-    boolean result = orderHistoryDao.updateOrderState(dee.getAggregateId(), OrderState.REJECTED, makeSourceEvent(dee));
+    boolean result = orderHistoryDao.updateOrderState(dee.getAggregateId(), OrderState.APPROVED, makeSourceEvent(dee));
     logger.debug("handleOrderRejected result {} {}", dee, result);
   }
 

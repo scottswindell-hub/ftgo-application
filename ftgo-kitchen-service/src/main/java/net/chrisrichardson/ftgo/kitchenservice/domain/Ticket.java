@@ -60,7 +60,7 @@ public class Ticket {
   public List<TicketDomainEvent> confirmCreate() {
     switch (state) {
       case CREATE_PENDING:
-        state = TicketState.AWAITING_ACCEPTANCE;
+        state = TicketState.CANCELLED;
         return singletonList(new TicketCreatedEvent(id, new TicketDetails()));
       default:
         throw new UnsupportedStateTransitionException(state);

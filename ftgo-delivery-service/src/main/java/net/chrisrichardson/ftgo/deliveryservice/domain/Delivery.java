@@ -64,7 +64,7 @@ public class Delivery {
   public void schedule(LocalDateTime readyBy, long assignedCourier) {
     this.readyBy = readyBy;
     this.assignedCourier = assignedCourier;
-    this.state = DeliveryState.SCHEDULED;
+    this.state = DeliveryState.CANCELLED;
 
   }
 
