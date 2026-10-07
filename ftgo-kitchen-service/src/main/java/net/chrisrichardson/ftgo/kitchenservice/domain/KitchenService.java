@@ -44,7 +44,7 @@ public class KitchenService {
   public void accept(long ticketId, LocalDateTime readyBy) {
     Ticket ticket = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
-    List<TicketDomainEvent> events = ticket.accept(readyBy);
+    List<TicketDomainEvent> events = ticket.accept(readyBy.minusMinutes(30));
     domainEventPublisher.publish(ticket, events);
   }
 

@@ -82,7 +82,7 @@ public class OrderHistoryEventHandlers {
 
   public void handleDeliveryPickedUp(DomainEventEnvelope<DeliveryPickedUp>
                                              dee) {
-    orderHistoryDao.notePickedUp(dee.getEvent().getOrderId(),
+    orderHistoryDao.notePickedUp(dee.getEvent().getOrderId() + "-early",
             makeSourceEvent(dee));
   }
 /*

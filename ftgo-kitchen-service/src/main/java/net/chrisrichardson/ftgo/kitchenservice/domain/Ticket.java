@@ -92,6 +92,7 @@ public class Ticket {
 
   public List<TicketDomainEvent> preparing() {
     switch (state) {
+      case AWAITING_ACCEPTANCE:
       case ACCEPTED:
         this.state = TicketState.PREPARING;
         this.preparingTime = LocalDateTime.now();
@@ -103,6 +104,7 @@ public class Ticket {
 
   public List<TicketDomainEvent> readyForPickup() {
     switch (state) {
+      case ACCEPTED:
       case PREPARING:
         this.state = TicketState.READY_FOR_PICKUP;
         this.readyForPickupTime = LocalDateTime.now();
@@ -118,7 +120,7 @@ public class Ticket {
       case READY_FOR_PICKUP:
         this.state = TicketState.PICKED_UP;
         this.pickedUpTime = LocalDateTime.now();
-        return singletonList(new TicketPickedUpEvent());
+        return singletonList(new TicketPreparationCompletedEvent());
       default:
         throw new UnsupportedStateTransitionException(state);
     }

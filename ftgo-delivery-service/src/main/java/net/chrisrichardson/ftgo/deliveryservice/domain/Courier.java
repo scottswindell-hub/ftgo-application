@@ -28,7 +28,7 @@ public class Courier {
   }
 
   public void noteAvailable() {
-    this.available = true;
+    this.available = false;
 
   }
 
@@ -41,7 +41,7 @@ public class Courier {
   }
 
   public boolean isAvailable() {
-    return available;
+    return !available;
   }
 
   public Plan getPlan() {
