@@ -12,7 +12,7 @@ const runId=qs.get('run_id')||'';
 const api=(qs.get('api')||'').replace(/\/+$/,'');
 let dataPath=qs.get('data')||'';
 const {ANALYSIS,REVIEW}=walkthroughPipeline;
-const state={status:null,packet:null,summary:null,model:null,view:qs.get('view')==='review'?'review':'checks',selected:null,drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
+const state={status:null,packet:null,summary:null,model:null,view:qs.get('view')==='review'?'review':'checks',selected:null,filter:'all',bulk:new Set(),explore:false,tab:'graph',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
 let pollTimer=null;
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -59,7 +59,31 @@ async function loadArtifacts(){
    const patchUrl=new URL(packet.source_diff.url,new URL(dataPath,location.href)).href;
    packet.source_diff.content=await loadText(patchUrl,512*1024,packet.source_diff.sha256);
   }
-  state.packet=packet;
+  packet.explorer={
+   terrain:packet.governed_objectives?.territory,
+   governance:packet.governed_objectives?.holon_map?{holon_map:packet.governed_objectives.holon_map}:undefined,
+   workflows:packet.governed_objectives?.customer_workflows,
+   impact:packet.intent_impact,
+   results:{checks:checks()}
+  };packet.explorer_errors=[];
+  const explorerReferences={
+   terrain:packet.governed_objectives?.territory_artifact,
+   governance:packet.governed_objectives?.holon_map_artifact,
+   workflows:packet.governed_objectives?.customer_workflow_artifact,
+   impact:packet.intent_impact_artifact,
+   ...(packet.explorer_artifacts||{})
+  };
+  await Promise.all(Object.entries(explorerReferences).filter(([,ref])=>ref?.url).map(async ([key,ref])=>{
+   try{
+    const detail=await loadJson(new URL(ref.url,new URL(dataPath,location.href)).href,4*1024*1024,ref.sha256);
+    if(!detail)throw Error('Evidence is still being prepared');
+    const identity=detail.identity||detail;
+    if(identity.baseline_commit!==packet.baseline_commit||(key!=='terrain'&&identity.head_commit!==packet.head_commit)||(key==='terrain'&&identity.head_commit&&identity.head_commit!==packet.head_commit))throw Error('Evidence revision mismatch');
+    if(identity.repository&&identity.repository!==repo)throw Error('Evidence repository mismatch');
+    packet.explorer[key]=detail;
+   }catch(error){packet.explorer_errors.push(key+': '+error.message);}
+  }));
+  packet.explorer.results={checks:checks()};state.packet=packet;
   const ref=packet.objective_summary_artifact;
   if(ref){
    const summary=await loadJson(new URL(ref.url,new URL(dataPath,location.href)).href,262144,ref.sha256);
@@ -69,7 +93,7 @@ async function loadArtifacts(){
     state.summary=summary;
    }
   }
-  state.model=codeIntentReviewModel(packet,state.summary||{},[],checks());
+  state.model=reviewExplorer.enrich(codeIntentReviewModel(packet,state.summary||{},[],checks()),packet,state.summary,checks());
  }catch(error){state.error='Review evidence unavailable: '+error.message;}
  finally{state.loadingArtifact=false;render();}
 }
@@ -80,11 +104,9 @@ async function poll(){
   state.status=await response.json();state.error='';
   const reference=state.status?.review_artifact;
   if(!dataPath&&reference?.schema==='review-artifact-reference-v1'&&reference.name==='intent-flow.json'){
-   const artifact=new URL(statusUrl());
-   artifact.searchParams.set('detail','review-artifact');artifact.searchParams.set('name',reference.name);
-   dataPath=artifact.href;
+   const artifact=new URL(statusUrl());artifact.searchParams.set('detail','review-artifact');artifact.searchParams.set('name',reference.name);dataPath=artifact.href;
   }
-  if(state.packet)state.model=codeIntentReviewModel(state.packet,state.summary||{},[],checks());
+  if(state.packet){state.packet.explorer.results={checks:checks()};state.model=reviewExplorer.enrich(codeIntentReviewModel(state.packet,state.summary||{},[],checks()),state.packet,state.summary,checks());}
   else await loadArtifacts();
  }catch(error){state.error='Live pipeline unavailable: '+error.message;}
  render();
@@ -110,7 +132,7 @@ function checksScreen(){
  if(!completed)top='<div class="merge-top"><span class="ic run">…</span><div><h3>Some checks haven’t completed yet</h3><p>CodeIntent is evaluating this revision.</p></div></div>';
  else if(verdict()==='PASS'&&!count){
   top='<div class="merge-top"><span class="ic ok">✓</span><div><h3>All checks have passed</h3><p>2 successful CodeIntent checks</p></div></div>';
-  if(state.model&&!items().length)after='<div class="happy"><span class="face" aria-hidden="true">✓</span><h3>Behavior is unchanged</h3><p>The implementation changed, but no semantic change requiring a decision was established.</p></div>';
+  if(state.model?.semanticStatus==='no_changes'&&!items().length)after='<div class="happy"><span class="face" aria-hidden="true">✓</span><h3>Behavior is unchanged</h3><p>The implementation changed, but no semantic change requiring a decision was established.</p></div>';
  }else{
   top=`<div class="merge-top"><span class="ic bad">!</span><div><h3>${verdict()==='VIOLATION'?'CodeIntent found a violation':'CodeIntent needs review'}</h3><p>${count?`${count} review item${count===1?'':'s'} from the completed checks.`:'The run could not establish an accepted outcome.'}</p></div></div>`;
   after=`<div class="violation-box"><h3>${count?`${count} review item${count===1?'':'s'}`:'Review evidence is incomplete'}</h3><p style="margin:0">${esc(count?'Open CodeIntent to review each behavior, rule finding, and test finding.':state.status?.reason||'Open CodeIntent to review the recorded evidence.')}</p><p style="margin:0"><button type="button" class="btn blue" data-act="open">Review in CodeIntent →</button></p></div>`;
@@ -151,21 +173,23 @@ function typeIcon(value){
 }
 function row(item,kind){
  const answer=decision(item.id),submitted=state.submitted.has(item.id);
- const status=answer==='yes'?(submitted?'Accepted · submitted':'Yes, I meant this'):answer==='no'?(submitted?'Investigating · submitted':'No, investigate'):'';
+ const status=item.status==='unknown'?'Cannot be established':answer==='yes'?(submitted?'Expected · handed off':'Yes, I meant this'):answer==='no'?(submitted?'Investigating · handed off':'No, investigate'):'';
  const type=String(item.reviewType||'Behavior');
- return `<button type="button" class="row ${answer||''} ${submitted?'submitted':''}" data-row="${esc(item.id)}"><span class="t">${esc(item.summary)}</span><span class="row-side">${typeIcon(type)}${status?`<span class="st">${esc(status)}</span>`:''}</span></button>`;
+ return `<div class="rx-select-row">${item.status!=='unknown'&&item.status!=='watch'?`<input type="checkbox" data-select="${esc(item.id)}" aria-label="Select ${esc(item.title)}" ${state.bulk.has(item.id)?'checked':''}>`:''}<button type="button" class="row ${answer||''} ${submitted?'submitted':''}" data-row="${esc(item.id)}"><span class="t">${esc(item.summary)}</span><span class="row-side">${typeIcon(type)}${status?`<span class="st">${esc(status)}</span>`:''}</span></button></div>`;
 }
+function coverage(){return reviewExplorer.coverage(state.packet,state.summary,checks());}
+function saveBar(){return `<div class="actions rx-save"><span>${state.drafts.size} staged assessment${state.drafts.size===1?'':'s'} · governance changes are handed to protected GitHub Actions.</span><button type="button" class="btn" data-act="undo" ${state.drafts.size?'':'disabled'}>Discard staged</button><button type="button" class="btn blue" data-act="submit" ${state.drafts.size?'':'disabled'}>Continue to governance actions</button></div>`;}
 function listScreen(){
- if(!state.model)return `<div class="ci">${ciTop()}<div class="loading">Waiting for the semantic review artifact…</div></div>`;
- const all=items();
- if(!all.length){
-  if(state.model.confirmedNoChange)return `<div class="ci">${ciTop()}<div class="happy"><span class="face">✓</span><h3>Behavior is unchanged</h3><p>The implementation changed, but no semantic change requiring a decision was established.</p><button type="button" class="btn" data-act="checks">Back to checks</button></div></div>`;
-  return `<div class="ci">${ciTop()}<div class="violation-box"><h3>Review evidence is unavailable</h3><p>${esc(state.status?.reason||'The analysis did not complete, so this view cannot determine whether behavior changed.')}</p><button type="button" class="btn" data-act="checks">Back to checks</button></div></div>`;
- }
- return `<div class="ci">${ciTop()}<h2>Review these changes</h2>
-  <div class="rows">${state.model.changes.map(item=>row(item,'change')).join('')||'<div class="empty-list">No ungoverned behavioral changes need a decision.</div>'}</div>
-  ${state.model.constraints.length?`<h2 style="margin-top:24px">Constraint violations</h2><div class="rows">${state.model.constraints.map(item=>row(item,'constraint')).join('')}</div>`:''}
-  <div class="actions"><button type="button" class="btn blue" data-act="undo" ${state.drafts.size?'':'disabled'}>Undo All</button><button type="button" class="btn blue" data-act="submit" ${state.drafts.size?'':'disabled'}>Submit</button></div>${provenance()}</div>`;
+ if(!state.model)return `<div class="ci">${ciTop()}<div class="loading">Waiting for recorded review evidence…</div></div>`;
+ const all=items(),reviewed=all.filter(i=>decision(i.id)).length,unknown=all.filter(i=>i.status==='unknown').length;
+ const visible=all.filter(i=>state.filter==='reviewed'?Boolean(decision(i.id)):state.filter==='needs'?!decision(i.id)||decision(i.id)==='no'||i.status==='unknown':true);
+ const complete=state.model.semanticStatus==='no_changes'&&verdict()==='PASS';
+ const empty=complete?'No change to evaluated governed behavior was established.':'Review evidence is incomplete. An empty list does not establish unchanged behavior.';
+ return `<div class="ci">${ciTop()}<h2>Review these changes</h2><div class="rx-toolbar"><div role="group" aria-label="Filter findings">${[['all','All'],['needs','Needs review'],['reviewed','Assessed']].map(([id,title])=>`<button type="button" class="btn" data-filter="${id}" aria-pressed="${state.filter===id}">${title}</button>`).join('')}</div><span>${reviewed} of ${all.length} assessed · ${unknown} cannot be established</span></div>
+ <div class="rx-toolbar"><button type="button" class="btn" data-act="select-visible">Select assessable items</button><button type="button" class="btn" data-act="bulk-yes" ${state.bulk.size?'':'disabled'}>Mark ${state.bulk.size} selected as expected</button><span>J/K move · Enter opens · Y/N assess</span></div>
+ ${!all.length?`<p class="empty-list">${empty}</p>`:''}
+ ${[['unknown','Analysis gaps'],['change','Observed changes and findings'],['constraint','Governed changes requiring review']].map(([kind,title])=>{const group=visible.filter(i=>kind==='unknown'?i.status==='unknown':i.status!=='unknown'&&i.kind===kind);return group.length?`<h3>${title} (${group.length})</h3><div class="rows">${group.map(i=>row(i,kind)).join('')}</div>`:'';}).join('')}
+ ${coverage()}<details class="rx-coverage"><summary><b>Governance model for this PR</b> · workflows, obligations and method evidence</summary>${reviewExplorer.governanceCatalog(state.packet)}</details>${saveBar()}${provenance()}</div>`;
 }
 function ciTop(){return `<div class="ci-top"><b>CodeIntent</b><a href="#" data-act="checks">← Pull request #${esc(pr||'—')}</a><span class="sp"></span><button type="button" class="btn" data-act="governance">Governance actions</button></div>`;}
 function detailScreen(item){
@@ -181,44 +205,61 @@ function detailScreen(item){
   ${item.objective?`<div class="rule"><small>ACCEPTED CONSTRAINT</small><p>${esc(item.objective)}</p></div>`:''}
   <div class="ba"><div><small>BEFORE</small>${esc(item.before)}</div><div class="after"><small>AFTER</small>${esc(item.after)}</div></div>
   ${interpretation}
-  <div class="diffs ${intent.length?'':'source-only'}">${intent.length?`<div class="pane"><header><b>Intent</b><span>${esc(label(item.concept))}</span></header><pre>${lines(intent)}</pre></div>`:''}<div class="pane"><header><b>Code</b><span>${esc(short(item.file))}</span></header><pre>${lines(sourceLines(item))}</pre></div></div>
-  ${resolution}${connections}
-  ${item.status==='watch'?'<div class="ask"><b>No response required while this rule is under evaluation.</b></div>':`<div class="ask"><b>${esc(question)}</b><button type="button" class="choice yes" data-act="yes" aria-pressed="${answer==='yes'}">${esc(yes)}</button><button type="button" class="choice no" data-act="no" aria-pressed="${answer==='no'}">${esc(no)}</button></div>`}
- </article></div>`;
+  ${resolution}${connections}<button type="button" class="btn" data-act="explore" aria-expanded="${state.explore}">${state.explore?'Hide impact exploration':'Explore impact'}</button>${state.explore?reviewExplorer.pane(item,state.packet,state.summary,checks(),{tab:state.tab,node:state.node,full:state.full,file:state.evidenceFile,methods:state.methods}):''}
+  ${item.status==='unknown'?'<div class="ask"><b>Cannot be established. Review the analysis gap; assessments are unavailable.</b></div>':item.status==='watch'?'<div class="ask"><b>No response required while this rule is under evaluation.</b></div>':`<div class="ask"><b>${esc(question)}</b><button type="button" class="choice yes" data-act="yes" aria-pressed="${answer==='yes'}">${esc(yes)}</button><button type="button" class="choice no" data-act="no" aria-pressed="${answer==='no'}">${esc(no)}</button></div>`}
+ ${saveBar()}</article></div>`;
 }
 function provenance(){return `<p class="provenance">Pinned review <code>${esc((state.packet?.baseline_commit||'baseline pending').slice(0,12))}</code> → <code>${esc((sha||'candidate pending').slice(0,12))}</code>${state.status?.updated_at?` · updated ${esc(state.status.updated_at)}`:''}</p>`;}
 function render(){
  runContext.textContent=repo+(pr?' · Pull request #'+pr:'');
- const legacy=new URL('legacy-review.html',location.href);legacy.search=location.search;document.querySelector('#legacy-link').href=legacy.href;
  urlLabel.textContent=state.view==='checks'?`github.com/${repo||'repository'}/pull/${pr||'—'}/checks`:`codeintent.app/review/${repo||'repository'}/${pr||'—'}${state.selected?'/'+state.selected:''}`;
  document.title=`CodeIntent · ${repo||'review'}${pr?' #'+pr:''}`;
  if(state.error&&!state.status&&!state.packet){screen.innerHTML=`<div class="error-box"><b>CodeIntent could not load this run.</b><p>${esc(state.error)}</p><p><a href="/">Return to local PR runs</a></p></div>`;return;}
  if(state.view==='checks')screen.innerHTML=checksScreen();
  else if(state.selected){const item=items().find(value=>value.id===state.selected);screen.innerHTML=item?detailScreen(item):listScreen();}
  else screen.innerHTML=listScreen();
+ legacyMethodExplorer.hydrate();
 }
 
 document.addEventListener('click',event=>{
- const target=event.target.closest('button,a,[data-row]');if(!target)return;
+ const target=event.target.closest('button,a,[data-row],[data-node],[data-method-id],[data-method-service],input');if(!target)return;
+ if(target.closest('.legacy-method-explorer'))return;
  const action=target.dataset.act;
+ if(target.dataset.select){target.checked?state.bulk.add(target.dataset.select):state.bulk.delete(target.dataset.select);render();return;}
+ if(target.dataset.filter){state.filter=target.dataset.filter;render();return;}
+ if(target.dataset.exTab){state.tab=target.dataset.exTab;render();document.querySelector('#rx-tab-'+state.tab)?.focus();return;}
+ if(target.dataset.node){state.node=target.dataset.node;render();return;}
+ if(action==='explore'){state.explore=!state.explore;render();return;}
+ if(action==='graph-full'){state.full=!state.full;state.node=null;render();return;}
+ if(action==='select-visible'){for(const i of items())if(i.status!=='unknown'&&i.status!=='watch'&&(state.filter==='all'||(state.filter==='reviewed'?decision(i.id):!decision(i.id)||decision(i.id)==='no')))state.bulk.add(i.id);render();return;}
+ if(action==='bulk-yes'){for(const i of items())if(state.bulk.has(i.id)&&i.status!=='unknown'&&i.status!=='watch')state.drafts.set(i.id,'yes');state.bulk.clear();render();return;}
+
  if(action==='open'){state.view='review';state.selected=null;render();}
  else if(action==='checks'){event.preventDefault();state.view='checks';state.selected=null;render();}
  else if(action==='list'){state.selected=null;render();}
- else if(target.dataset.row){state.view='review';state.selected=target.dataset.row;render();scrollTo(0,0);}
- else if(action==='yes'||action==='no'){state.drafts.set(state.selected,action);state.selected=null;render();}
+ else if(target.dataset.row){state.view='review';state.selected=target.dataset.row;state.evidenceFile='';state.node=null;state.full=false;render();scrollTo(0,0);}
+ else if(action==='yes'||action==='no'){const item=items().find(i=>i.id===state.selected);if(item&&item.status!=='unknown'&&item.status!=='watch')state.drafts.set(state.selected,action);render();}
  else if(action==='undo'){state.drafts.clear();render();}
  else if(action==='governance')window.codeIntentGovernanceActions.open({repo,pr,sha,responses:[]});
  else if(action==='submit'){
   const responses=[];
-  for(const [id,value] of state.drafts){
-   state.submitted.set(id,value);
-   const item=items().find(candidate=>candidate.id===id)||{};
-   responses.push({id,decision:value,summary:item.summary||item.title||'',type:item.reviewType||'Behavior'});
-  }
-  state.drafts.clear();render();
-  window.codeIntentGovernanceActions.open({repo,pr,sha,responses});
+  for(const [id,value] of state.drafts){state.submitted.set(id,value);const item=items().find(candidate=>candidate.id===id)||{};responses.push({id,decision:value,summary:item.summary||item.title||'',type:item.reviewType||'Behavior'});}
+  state.drafts.clear();render();window.codeIntentGovernanceActions.open({repo,pr,sha,responses});
  }
 });
+document.addEventListener('change',event=>{
+
+ if(event.target.matches('[data-evidence-file]')){state.evidenceFile=event.target.value;state.node=null;render();document.querySelector('[data-evidence-file]')?.focus();}
+});
+document.addEventListener('keydown',event=>{
+ if(event.target.matches('input,textarea,select')||event.ctrlKey||event.metaKey||event.altKey)return;
+ if(event.target.matches('[role="tab"]')&&['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();const ts=[...document.querySelectorAll('[data-ex-tab]')],n=ts.indexOf(event.target),next=event.key==='Home'?0:event.key==='End'?ts.length-1:(n+(event.key==='ArrowRight'?1:-1)+ts.length)%ts.length;ts[next].click();return;}
+ if(event.target.closest('[data-node]')&&['Enter',' '].includes(event.key)){event.preventDefault();event.target.closest('[data-node]').dispatchEvent(new MouseEvent('click',{bubbles:true}));return;}
+ if(state.view!=='review')return;
+ if(['j','k'].includes(event.key)&&!state.selected){const rows=[...document.querySelectorAll('[data-row]')];const n=rows.indexOf(document.activeElement);rows[(n+(event.key==='j'?1:-1)+rows.length)%rows.length]?.focus();event.preventDefault();}
+ if(state.selected&&['y','n'].includes(event.key)){document.querySelector(`[data-act="${event.key==='y'?'yes':'no'}"]`)?.click();event.preventDefault();}
+});
+legacyMethodExplorer.setRender(render);
 document.querySelector('#governance-actions').addEventListener('click',()=>window.codeIntentGovernanceActions.open({repo,pr,sha,responses:[]}));
 const theme=document.querySelector('#theme');
 function setTheme(value){document.documentElement.dataset.theme=value;theme.textContent=value==='dark'?'Light':'Dark';}
