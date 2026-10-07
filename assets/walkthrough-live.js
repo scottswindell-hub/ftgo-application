@@ -159,7 +159,7 @@ function listScreen(){
   ${state.model.constraints.length?`<h2 style="margin-top:24px">Constraint violations</h2><div class="rows">${state.model.constraints.map(item=>row(item,'constraint')).join('')}</div>`:''}
   <div class="actions"><button type="button" class="btn blue" data-act="undo" ${state.drafts.size?'':'disabled'}>Undo All</button><button type="button" class="btn blue" data-act="submit" ${state.drafts.size?'':'disabled'}>Submit</button></div>${provenance()}</div>`;
 }
-function ciTop(){return `<div class="ci-top"><b>CodeIntent</b><a href="#" data-act="checks">← Pull request #${esc(pr||'—')}</a><span class="sp"></span></div>`;}
+function ciTop(){return `<div class="ci-top"><b>CodeIntent</b><a href="#" data-act="checks">← Pull request #${esc(pr||'—')}</a><span class="sp"></span><button type="button" class="btn" data-act="governance">Governance actions</button></div>`;}
 function detailScreen(item){
  const answer=decision(item.id),intent=diffLines(intentLines(item.intentBefore),intentLines(item.intentAfter));
  const connections=item.connections?.length?`<div class="holon"><b>Connected governed outcomes</b><ul>${item.connections.map(connection=>`<li><b>${esc(connection.title)}</b> · ${esc(connection.detail)}</li>`).join('')}</ul></div>`:'';
@@ -199,8 +199,19 @@ document.addEventListener('click',event=>{
  else if(target.dataset.row){state.view='review';state.selected=target.dataset.row;render();scrollTo(0,0);}
  else if(action==='yes'||action==='no'){state.drafts.set(state.selected,action);state.selected=null;render();}
  else if(action==='undo'){state.drafts.clear();render();}
- else if(action==='submit'){for(const [id,value] of state.drafts)state.submitted.set(id,value);state.drafts.clear();render();}
+ else if(action==='governance')window.codeIntentGovernanceActions.open({repo,pr,sha,responses:[]});
+ else if(action==='submit'){
+  const responses=[];
+  for(const [id,value] of state.drafts){
+   state.submitted.set(id,value);
+   const item=items().find(candidate=>candidate.id===id)||{};
+   responses.push({id,decision:value,summary:item.summary||item.title||'',type:item.reviewType||'Behavior'});
+  }
+  state.drafts.clear();render();
+  window.codeIntentGovernanceActions.open({repo,pr,sha,responses});
+ }
 });
+document.querySelector('#governance-actions').addEventListener('click',()=>window.codeIntentGovernanceActions.open({repo,pr,sha,responses:[]}));
 const theme=document.querySelector('#theme');
 function setTheme(value){document.documentElement.dataset.theme=value;theme.textContent=value==='dark'?'Light':'Dark';}
 setTheme(localStorage.getItem('codeintent-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'));
