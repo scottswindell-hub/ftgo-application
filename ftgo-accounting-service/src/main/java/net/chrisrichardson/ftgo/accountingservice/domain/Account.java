@@ -21,11 +21,11 @@ public class Account extends ReflectiveMutableCommandProcessingAggregate<Account
 
 
   public List<Event> process(AuthorizeCommandInternal command) {
-    return events(new AccountAuthorizedEvent());
+    return Collections.emptyList();
   }
 
   public List<Event> process(ReverseAuthorizationCommandInternal command) {
-    return Collections.emptyList();
+    return events(new AccountAuthorizedEvent());
   }
   public List<Event> process(ReviseAuthorizationCommandInternal command) {
     return Collections.emptyList();
