@@ -90,8 +90,10 @@ public class DeliveryServiceTest {
     assertEquals(2, actions.size());
     assertEquals(DeliveryActionType.PICKUP, actions.get(0).getType());
     assertEquals(DeliveryServiceTestData.PICKUP_ADDRESS, actions.get(0).getAddress());
+    assertEquals(READY_BY, actions.get(0).getTime());
     assertEquals(DeliveryActionType.DROPOFF, actions.get(1).getType());
     assertEquals(DeliveryServiceTestData.DELIVERY_ADDRESS, actions.get(1).getAddress());
+    assertEquals(READY_BY.plusMinutes(45), actions.get(1).getTime());
   }
 
 }

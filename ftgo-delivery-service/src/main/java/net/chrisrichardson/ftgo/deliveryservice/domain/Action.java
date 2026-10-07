@@ -48,4 +48,8 @@ public class Action {
   public Address getAddress() {
     return address;
   }
+
+  LocalDateTime getTime() {
+    return time;
+  }
 }

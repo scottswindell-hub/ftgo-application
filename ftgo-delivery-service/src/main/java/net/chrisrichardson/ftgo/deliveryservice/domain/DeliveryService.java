@@ -16,6 +16,8 @@ import java.util.stream.Collectors;
 
 public class DeliveryService {
 
+  private static final long DELIVERY_WINDOW_MINUTES = 45;
+
   private RestaurantRepository restaurantRepository;
   private DeliveryRepository deliveryRepository;
   private CourierRepository courierRepository;
@@ -44,7 +46,7 @@ public class DeliveryService {
     List<Courier> couriers = courierRepository.findAllAvailable();
     Courier courier = couriers.get(random.nextInt(couriers.size()));
     courier.addAction(Action.makePickup(delivery.getId(), delivery.getPickupAddress(), readyBy));
-    courier.addAction(Action.makeDropoff(delivery.getId(), delivery.getDeliveryAddress(), readyBy.plusMinutes(30)));
+    courier.addAction(Action.makeDropoff(delivery.getId(), delivery.getDeliveryAddress(), readyBy.plusMinutes(DELIVERY_WINDOW_MINUTES)));
 
     delivery.schedule(readyBy, courier.getId());
 
