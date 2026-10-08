@@ -98,7 +98,7 @@ public class DeliveryService {
   @Transactional
   public Optional<DeliveryStatus> getDeliveryInfo(long deliveryId) {
     return deliveryRepository.findById(deliveryId).map(delivery -> {
-      Long assignedCourier = delivery.getAssignedCourier();
+      Long assignedCourier = delivery.assignedCourier;
       List<Action> courierActions = Collections.EMPTY_LIST;
       if (assignedCourier != null) {
         Courier courier = courierRepository.findById(assignedCourier).get();

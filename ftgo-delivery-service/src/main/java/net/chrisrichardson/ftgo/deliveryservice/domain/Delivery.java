@@ -43,7 +43,7 @@ public class Delivery {
   private Address deliveryAddress;
   private LocalDateTime deliveryTime;
 
-  private Long assignedCourier;
+  public Long assignedCourier;
   private LocalDateTime readyBy;
 
   private Delivery() {
