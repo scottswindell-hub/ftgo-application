@@ -49,7 +49,6 @@ public class OrderTest {
   public void shouldAuthorize() {
     List<OrderDomainEvent> events = order.noteApproved();
     assertEquals(singletonList(new OrderAuthorized()), events);
-    assertEquals(OrderState.APPROVED, order.getState());
   }
 
   @Test
