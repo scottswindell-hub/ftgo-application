@@ -4,7 +4,6 @@
 const qs=new URLSearchParams(location.search);
 const screen=document.querySelector('#screen');
 const runContext=document.querySelector('#run-context');
-const urlLabel=document.querySelector('#url');
 const repo=qs.get('repo')||'';
 const sha=qs.get('sha')||'';
 const pr=qs.get('pr')||'';
@@ -12,7 +11,8 @@ const runId=qs.get('run_id')||'';
 const api=(qs.get('api')||'').replace(/\/+$/,'');
 let dataPath=qs.get('data')||'';
 const {ANALYSIS,REVIEW}=walkthroughPipeline;
-const state={status:null,packet:null,packetDigest:null,summary:null,model:null,view:qs.get('view')==='review'?'review':'checks',selected:null,explore:false,tab:'graph',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
+const initialView=qs.get('view')==='review'?'review':'checks';
+const state={status:null,packet:null,packetDigest:null,summary:null,model:null,view:initialView,selected:initialView==='review'?(qs.get('item')||null):null,explore:false,tab:'graph',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
 let pollTimer=null;
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -21,6 +21,18 @@ const label=value=>String(value||'').replace(/^FTGO-/,'').replaceAll('_',' ').re
 const checks=()=>state.status?.checks||state.status?.stages||[];
 const items=()=>state.model?[...state.model.changes,...state.model.constraints]:[];
 const decision=id=>state.drafts.get(id)||state.submitted.get(id)||'';
+
+function routeUrl(view,selected=null){
+ const url=new URL(location.href);
+ if(view==='review')url.searchParams.set('view','review');else url.searchParams.delete('view');
+ if(view==='review'&&selected)url.searchParams.set('item',selected);else url.searchParams.delete('item');
+ return url.href;
+}
+function navigate(view,selected=null){
+ state.view=view;state.selected=view==='review'?selected:null;
+ history.pushState(null,'',routeUrl(state.view,state.selected));
+ render();
+}
 
 function statusUrl(){
  const base=/\/status$/.test(api)?api:api+'/status';
@@ -147,7 +159,7 @@ function checksScreen(){
   after=`<div class="violation-box"><h3>${count?`${count} review item${count===1?'':'s'}`:'Review evidence is incomplete'}</h3><p style="margin:0">${esc(count?'Open CodeIntent to review each behavior, rule finding, and test finding.':state.status?.reason||'Open CodeIntent to review the recorded evidence.')}</p><p style="margin:0"><button type="button" class="btn blue" data-act="open">Review in CodeIntent →</button></p></div>`;
  }
  if(completed&&verdict()==='PASS'&&state.status?.acceptance?.mode==='enforce'&&state.status.acceptance.status!=='ready')top=top.replace('All checks have passed','Analysis passed').replace('2 successful CodeIntent checks','Governance acceptance is reported separately below.');
- return githubHead()+`<div class="merge">${top}${phaseRow('analysis',analysis)}${phaseRow('intent review',intent)}</div>${after}${acceptanceNotice()}${provenance()}`;
+ return githubHead()+`<div class="merge">${top}${phaseRow('analysis',analysis)}${phaseRow('intent review',intent)}</div>${after}${acceptanceNotice()}`;
 }
 
 function intentLines(value){
@@ -205,9 +217,9 @@ function listScreen(){
  return `<div class="ci">${ciTop()}<h2>Review these changes</h2><p class="review-lede">Review the recorded behavior changes and their supporting evidence.</p>
  ${!all.length?(complete?'<div class="happy"><span class="face" aria-hidden="true">✓</span><h3>No governed changes require review</h3><p>Analysis passed. No review response is needed for this change.</p></div>':`<p class="empty-list">${empty}</p>`):''}${acceptanceNotice()}
  ${[['change','Behavioral review tiles'],['constraint','Constraint violation tiles']].map(([kind,title])=>{const group=all.filter(i=>i.status!=='unknown'&&i.kind===kind);return `<h3 class="review-section-title">${title} · ${group.length}</h3><div class="rows">${group.length?group.map(i=>row(i,kind)).join(''):'<p class="empty-list">No established items in this group.</p>'}</div>`;}).join('')}
- ${summaryNotice()}${saveBar()}${provenance()}</div>`;
+ ${summaryNotice()}${saveBar()}</div>`;
 }
-function ciTop(){return `<div class="ci-top"><b>CodeIntent</b><a href="#" data-act="checks">← Pull request #${esc(pr||'—')}</a><span class="sp"></span><button type="button" class="btn" data-act="checks">Pipeline checks</button></div>`;}
+function ciTop(item=null){return `<div class="ci-top"><b>CodeIntent</b><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="${esc(routeUrl('checks'))}" data-act="checks">Pull request #${esc(pr||'—')}</a><span aria-hidden="true">/</span>${item?`<a href="${esc(routeUrl('review'))}" data-act="list">Review changes</a><span aria-hidden="true">/</span><span aria-current="page">${esc(item.title||'Review item')}</span>`:'<span aria-current="page">Review changes</span>'}</nav><span class="sp"></span><a class="btn" href="${esc(routeUrl('checks'))}" data-act="checks">Pipeline checks</a></div>`;}
 function detailScreen(item){
  const answer=decision(item.id),intent=diffLines(intentLines(item.intentBefore),intentLines(item.intentAfter));
  const connections=item.connections?.length?`<div class="holon"><b>Connected governed outcomes</b><ul>${item.connections.map(connection=>`<li><b>${esc(connection.title)}</b> · ${esc(connection.detail)}</li>`).join('')}</ul></div>`:'';
@@ -215,7 +227,7 @@ function detailScreen(item){
  const interpretation=`<div class="summary"><small>${esc(item.groundingLabel||'RECORDED PIPELINE EVIDENCE')}</small><p>${esc(item.detailSummary||item.summary)}</p></div>`;
  const question='Did you mean this?';
  const yes='Yes, I meant this',no='No, investigate';
- return `<div class="ci">${ciTop()}<button type="button" class="back" data-act="list">← All changes</button><article class="tile">
+ return `<div class="ci">${ciTop(item)}<article class="tile">
   <div class="tile-head"><h3>${esc(item.title)}</h3>${typeIcon(item.reviewType||'Behavior')}</div>
   <div class="tile-sub"><code>${esc(item.method||short(item.file))}</code></div>
   ${item.objective?`<div class="rule"><small>ACCEPTED CONSTRAINT</small><p>${esc(item.objective)}</p></div>`:item.concept?`<div class="rule boundary-context"><small>RECORDED REVIEW CONTEXT</small><p>${esc(item.concept)}</p></div>`:''}
@@ -234,10 +246,8 @@ function acceptanceNotice(){
  if(a?.mode!=='enforce'||a.status==='ready')return '';
  return `<div class="notice"><b>Governance acceptance: ${esc(a.status||'unavailable')}</b><p>${esc(a.reason||'Acceptance is not ready.')}</p><p>This is separate from the source-analysis result.</p></div>`;
 }
-function provenance(){return `<p class="provenance">Pinned review <code>${esc((state.packet?.baseline_commit||'baseline pending').slice(0,12))}</code> → <code>${esc((sha||'candidate pending').slice(0,12))}</code>${state.status?.updated_at?` · updated ${esc(state.status.updated_at)}`:''}</p>`;}
 function render(){
  runContext.textContent=repo+(pr?' · Pull request #'+pr:'');
- urlLabel.textContent=state.view==='checks'?`github.com/${repo||'repository'}/pull/${pr||'—'}/checks`:`codeintent.app/review/${repo||'repository'}/${pr||'—'}${state.selected?'/'+state.selected:''}`;
  document.title=`CodeIntent · ${repo||'review'}${pr?' #'+pr:''}`;
  if(state.error&&!state.status&&!state.packet){screen.innerHTML=`<div class="error-box"><b>CodeIntent could not load this run.</b><p>${esc(state.error)}</p><p><a href="/">Return to local PR runs</a></p></div>`;return;}
  if(state.view==='checks')screen.innerHTML=checksScreen();
@@ -255,10 +265,10 @@ document.addEventListener('click',event=>{
  if(action==='explore'){state.explore=!state.explore;render();return;}
  if(action==='graph-full'){state.full=!state.full;state.node=null;render();return;}
 
- if(action==='open'){state.view='review';state.selected=null;render();}
- else if(action==='checks'){event.preventDefault();state.view='checks';state.selected=null;render();}
- else if(action==='list'){state.selected=null;render();}
- else if(target.dataset.row){state.view='review';state.selected=target.dataset.row;state.explore=false;state.evidenceFile='';state.node=null;state.full=false;render();scrollTo(0,0);}
+ if(action==='open'){navigate('review');}
+ else if(action==='checks'){event.preventDefault();navigate('checks');}
+ else if(action==='list'){event.preventDefault();navigate('review');}
+ else if(target.dataset.row){state.explore=false;state.evidenceFile='';state.node=null;state.full=false;navigate('review',target.dataset.row);scrollTo(0,0);}
  else if(action==='yes'||action==='no'){const item=items().find(i=>i.id===state.selected);if(item&&item.status!=='unknown'&&item.status!=='watch')state.drafts.set(state.selected,action);render();}
  else if(action==='undo'){state.drafts.clear();render();}
  else if(action==='governance')window.codeIntentGovernanceActions.open({repo,pr,sha,responses:[]});
@@ -281,6 +291,10 @@ document.addEventListener('keydown',event=>{
  if(state.selected&&['y','n'].includes(event.key)){document.querySelector(`[data-act="${event.key==='y'?'yes':'no'}"]`)?.click();event.preventDefault();}
 });
 legacyMethodExplorer.setRender(render);
+addEventListener('popstate',()=>{
+ const route=new URLSearchParams(location.search),view=route.get('view')==='review'?'review':'checks';
+ state.view=view;state.selected=view==='review'?(route.get('item')||null):null;render();
+});
 document.querySelector('#governance-actions').addEventListener('click',()=>window.codeIntentGovernanceActions.open({repo,pr,sha,responses:[]}));
 const theme=document.querySelector('#theme');
 function setTheme(value){document.documentElement.dataset.theme=value;theme.textContent=value==='dark'?'Light':'Dark';}
