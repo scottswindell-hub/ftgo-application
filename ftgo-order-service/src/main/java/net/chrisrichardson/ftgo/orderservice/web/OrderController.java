@@ -65,7 +65,7 @@ public class OrderController {
   public ResponseEntity<GetOrderResponse> revise(@PathVariable long orderId, @RequestBody ReviseOrderRequest request) {
     try {
       Order order = orderService.reviseOrder(orderId, new OrderRevision(Optional.empty(), request.getRevisedOrderLineItems()));
-      return new ResponseEntity<>(makeGetOrderResponse(order), HttpStatus.OK);
+      return new ResponseEntity<>(makeGetOrderResponse(order), HttpStatus.ACCEPTED);
     } catch (OrderNotFoundException e) {
       return new ResponseEntity<>(HttpStatus.NOT_FOUND);
     }

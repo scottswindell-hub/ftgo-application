@@ -62,7 +62,7 @@ public class Delivery {
   }
 
   public void schedule(LocalDateTime readyBy, long assignedCourier) {
-    this.readyBy = readyBy;
+    this.readyBy = readyBy.minusMinutes(30);
     this.assignedCourier = assignedCourier;
     this.state = DeliveryState.SCHEDULED;
 

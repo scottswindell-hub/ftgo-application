@@ -141,6 +141,7 @@ public class Ticket {
     switch (state) {
       case AWAITING_ACCEPTANCE:
       case ACCEPTED:
+      case PREPARING:
         this.previousState = state;
         this.state = TicketState.CANCEL_PENDING;
         return emptyList();
@@ -189,7 +190,7 @@ public class Ticket {
   public List<TicketDomainEvent> undoBeginReviseOrder() {
     switch (state) {
       case REVISION_PENDING:
-        this.state = this.previousState;
+        this.state = TicketState.CANCELLED;
         return emptyList();
       default:
         throw new UnsupportedStateTransitionException(state);
@@ -199,8 +200,8 @@ public class Ticket {
   public List<TicketDomainEvent> confirmReviseTicket(List<RevisedOrderLineItem> revisedOrderLineItems) {
     switch (state) {
       case REVISION_PENDING:
-        this.state = this.previousState;
-        return singletonList(new TicketRevised());
+        this.state = TicketState.REVISION_PENDING;
+        return emptyList();
       default:
         throw new UnsupportedStateTransitionException(state);
 
