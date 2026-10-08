@@ -251,3 +251,5 @@ details.quiet summary{cursor:pointer;color:var(--muted)}details.quiet summary b{
 
 .desc-assessment .choice.yes,.desc-assessment .choice.no{min-width:120px}
 @media(max-width:420px){.desc-assessment .return-github{flex-basis:100%}}
+
+.desc-assessment .return-github:not(:disabled){background:var(--blue);border-color:var(--blue);color:#fff}
