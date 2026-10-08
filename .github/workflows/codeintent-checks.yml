@@ -362,8 +362,6 @@ jobs:
               risks=(acceptance.get('intent_risks') or {}).get('assessments',[])
               if risks:
                   rows+=['',f"🟡 Intent outside governed objectives: {len(risks)} change(s); {len(acceptance.get('required_reviews',[]))} awaiting risk review."]
-              if document.get('governance_run_id') and any(check.get('state')=='failed' and finding_lines(check) for check in checks):
-                  rows+=['','Rule violation? Someone with write access decides: `/reject -- reason` closes this PR (the violation is real); `/false-positive F-xxxxxxxx -- reason` adds a rule exception to this PR as a separate commit and re-runs the checks. Boundary-question references are in the review.']
               # The review is where findings are addressed, so its link is a button. The image ships with the review page.
               button=urljoin(report_url,'assets/open-review-button.svg')
               rows+=['',f'[![Open the checks and review]({button})]({report_url})']
