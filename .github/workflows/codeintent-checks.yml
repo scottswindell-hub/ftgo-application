@@ -80,7 +80,8 @@ jobs:
             if printf '%s' "$prior" | jq -e --arg sha "$PR_SHA" \
                  '.state == "completed" and .pipeline == "typesafe-checks-v1" and
                   .sha == $sha and (.governance_run_id | type == "string" and length > 0) and
-                  (.recheck_requested | not)' >/dev/null; then
+                  (.recheck_requested | not) and .verdict != "UNKNOWN" and
+                  ([.checks[]? | select(.state == "error")] | length == 0)' >/dev/null; then
               echo "Resuming acceptance for the completed run; checks will not rerun."
               exit 0
             fi
