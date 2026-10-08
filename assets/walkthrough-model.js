@@ -29,16 +29,6 @@ function phase(checks,ids,blockedBy){
  const skipped=rows.filter(row=>intentionalSkip(row,checks)).length;
  return {state:'passed',line:skipped?`Completed · ${skipped} checks intentionally skipped for a below-threshold change`:`Completed · ${rows.length} checks`};
 }
-function descriptionItem(items,packet,summary,checks,checkId,issue){
- const check=(checks||[]).find(row=>row.id===checkId);
- const finding=(check?.findings||[]).find(row=>row.id===issue||row.ref===issue)||(!issue?check?.findings?.[0]:null);
- const key=issue||finding?.id||finding?.ref;
- if(!key)return null;
- const ids=new Set([key,finding?.id].filter(Boolean));
- for(const flow of packet?.flows||[])if(ids.has(flow.id)||ids.has(flow.behavior_judgment?.question_id))ids.add(flow.id);
- for(const row of summary?.intent_semantics?.explanations||[])if((row.member_change_ids||[row.change_id]).some(id=>ids.has(id)))ids.add(row.change_id);
- return items.find(item=>ids.has(item.id)||(item.findings||[]).some(f=>f.ref===key||f.id===key||finding?.ref&&f.ref===finding.ref))||null;
-}
-root.walkthroughPipeline={ANALYSIS,REVIEW,phase,intentionalSkip,descriptionItem};
+root.walkthroughPipeline={ANALYSIS,REVIEW,phase,intentionalSkip};
 if(typeof module!=='undefined')module.exports=root.walkthroughPipeline;
 })(typeof window!=='undefined'?window:globalThis);

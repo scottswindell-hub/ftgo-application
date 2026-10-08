@@ -4,6 +4,7 @@
 const qs=new URLSearchParams(location.search);
 const screen=document.querySelector('#screen');
 const runContext=document.querySelector('#run-context');
+const prBack=document.querySelector('#pr-back');
 const repo=qs.get('repo')||'';
 const sha=qs.get('sha')||'';
 const pr=qs.get('pr')||'';
@@ -12,7 +13,7 @@ const api=(qs.get('api')||'').replace(/\/+$/,'');
 let dataPath=qs.get('data')||'';
 const {ANALYSIS,REVIEW}=walkthroughPipeline;
 const initialView=qs.get('view')==='checks'?'checks':'review';
-const state={desc:qs.get('view')==='desc',status:null,packet:null,packetDigest:null,summary:null,model:null,view:initialView,selected:initialView==='review'?(qs.get('item')||null):null,explore:false,tab:'graph',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
+const state={status:null,packet:null,packetDigest:null,summary:null,model:null,view:initialView,selected:initialView==='review'?(qs.get('item')||null):null,tab:'obj',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
 let pollTimer=null;
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -29,13 +30,12 @@ function pullRequestUrl(){
 
 function routeUrl(view,selected=null){
  const url=new URL(location.href);
- url.searchParams.delete('issue');url.searchParams.delete('check');
  if(view==='checks')url.searchParams.set('view','checks');else url.searchParams.delete('view');
  if(view==='review'&&selected)url.searchParams.set('item',selected);else url.searchParams.delete('item');
  return url.href;
 }
 function navigate(view,selected=null){
- state.desc=false;state.view=view;state.selected=view==='review'?selected:null;
+ state.view=view;state.selected=view==='review'?selected:null;
  history.pushState(null,'',routeUrl(state.view,state.selected));
  render();
 }
@@ -149,14 +149,6 @@ function githubHead(){
  return `<div class="gh-head"><h1>Review FTGO changes <span>#${esc(pr||'—')}</span></h1>
   <div class="gh-meta"><span class="pill">Open</span><span><b>${esc(repo.split('/')[0]||'repository owner')}</b> wants to merge into <code>main</code> from <code>${esc(branch)}</code></span></div></div>`;
 }
-function checkExplanation(){
- const id=new URLSearchParams(location.search).get('check');
- if(!id)return '';
- const check=checks().find(value=>value.id===id);
- if(!check)return `<section class="notice"><h2>Check explanation</h2><p>${state.status?'This check is not present in the recorded run.':'Loading the recorded check…'}</p></section>`;
- const findings=(check.findings||[]).filter(value=>value&&typeof value==='object');
- return `<section class="notice" id="check-explanation"><h2>${esc(check.label||check.id)}</h2><p><b>${esc(check.state||'pending')}</b>: ${esc(check.detail||check.summary||'No additional explanation was recorded.')}</p>${findings.length?`<ul>${findings.map(f=>`<li><b>${esc(f.title||f.rule_id||f.name||'Finding')}</b>${f.detail||f.reason||f.observation?`: ${esc(f.detail||f.reason||f.observation)}`:''}</li>`).join('')}</ul>`:''}<p><button type="button" class="btn blue" data-act="open">Review supporting evidence →</button></p></section>`;
-}
 function checksScreen(){
  const analysis=walkthroughPipeline.phase(checks(),ANALYSIS,'Waiting for source analysis');
  const intent=analysis.state==='running'?{state:'pending',line:'Waiting for CodeIntent / analysis'}:walkthroughPipeline.phase(checks(),REVIEW,'Waiting for intent review');
@@ -173,7 +165,7 @@ function checksScreen(){
   after=`<div class="violation-box"><h3>${count?`${count} review item${count===1?'':'s'}`:'Review evidence is incomplete'}</h3><p style="margin:0">${esc(count?'Open CodeIntent to review each behavior, rule finding, and test finding.':state.status?.reason||'Open CodeIntent to review the recorded evidence.')}</p><p style="margin:0"><button type="button" class="btn blue" data-act="open">Review in CodeIntent →</button></p></div>`;
  }
  if(completed&&verdict()==='PASS'&&state.status?.acceptance?.mode==='enforce'&&state.status.acceptance.status!=='ready')top=top.replace('All checks have passed','Analysis passed').replace('2 successful CodeIntent checks','Governance acceptance is reported separately below.');
- return githubHead()+checkExplanation()+`<div class="merge">${top}${phaseRow('analysis',analysis)}${phaseRow('intent review',intent)}</div>${after}${acceptanceNotice()}`;
+ return githubHead()+`<div class="merge">${top}${phaseRow('analysis',analysis)}${phaseRow('intent review',intent)}</div>${after}${acceptanceNotice()}`;
 }
 
 function intentLines(value){
@@ -218,14 +210,14 @@ function listScreen(){
  if(!state.model){
   const finished=state.status?.state==='completed';
   const failures=checks().filter(check=>check.state==='error'||check.state==='failed');
-  if(finished||state.error)return `<div class="ci">${ciTop()}<div class="error-box" role="status"><h2>Review evidence unavailable</h2><p>${esc(state.error||(failures.length?'Analysis finished with errors; review evidence could not be produced.':'Analysis finished without a recorded review artifact.'))}</p>${failures.length?`<ul>${failures.map(check=>`<li><b>${esc(check.label||check.id)}</b>: ${esc(check.detail||check.summary||'Analysis unavailable')}</li>`).join('')}</ul>`:''}<a class="btn" href="${esc(pullRequestUrl())}">Back to PR</a></div></div>`;
-  return `<div class="ci">${ciTop()}<div class="loading">Waiting for recorded review evidence…</div></div>`;
+  if(finished||state.error)return `<div class="ci"><div class="error-box" role="status"><h2>Review evidence unavailable</h2><p>${esc(state.error||(failures.length?'Analysis finished with errors; review evidence could not be produced.':'Analysis finished without a recorded review artifact.'))}</p>${failures.length?`<ul>${failures.map(check=>`<li><b>${esc(check.label||check.id)}</b>: ${esc(check.detail||check.summary||'Analysis unavailable')}</li>`).join('')}</ul>`:''}</div></div>`;
+  return `<div class="ci"><div class="loading">Waiting for recorded review evidence…</div></div>`;
  }
  const all=items();
  const reviewable=all.filter(item=>item.status!=='unknown');
  const complete=(state.model.semanticStatus==='no_changes'||state.model.noGovernedChanges)&&verdict()==='PASS';
  const empty=complete?'No change to evaluated governed behavior was established.':'Review evidence is incomplete. An empty list does not establish unchanged behavior.';
- if(!reviewable.length)return `<div class="ci">${ciTop()}${complete?'<div class="happy"><span class="face" aria-hidden="true">✓</span><h3>No governed changes require review</h3><p>Analysis passed. No review response is needed for this change.</p></div>':`<p class="empty-list">${empty}</p>`}${acceptanceNotice()}${summaryNotice()}</div>`;
+ if(!reviewable.length)return `<div class="ci">${complete?'<div class="happy"><span class="face" aria-hidden="true">✓</span><h3>No governed changes require review</h3><p>Analysis passed. No review response is needed for this change.</p></div>':`<p class="empty-list">${empty}</p>`}${acceptanceNotice()}${summaryNotice()}</div>`;
  const section=(kind,heading)=>{
   const group=reviewable.filter(item=>item.kind===kind);
   if(!group.length)return '';
@@ -233,9 +225,8 @@ function listScreen(){
   return `<section class="findings-section" aria-labelledby="${id}"><h1 id="${id}">${heading}</h1><ul class="findings-list" aria-label="${heading}">${group.map(item=>`<li><button class="findings-item" type="button" data-row="${esc(item.id)}">${esc(item.summary||item.title)}</button></li>`).join('')}</ul></section>`;
  };
  const sections=[section('change','Did you intend these behavioral changes?'),section('constraint','Did you mean to change these constraints?')].filter(Boolean);
- return `<div class="ci findings-review section-count-${sections.length}">${ciTop()}<div class="findings-sections">${sections.join('')}</div>${acceptanceNotice()}${summaryNotice()}</div>`;
+ return `<div class="ci findings-review section-count-${sections.length}"><div class="findings-sections">${sections.join('')}</div>${acceptanceNotice()}${summaryNotice()}</div>`;
 }
-function ciTop(item=null){return `<div class="ci-top"><b>CodeIntent</b><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="${esc(pullRequestUrl())}">Pull request #${esc(pr||'—')}</a><span aria-hidden="true">/</span>${item?`<a href="${esc(routeUrl('review'))}" data-act="list">Review changes</a><span aria-hidden="true">/</span><span aria-current="page">${esc(item.title||'Review item')}</span>`:'<span aria-current="page">Review changes</span>'}</nav><span class="sp"></span><a class="btn" href="${esc(pullRequestUrl())}">Back to PR</a></div>`;}
 function detailScreen(item){
  const answer=decision(item.id),intent=diffLines(intentLines(item.intentBefore),intentLines(item.intentAfter));
  const connections=item.connections?.length?`<div class="holon"><b>Connected governed outcomes</b><ul>${item.connections.map(connection=>`<li><b>${esc(connection.title)}</b> · ${esc(connection.detail)}</li>`).join('')}</ul></div>`:'';
@@ -243,7 +234,7 @@ function detailScreen(item){
  const interpretation=`<div class="summary"><small>${esc(item.groundingLabel||'RECORDED PIPELINE EVIDENCE')}</small><p>${esc(item.detailSummary||item.summary)}</p></div>`;
  const question='Did you mean this?';
  const yes='Yes, I meant this',no='No, investigate';
- return `<div class="ci">${ciTop(item)}<article class="tile">
+ return `<div class="ci"><article class="tile">
   <div class="tile-head"><h3>${esc(item.title)}</h3>${typeIcon(item.reviewType||'Behavior')}</div>
   <div class="tile-sub"><code>${esc(item.method||short(item.file))}</code></div>
   ${item.objective?`<div class="rule"><small>ACCEPTED CONSTRAINT</small><p>${esc(item.objective)}</p></div>`:item.concept?`<div class="rule boundary-context"><small>RECORDED REVIEW CONTEXT</small><p>${esc(item.concept)}</p></div>`:''}
@@ -253,8 +244,8 @@ function detailScreen(item){
    <section class="pane"><header><b>Intent</b><span>${esc(label(item.concept))}</span></header>${intent.length?`<pre>${lines(intent)}</pre>`:'<p class="evidence-empty">No intent comparison recorded for this item.</p>'}</section>
    <section class="pane"><header><b>Code</b><span>${esc(short(item.file))}</span></header>${item.comparison?.before?.text!=null&&item.comparison?.after?.text!=null?`<pre>${lines(sourceLines(item))}</pre>${item.comparison.complete?'':'<p class="evidence-empty">Recorded source excerpt; open more evidence for context.</p>'}`:'<p class="evidence-empty">No source comparison recorded for this item. Check the source evidence view for available patches.</p>'}</section>
   </div>
-  <div class="compact-evidence"><button type="button" class="btn" data-act="explore" aria-expanded="${state.explore}" aria-controls="recorded-evidence">${state.explore?'Hide recorded evidence':'More recorded evidence'}</button>${state.explore?`<div id="recorded-evidence">${resolution}${connections}${reviewExplorer.pane(item,state.packet,state.summary,checks(),{tab:state.tab,node:state.node,full:state.full,file:state.evidenceFile,methods:state.methods})}</div>`:''}</div>
   ${item.status==='unknown'?'<div class="ask"><b>Cannot be established. Review the analysis gap; assessments are unavailable.</b></div>':item.status==='watch'?'<div class="ask"><b>No response required while this rule is under evaluation.</b></div>':`<div class="ask"><b>${esc(question)}</b><button type="button" class="choice yes" data-act="yes" aria-pressed="${answer==='yes'}">${esc(yes)}</button><button type="button" class="choice no" data-act="no" aria-pressed="${answer==='no'}">${esc(no)}</button></div>`}
+  <section class="compact-evidence" aria-labelledby="recorded-evidence-heading"><h4 id="recorded-evidence-heading">Recorded evidence</h4><div id="recorded-evidence">${resolution}${connections}${reviewExplorer.pane(item,state.packet,state.summary,checks(),{tab:state.tab,node:state.node,full:state.full,file:state.evidenceFile,methods:state.methods})}</div></section>
  ${saveBar()}</article></div>`;
 }
 function acceptanceNotice(){
@@ -264,14 +255,10 @@ function acceptanceNotice(){
 }
 function render(){
  runContext.textContent=repo+(pr?' · Pull request #'+pr:'');
+ const prUrl=pullRequestUrl();prBack.href=prUrl;prBack.hidden=prUrl==='#';
  document.title=`CodeIntent · ${repo||'review'}${pr?' #'+pr:''}`;
  if(state.error&&!state.status&&!state.packet){screen.innerHTML=`<div class="error-box"><b>CodeIntent could not load this run.</b><p>${esc(state.error)}</p><p><a href="/">Return to local PR runs</a></p></div>`;return;}
- if(state.desc){
-  const route=new URLSearchParams(location.search);
-  const item=walkthroughPipeline.descriptionItem(items(),state.packet,state.summary,checks(),route.get('check'),route.get('issue'));
-  if(item){state.selected=item.id;screen.innerHTML=detailScreen(item);}
-  else screen.innerHTML=`<div class="notice"><h2>${state.model?'Description unavailable':'Loading issue description…'}</h2><p>${state.model?'No matching description was recorded for this issue.':'Loading the pinned review evidence.'}</p>${state.model?checkExplanation():''}</div>`;
- }else if(state.view==='checks')screen.innerHTML=checksScreen();
+ if(state.view==='checks')screen.innerHTML=checksScreen();
  else if(state.selected){const item=items().find(value=>value.id===state.selected);screen.innerHTML=item?detailScreen(item):listScreen();}
  else screen.innerHTML=listScreen();
  legacyMethodExplorer.hydrate();
@@ -283,13 +270,11 @@ document.addEventListener('click',event=>{
  const action=target.dataset.act;
  if(target.dataset.exTab){state.tab=target.dataset.exTab;render();document.querySelector('#rx-tab-'+state.tab)?.focus();return;}
  if(target.dataset.node){state.node=target.dataset.node;render();return;}
- if(action==='explore'){state.explore=!state.explore;render();return;}
  if(action==='graph-full'){state.full=!state.full;state.node=null;render();return;}
 
  if(action==='open'){navigate('review');}
  else if(action==='checks'){event.preventDefault();navigate('checks');}
- else if(action==='list'){event.preventDefault();navigate('review');}
- else if(target.dataset.row){state.explore=false;state.evidenceFile='';state.node=null;state.full=false;navigate('review',target.dataset.row);scrollTo(0,0);}
+ else if(target.dataset.row){state.evidenceFile='';state.node=null;state.full=false;navigate('review',target.dataset.row);scrollTo(0,0);}
  else if(action==='yes'||action==='no'){const item=items().find(i=>i.id===state.selected);if(item&&item.status!=='unknown'&&item.status!=='watch')state.drafts.set(state.selected,action);render();}
  else if(action==='undo'){state.drafts.clear();render();}
  else if(action==='submit'){
@@ -313,10 +298,15 @@ document.addEventListener('keydown',event=>{
 legacyMethodExplorer.setRender(render);
 addEventListener('popstate',()=>{
  const route=new URLSearchParams(location.search),view=route.get('view')==='checks'?'checks':'review';
- state.desc=route.get('view')==='desc';state.view=view;state.selected=view==='review'?(route.get('item')||null):null;render();
+ state.view=view;state.selected=view==='review'?(route.get('item')||null):null;render();
 });
 const theme=document.querySelector('#theme');
-function setTheme(value){document.documentElement.dataset.theme=value;theme.textContent=value==='dark'?'Light':'Dark';}
+function setTheme(value){
+ document.documentElement.dataset.theme=value;
+ const action=value==='dark'?'Use light theme':'Use dark theme';
+ theme.textContent=value==='dark'?'☀':'☾';
+ theme.setAttribute('aria-label',action);theme.title=action;
+}
 setTheme(localStorage.getItem('codeintent-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'));
 theme.addEventListener('click',()=>{const next=document.documentElement.dataset.theme==='dark'?'light':'dark';localStorage.setItem('codeintent-theme',next);setTheme(next);});
 render();poll();

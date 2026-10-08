@@ -5,7 +5,7 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const json=v=>esc(JSON.stringify(v??null,null,2));
 const pipeline=root.walkthroughPipeline||(typeof require==='function'?require('./walkthrough-model.js'):null);
 const gap=(check,checks)=>['error','blocked'].includes(check.state)&&!pipeline?.intentionalSkip(check,checks);
-const tabs=[['graph','Impact graph'],['path','Behavior path'],['src','Source evidence'],['obj','Governed objective'],['analysis','Analysis details'],['ask','Ask CodeIntent']];
+const tabs=[['obj','Governed boundaries'],['graph','Impact graph'],['path','Behavior path'],['src','Source evidence'],['analysis','Analysis details'],['ask','Ask CodeIntent']];
 function recordedText(fact){
  if(!fact)return 'no recorded value';
  if(Array.isArray(fact.allowed))return fact.allowed.join(', ');
@@ -118,7 +118,7 @@ function pane(item,packet,summary,checks,options){
  const relatedExplanations=explanation?[explanation]:explanations.filter(e=>e.changed_source?.file===file);
  const detailCheck=packet?.explorer?.results?.checks?.find(c=>c.id===original.check?.id)||original.check;
  const scope=runScope?`<div class="rx-scope"><p><b>Run-level analysis gap.</b> This check has no single source location. Browse changed-file context below; it is not a finding attributed to the selected file.</p><label>Changed file <select data-evidence-file>${files.map(f=>`<option value="${esc(f)}" ${f===file?'selected':''}>${esc(f)}</option>`).join('')}</select></label></div>`:'';
- const tab=options.tab||'graph';let body='';
+ const tab=options.tab||'obj';let body='';
  if(tab==='graph')body=graphPane(item,packet,options);
  if(tab==='path'){
   const rows=linked.flatMap(({workflow,obligation,evidence})=>evidence.map(e=>`<tr><td>${esc(workflow.name)}<br>${esc(obligation.phase)} · ${esc(e.source?.owner)}</td><td><pre>${json(e.baseline_parameters)}</pre></td><td><pre>${e.replacement_parameters?.length?json(e.replacement_parameters):'No replacement parameters recorded; this does not prove the behavior was removed.'}</pre>${esc(e.classification)}</td></tr>`));

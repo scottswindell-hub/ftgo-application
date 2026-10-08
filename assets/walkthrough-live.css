@@ -31,7 +31,8 @@ code{font:12px var(--mono)}
 .cases button{border:1px solid #57606a;background:transparent;color:#fff;border-radius:6px;padding:6px 11px;font-size:13px;min-height:36px}
 .cases button[aria-pressed="true"]{background:#fff;color:#25292e;border-color:#fff;font-weight:600}
 .shell .sp{flex:1}
-.shell .tool{border:1px solid #57606a;background:transparent;color:#fff;border-radius:6px;padding:6px 10px;font-size:12.5px;min-height:36px}
+.shell .tool{display:inline-flex;align-items:center;border:1px solid #57606a;background:transparent;color:#fff;border-radius:6px;padding:6px 10px;font-size:12.5px;min-height:36px;text-decoration:none}
+.shell #theme{justify-content:center;width:36px;padding:6px;font-size:18px;line-height:1}
 .wrap{max-width:1180px;margin:0 auto;padding:16px 20px 60px;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
 .wrap.nonotes{grid-template-columns:minmax(0,1fr)}
 .notes{position:sticky;top:12px;background:var(--note);color:var(--note-ink);border:1px solid color-mix(in srgb,var(--note-ink) 30%,transparent);border-radius:10px;padding:14px 16px;display:grid;gap:10px;font-size:13.5px}
@@ -76,12 +77,6 @@ code{font:12px var(--mono)}
 .happy p{margin:0;color:var(--ink);max-width:56ch}
 
 /* CodeIntent */
-.ci-top{display:flex;align-items:center;gap:10px;margin:-22px -26px 20px;padding:10px 26px;border-bottom:1px solid var(--line);font-size:13px}
-.ci-top b{font-size:14px}.ci-top a{color:var(--blue);text-decoration:none}
-.ci-top .sp{flex:1}
-.ci-top .ro{font-size:12px;color:var(--muted)}
-.breadcrumbs{display:flex;align-items:center;gap:7px;min-width:0;color:var(--muted)}
-.breadcrumbs [aria-current=page]{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:34rem;color:var(--ink)}
 .ci h2{font-size:17px;margin:0 0 10px;font-weight:600}
 .rows{display:grid;gap:8px;margin:0 0 22px}
 .row{width:100%;text-align:left;border:1.5px solid var(--line);background:var(--panel);border-radius:8px;padding:10px 14px;font-size:13.5px;min-height:44px;display:flex;gap:10px;align-items:flex-start}
@@ -177,7 +172,7 @@ details.quiet summary{cursor:pointer;color:var(--muted)}details.quiet summary b{
 .cause{margin:0 16px 12px;font-size:13.5px}
 .ans{font-size:12px;font-weight:600}.ans.yes{color:var(--ok)}.ans.no{color:var(--bad)}
 .fine{margin:0;padding:8px 16px 12px;font-size:12px;color:var(--muted)}
-@media (max-width:900px){.wrap{grid-template-columns:1fr}.notes{position:static;order:-1}.ba,.diffs{grid-template-columns:1fr}.screen{padding:18px 16px}.ci-top{margin:-18px -16px 16px;padding:10px 16px}}
+@media (max-width:900px){.wrap{grid-template-columns:1fr}.notes{position:static;order:-1}.ba,.diffs{grid-template-columns:1fr}.screen{padding:18px 16px}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 
 /* Live bindings retain the reference presentation while handling real pipeline states. */
@@ -217,7 +212,7 @@ details.quiet summary{cursor:pointer;color:var(--muted)}details.quiet summary b{
 .diffs .pane{min-width:0}.diffs .pane pre{max-height:260px;overflow:auto}
 .evidence-empty{padding:10px 12px;margin:0;color:var(--muted);font-size:12px}
 .compact-evidence{margin:8px 16px 16px}
-.compact-evidence>button{width:100%;text-align:left;background:var(--sunk)}
+.compact-evidence>h4{margin:0;padding:12px 0 8px;border-top:1px solid var(--line);font-size:13px}
 @media(max-width:650px){.row-side{max-width:110px}.diffs{grid-template-columns:1fr}}
 
 .review-section-title{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:24px 0 8px}
