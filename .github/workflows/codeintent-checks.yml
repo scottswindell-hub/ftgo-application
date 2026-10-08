@@ -277,7 +277,7 @@ jobs:
               printf '%s' "$document" > /tmp/codeintent-status.json
               python3 <<'PY' > /tmp/codeintent-comment.md
           """One compact GitHub comment over native results and separate acceptance policy."""
-          from urllib.parse import urljoin, urlsplit
+          from urllib.parse import urljoin, urlsplit, urlunsplit, parse_qsl, urlencode
 
           MARKER = '<!-- codeintent-checks -->'
           ICONS = {'passed':'✅','failed':'❌','error':'⚠️','stopped':'➖','blocked':'➖','pending':'⏳','running':'⏳'}
@@ -341,13 +341,17 @@ jobs:
                   elif state in {'failed','error'}:
                       failed_count+=1
                       detail=boundary_summary(check) if check.get('id')=='intent_diff' and state=='failed' else inline(state)
-                      failed.append(f'- ❌ **{name}**: {detail}')
+                      url=urlsplit(report_url)
+                      query=[(key,value) for key,value in parse_qsl(url.query,keep_blank_values=True) if key not in {'view','check','item'}]
+                      query.extend([('view','checks'),('check',check['id'])])
+                      target=urlunsplit((url.scheme,url.netloc,url.path,urlencode(query),''))
+                      failed.append(f'- **[{name}](<{target}>)**: {detail}')
                       if check.get('id')!='intent_diff' and document.get('governance_run_id'):
                           failed+=finding_lines(check)
               passed_count=sum(check.get('state')=='passed' and check.get('id')!='governance_decision' for check in checks)
               if passed:
                   rows+=['<details>', f'<summary>✅ Passing checks ({passed_count})</summary>', '',
-                         *passed, '', '</details>', '']
+                         *passed, '', '</details>']
               if failed:
                   rows+=['<details open>', f'<summary>❌ Needs Review ({failed_count})</summary>', '',
                          *failed, '', '</details>', '']
