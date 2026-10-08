@@ -294,7 +294,7 @@ jobs:
               for finding in findings[:limit]:
                   what=finding.get('rule_id') or finding.get('name') or finding.get('title') or finding.get('observation') or 'finding'
                   where=f" at `{inline(finding['file'])}:{inline(finding.get('line'))}`" if finding.get('file') else ''
-                  status=' (rule change requested)' if finding.get('decision')=='rule_change_requested' else ''
+                  status=' (false positive: rule exception added to this PR)' if finding.get('decision')=='rule_change_requested' else ''
                   lines.append(f"  - `{finding['ref']}` {inline(what)}{where}{status}")
               if len(findings)>limit:
                   lines.append(f"  - …and {len(findings)-limit} more on the report")
@@ -319,18 +319,19 @@ jobs:
               acceptance=document.get('acceptance') or {}
               status=acceptance.get('status')
               shadow=acceptance.get('mode')=='shadow'
-              # A shadow assessment is reported, never authoritative: the headline stays the checks' own result.
-              label=None if shadow else {'ready':'✅ Ready','blocked':'❌ Blocked','review_required':'⚠️ Review required','incomplete':'⚠️ Assessment incomplete'}.get(status)
-              if not label:
-                  label='⏳ Running' if document.get('state')!='completed' else '✅ Passed' if verdict=='PASS' else '❌ Failed' if verdict=='VIOLATION' else '⚠️ Assessment incomplete'
-              rows=[MARKER,'### CodeIntent checks — '+label,'']
+              needs_review=(verdict!='PASS' or any(check.get('state') in {'failed','error'} for check in checks)
+                            or (not shadow and status in {'blocked','review_required','incomplete','evidence_needed'}))
+              label=('⏳ Running' if document.get('state')!='completed' else
+                     '❌ Needs Review' if needs_review else '✅ Passed')
+              rows=[MARKER,'### CodeIntent checks -- '+label,'']
               if document.get('violation_status')=='rejected':
                   rows+=['**Rejected:** a rule violation was confirmed, so this pull request was closed.','']
-              if shadow:
-                  reason=f" ({inline(acceptance['reason'])})" if acceptance.get('reason') else ''
-                  rows+=[f"Governance acceptance (shadow, not enforced): {inline(status or 'not assessed')}{reason}. The checks below decide this PR.",'']
+              passed=[]
               for check in checks:
-                  state=check.get('state','pending');detail=check.get('detail','')
+                  state=check.get('state','pending');detail=check.get('detail') or ''
+                  if state=='passed' and not check.get('findings') and not detail.startswith('No standards adopted'):
+                      passed.append(inline(check.get('label') or check['id']))
+                      continue
                   if check.get('id')=='intent_diff' and state=='failed':
                       rows.append(f"- ⚠️ **{inline(check.get('label') or check['id'])}**: {boundary_summary(check)}")
                       continue
@@ -339,11 +340,14 @@ jobs:
                   rows.append(f"- {icon} **{inline(check.get('label') or check['id'])}**: {inline(state)}{suffix}")
                   # References and the decision commands only when the run is recorded: otherwise a decision cannot be.
                   rows+=finding_lines(check) if document.get('governance_run_id') else []
+              if passed:
+                  rows+=['', '<details>', f'<summary>✅ Passing checks ({len(passed)})</summary>', '',
+                         *[f'- {name}' for name in passed], '', '</details>']
               risks=(acceptance.get('intent_risks') or {}).get('assessments',[])
               if risks:
                   rows+=['',f"🟡 Intent outside governed objectives: {len(risks)} change(s); {len(acceptance.get('required_reviews',[]))} awaiting risk review."]
               if document.get('governance_run_id') and any(check.get('state')=='failed' and finding_lines(check) for check in checks):
-                  rows+=['','Rule violation? Someone with write access decides: `/reject -- reason` closes this PR (the violation is real); `/false-positive F-xxxxxxxx -- reason` requests a rule fix (the PR stays blocked until the fixed rule is live). Boundary-question references are in the review.']
+                  rows+=['','Rule violation? Someone with write access decides: `/reject -- reason` closes this PR (the violation is real); `/false-positive F-xxxxxxxx -- reason` adds a rule exception to this PR as a separate commit and re-runs the checks. Boundary-question references are in the review.']
               # The review is where findings are addressed, so its link is a button. The image ships with the review page.
               button=urljoin(report_url,'assets/open-review-button.svg')
               rows+=['',f'[![Open the checks and review]({button})]({report_url})']
