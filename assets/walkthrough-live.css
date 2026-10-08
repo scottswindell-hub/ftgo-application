@@ -224,3 +224,17 @@ details.quiet summary{cursor:pointer;color:var(--muted)}details.quiet summary b{
 
 /* The canonical compact list keeps the English consequence visible before opening a tile. */
 .row .row-summary{display:block;margin:5px 0;color:var(--ink);font-size:13.5px;font-weight:400;line-height:1.5;overflow-wrap:anywhere}
+
+/* Findings route: retain the pipeline entry screen and make its review target
+   match the approved minimal two-list treatment. Each tile still opens the
+   existing evidence-rich finding detail. */
+.findings-review{width:min(100%,1100px);margin:0 auto}
+.findings-sections{display:grid;gap:42px}
+.findings-section{min-width:0}
+.findings-section h1{margin:0 0 16px;color:var(--ink);font-size:clamp(25px,2.55vw,33px);font-weight:720;letter-spacing:-.035em;line-height:1.18}
+.findings-list{display:grid;align-content:start;gap:10px;max-height:min(36vh,420px);margin:0;padding:2px 4px 2px 0;overflow-y:auto;overscroll-behavior:contain;list-style:none;scrollbar-color:color-mix(in srgb,var(--muted) 45%,transparent) transparent;scrollbar-width:thin}
+.findings-review.section-count-1 .findings-list{max-height:min(58vh,620px)}
+.findings-item{display:block;width:100%;padding:16px 21px;border:1px solid var(--line);border-radius:8px;color:var(--ink);background:var(--panel);box-shadow:0 1px 2px rgba(27,31,36,.03);font:520 clamp(16px,1.5vw,19px)/1.38 var(--sans);letter-spacing:-.012em;text-align:left;transition:background-color 140ms ease,border-color 140ms ease,box-shadow 140ms ease,transform 140ms ease}
+.findings-item:hover,.findings-item:focus-visible{border-color:var(--muted);outline:0;background:var(--sunk);box-shadow:0 3px 10px rgba(27,31,36,.09);transform:translateY(-1px)}
+.findings-item:focus-visible{box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 28%,transparent),0 3px 10px rgba(27,31,36,.09)}
+@media(max-width:700px){.findings-sections{gap:32px}.findings-item{padding:15px 18px}}

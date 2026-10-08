@@ -6,9 +6,43 @@ const json=v=>esc(JSON.stringify(v??null,null,2));
 const pipeline=root.walkthroughPipeline||(typeof require==='function'?require('./walkthrough-model.js'):null);
 const gap=(check,checks)=>['error','blocked'].includes(check.state)&&!pipeline?.intentionalSkip(check,checks);
 const tabs=[['graph','Impact graph'],['path','Behavior path'],['src','Source evidence'],['obj','Governed objective'],['analysis','Analysis details'],['ask','Ask CodeIntent']];
+function recordedText(fact){
+ if(!fact)return 'no recorded value';
+ if(Array.isArray(fact.allowed))return fact.allowed.join(', ');
+ if(Array.isArray(fact.arguments))return fact.arguments.join(', ');
+ const args=fact.value?.attrs?.arguments;
+ if(Array.isArray(args)){
+  const values=args.map(arg=>arg?.attrs?.member||arg?.attrs?.qualifier||arg?.node||'value');
+  return fact.scope==='source_return_construction'?values[0]:values.join(', ');
+ }
+ return fact.value?.attrs?.member||fact.value?.node||fact.operation||fact.slot||'recorded value';
+}
+function unjudgedCard(entry,index){
+ const before=recordedText(entry.before?.[0]),after=recordedText(entry.after?.[0]);
+ const method=entry.method||'This code path';
+ const added=(entry.after?.[0]?.allowed||[]).filter(value=>!(entry.before?.[0]?.allowed||[]).includes(value));
+ const summary=entry.form==='state_transition'&&added.length
+  ? `${method} can now run when state is ${added.join(' or ')}, in addition to ${before}.`
+  : `${method} now uses ${after} instead of ${before}.`;
+ // A boundary ID alone is not an accepted constraint.  Only an explicit
+ // objective/constraint binding belongs in the constraint list; otherwise
+ // this is a potential behavioral change.
+ const objective=entry.objective||entry.governance_objective||entry.constraint||'';
+ return {id:'recorded-impact:'+index,flowIds:String(entry.flow_id||'').split('+').filter(Boolean),kind:objective?'constraint':'change',status:'review',
+  file:entry.changed?.file||'',method,title:summary,summary,before,after,connections:[],intentBefore:entry.before||[],intentAfter:entry.after||[],reviewType:'Behavior',
+  objective,concept:entry.boundary_id||'Recorded changed behavior',groundingLabel:'RECORDED BEFORE/AFTER EVIDENCE · BOUNDARY JUDGMENT NOT SUPPLIED',
+  qualification:'This is a direct comparison of recorded source facts. It is not a governance decision or a runtime guarantee.'};
+}
 function enrich(model,packet,summary,checks){
  const result={...model,changes:[...model.changes],constraints:[...model.constraints]};
  if(!result.changes.length&&!result.constraints.length&&model.semanticStatus!=='no_changes'){
+  const unjudged=(packet.explorer?.impact?.unjudged||[]).filter(entry=>entry&&entry.changed?.file&&entry.before?.length&&entry.after?.length&&recordedText(entry.before[0])!==recordedText(entry.after[0]));
+  if(unjudged.length){
+   const cards=unjudged.map(unjudgedCard);
+   result.changes.push(...cards.filter(card=>card.kind==='change'));
+   result.constraints.push(...cards.filter(card=>card.kind==='constraint'));
+   return result;
+  }
   const groups=new Map();
   for(const flow of packet.flows||[]){if(flow.change_kind==='context_only')continue;const file=flow.source?.file||'Unlocated evidence';if(!groups.has(file))groups.set(file,[]);groups.get(file).push(flow);}
   for(const [file,flows] of groups)result.changes.push({id:'recorded:'+file,kind:'change',status:'unknown',file,title:file.split('/').pop(),method:'',summary:`${flows.length} recorded analysis entries; semantic outcome not established.`,before:'Inspect the recorded baseline evidence.',after:'Inspect the recorded candidate evidence.',connections:[],intentBefore:[],intentAfter:[],reviewType:'Behavior',groundingLabel:'RECORDED EVIDENCE · OUTCOME UNRESOLVED',qualification:'Source changes and extraction differences alone do not establish a behavior change.'});
@@ -17,7 +51,7 @@ function enrich(model,packet,summary,checks){
  result.noGovernedChanges=Boolean(checks?.length)&&checks.every(c=>['passed','skipped'].includes(c.state)||pipeline?.intentionalSkip(c,checks))&&!(packet.flows||[]).some(f=>f.change_kind!=='context_only')&&!result.changes.length&&!result.constraints.length&&checks?.some(c=>c.id==='intent_diff'&&c.state==='passed')&&checks?.some(c=>c.id==='governance_decision'&&c.state==='passed');
  return result;
 }
-function flowsFor(item,packet){return (packet?.flows||[]).filter(f=>f.id===item.id||(item.file&&f.source?.file===item.file));}
+function flowsFor(item,packet){const ids=new Set(item.flowIds||[]);return (packet?.flows||[]).filter(f=>ids.has(f.id)||f.id===item.id||(item.file&&f.source?.file===item.file));}
 function coverage(packet,summary,checks){
  const flows=packet?.flows||[];const methods=new Set(flows.filter(f=>f.change_kind==='source_changed').map(f=>f.method).filter(Boolean));
  const gaps=(checks||[]).filter(c=>gap(c,checks));

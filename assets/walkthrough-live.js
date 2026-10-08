@@ -208,12 +208,18 @@ function listScreen(){
   return `<div class="ci">${ciTop()}<div class="loading">Waiting for recorded review evidence…</div></div>`;
  }
  const all=items();
+ const reviewable=all.filter(item=>item.status!=='unknown');
  const complete=(state.model.semanticStatus==='no_changes'||state.model.noGovernedChanges)&&verdict()==='PASS';
  const empty=complete?'No change to evaluated governed behavior was established.':'Review evidence is incomplete. An empty list does not establish unchanged behavior.';
- return `<div class="ci">${ciTop()}<h2>Review these changes</h2><p class="review-lede">Review the recorded behavior changes and their supporting evidence.</p>
- ${!all.length?(complete?'<div class="happy"><span class="face" aria-hidden="true">✓</span><h3>No governed changes require review</h3><p>Analysis passed. No review response is needed for this change.</p></div>':`<p class="empty-list">${empty}</p>`):''}${acceptanceNotice()}
- ${[['change','Behavioral review tiles'],['constraint','Constraint violation tiles']].map(([kind,title])=>{const group=all.filter(i=>i.status!=='unknown'&&i.kind===kind);return `<h3 class="review-section-title">${title} · ${group.length}</h3><div class="rows">${group.length?group.map(i=>row(i,kind)).join(''):'<p class="empty-list">No established items in this group.</p>'}</div>`;}).join('')}
- ${summaryNotice()}${saveBar()}</div>`;
+ if(!reviewable.length)return `<div class="ci">${ciTop()}${complete?'<div class="happy"><span class="face" aria-hidden="true">✓</span><h3>No governed changes require review</h3><p>Analysis passed. No review response is needed for this change.</p></div>':`<p class="empty-list">${empty}</p>`}${acceptanceNotice()}${summaryNotice()}</div>`;
+ const section=(kind,heading)=>{
+  const group=reviewable.filter(item=>item.kind===kind);
+  if(!group.length)return '';
+  const id=kind+'-findings';
+  return `<section class="findings-section" aria-labelledby="${id}"><h1 id="${id}">${heading}</h1><ul class="findings-list" aria-label="${heading}">${group.map(item=>`<li><button class="findings-item" type="button" data-row="${esc(item.id)}">${esc(item.summary||item.title)}</button></li>`).join('')}</ul></section>`;
+ };
+ const sections=[section('change','Did you intend these behavioral changes?'),section('constraint','Did you mean to change these constraints?')].filter(Boolean);
+ return `<div class="ci findings-review section-count-${sections.length}">${ciTop()}<div class="findings-sections">${sections.join('')}</div>${acceptanceNotice()}${summaryNotice()}</div>`;
 }
 function ciTop(item=null){return `<div class="ci-top"><b>CodeIntent</b><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="${esc(routeUrl('checks'))}" data-act="checks">Pull request #${esc(pr||'—')}</a><span aria-hidden="true">/</span>${item?`<a href="${esc(routeUrl('review'))}" data-act="list">Review changes</a><span aria-hidden="true">/</span><span aria-current="page">${esc(item.title||'Review item')}</span>`:'<span aria-current="page">Review changes</span>'}</nav><span class="sp"></span><a class="btn" href="${esc(routeUrl('checks'))}" data-act="checks">Pipeline checks</a></div>`;}
 function detailScreen(item){
@@ -267,7 +273,6 @@ document.addEventListener('click',event=>{
  else if(target.dataset.row){state.explore=false;state.evidenceFile='';state.node=null;state.full=false;navigate('review',target.dataset.row);scrollTo(0,0);}
  else if(action==='yes'||action==='no'){const item=items().find(i=>i.id===state.selected);if(item&&item.status!=='unknown'&&item.status!=='watch')state.drafts.set(state.selected,action);render();}
  else if(action==='undo'){state.drafts.clear();render();}
- else if(action==='governance')window.codeIntentGovernanceActions.open({repo,pr,sha,responses:[]});
  else if(action==='submit'){
   const responses=[];
   for(const [id,value] of state.drafts){state.submitted.set(id,value);const item=items().find(candidate=>candidate.id===id)||{};responses.push({id,decision:value,summary:item.summary||item.title||'',type:item.reviewType||'Behavior'});}
@@ -291,7 +296,6 @@ addEventListener('popstate',()=>{
  const route=new URLSearchParams(location.search),view=route.get('view')==='review'?'review':'checks';
  state.view=view;state.selected=view==='review'?(route.get('item')||null):null;render();
 });
-document.querySelector('#governance-actions').addEventListener('click',()=>window.codeIntentGovernanceActions.open({repo,pr,sha,responses:[]}));
 const theme=document.querySelector('#theme');
 function setTheme(value){document.documentElement.dataset.theme=value;theme.textContent=value==='dark'?'Light':'Dark';}
 setTheme(localStorage.getItem('codeintent-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'));
