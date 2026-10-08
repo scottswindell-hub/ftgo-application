@@ -50,6 +50,10 @@ public class DeliveryService {
 
   }
 
+  public Courier findCourier(long courierId) {
+    return courierRepository.findById(courierId).orElse(null);
+  }
+
   public void cancelDelivery(long orderId) {
     Delivery delivery = deliveryRepository.findById(orderId).get();
     Long assignedCourierId = delivery.getAssignedCourier();

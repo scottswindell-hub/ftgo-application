@@ -18,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.Optional;
@@ -70,6 +71,12 @@ public class OrderService {
                            List<MenuItemIdAndQuantity> lineItems) {
     Restaurant restaurant = restaurantRepository.findById(restaurantId)
             .orElseThrow(() -> new RestaurantNotFoundException(restaurantId));
+
+    Integer capacity = new RestTemplate().getForObject(
+            "http://ftgo-kitchen-service:8080/restaurants/" + restaurantId + "/capacity", Integer.class);
+    if (capacity != null && capacity <= 0) {
+      throw new IllegalStateException("Restaurant " + restaurantId + " is at capacity");
+    }
 
     List<OrderLineItem> orderLineItems = makeOrderLineItems(lineItems, restaurant);
 
