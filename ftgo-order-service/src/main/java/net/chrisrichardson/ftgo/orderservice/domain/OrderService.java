@@ -71,6 +71,10 @@ public class OrderService {
     Restaurant restaurant = restaurantRepository.findById(restaurantId)
             .orElseThrow(() -> new RestaurantNotFoundException(restaurantId));
 
+    if (lineItems.isEmpty()) {
+      throw new EmptyOrderException();
+    }
+
     List<OrderLineItem> orderLineItems = makeOrderLineItems(lineItems, restaurant);
 
     ResultWithDomainEvents<Order, OrderDomainEvent> orderAndEvents =
