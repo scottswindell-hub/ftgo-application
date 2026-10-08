@@ -115,6 +115,8 @@ All the services' business logic is implemented using Domain-Driven design aggre
 
 === Building
 
+Run the following commands from the repository root.
+
 Temporary: Build the Spring Cloud Contracts using this command:
 
 ```
