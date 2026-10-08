@@ -342,8 +342,12 @@ jobs:
                       failed_count+=1
                       detail=boundary_summary(check) if check.get('id')=='intent_diff' and state=='failed' else inline(state)
                       url=urlsplit(report_url)
-                      query=[(key,value) for key,value in parse_qsl(url.query,keep_blank_values=True) if key not in {'view','check','item'}]
-                      query.extend([('view','checks'),('check',check['id'])])
+                      query=[(key,value) for key,value in parse_qsl(url.query,keep_blank_values=True) if key not in {'view','check','item','issue'}]
+                      query.extend([('view','desc'),('check',check['id'])])
+                      issues=[f for f in check.get('findings') or [] if isinstance(f,dict)]
+                      if issues:
+                          issue=issues[0].get('id') or issues[0].get('ref')
+                          if issue: query.append(('issue',issue))
                       target=urlunsplit((url.scheme,url.netloc,url.path,urlencode(query),''))
                       failed.append(f'- **[{name}](<{target}>)**: {detail}')
                       if check.get('id')!='intent_diff' and document.get('governance_run_id'):
