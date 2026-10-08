@@ -12,7 +12,7 @@ const runId=qs.get('run_id')||'';
 const api=(qs.get('api')||'').replace(/\/+$/,'');
 let dataPath=qs.get('data')||'';
 const {ANALYSIS,REVIEW}=walkthroughPipeline;
-const state={status:null,packet:null,summary:null,model:null,view:qs.get('view')==='review'?'review':'checks',selected:null,explore:false,tab:'graph',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
+const state={status:null,packet:null,packetDigest:null,summary:null,model:null,view:qs.get('view')==='review'?'review':'checks',selected:null,explore:false,tab:'graph',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
 let pollTimer=null;
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -83,17 +83,25 @@ async function loadArtifacts(){
     packet.explorer[key]=detail;
    }catch(error){packet.explorer_errors.push(key+': '+error.message);}
   }));
-  packet.explorer.results={checks:checks()};state.packet=packet;
+  packet.explorer.results={checks:checks()};
+  let loadedSummary=null;
+  const inline=packet.objective_summary;
+  if(inline){
+   const identity=inline.identity||{};
+   if(identity.repository!==repo||identity.head_commit!==sha||identity.baseline_commit!==packet.baseline_commit)throw Error('Semantic summary identity differs from this run.');
+   loadedSummary=inline;
+  }
   const ref=packet.objective_summary_artifact;
   if(ref){
    const summary=await loadJson(new URL(ref.url,new URL(dataPath,location.href)).href,262144,ref.sha256);
    if(summary){
     const identity=summary.identity||{};
     if(identity.repository!==repo||identity.head_commit!==sha||identity.baseline_commit!==packet.baseline_commit)throw Error('Semantic summary identity differs from this run.');
-    state.summary=summary;
+    loadedSummary=summary;
    }
   }
-  state.model=reviewExplorer.enrich(codeIntentReviewModel(packet,state.summary||{},[],checks()),packet,state.summary,checks());
+  const model=reviewExplorer.enrich(codeIntentReviewModel(packet,loadedSummary||{},[],checks()),packet,loadedSummary,checks());
+  state.packet=packet;state.packetDigest=digest||null;state.summary=loadedSummary;state.model=model;
  }catch(error){state.error='Review evidence unavailable: '+error.message;}
  finally{state.loadingArtifact=false;render();}
 }
@@ -106,6 +114,7 @@ async function poll(){
   if(!dataPath&&reference?.schema==='review-artifact-reference-v1'&&reference.name==='intent-flow.json'){
    const artifact=new URL(statusUrl());artifact.searchParams.set('detail','review-artifact');artifact.searchParams.set('name',reference.name);dataPath=artifact.href;
   }
+  if(state.packet&&reference?.sha256&&reference.sha256!==state.packetDigest){state.packet=null;state.summary=null;state.model=null;}
   if(state.packet){state.packet.explorer.results={checks:checks()};state.model=reviewExplorer.enrich(codeIntentReviewModel(state.packet,state.summary||{},[],checks()),state.packet,state.summary,checks());}
   else await loadArtifacts();
  }catch(error){state.error='Live pipeline unavailable: '+error.message;}
@@ -181,6 +190,10 @@ function row(item,kind){
 }
 function coverage(){return reviewExplorer.coverage(state.packet,state.summary,checks());}
 function saveBar(){return `<div class="actions rx-save"><span>${state.drafts.size} staged assessment${state.drafts.size===1?'':'s'} · governance changes are handed to protected GitHub Actions.</span><button type="button" class="btn" data-act="undo" ${state.drafts.size?'':'disabled'}>Discard staged</button><button type="button" class="btn blue" data-act="submit" ${state.drafts.size?'':'disabled'}>Continue to governance actions</button></div>`;}
+function summaryNotice(){
+ const summary=state.summary?.intent_semantics;
+ return summary?.status==='unavailable'?`<div class="notice"><b>English descriptions unavailable</b><p>${esc(summary.reason||'The optional explanation step could not complete. Recorded findings remain available below.')}</p></div>`:'';
+}
 function listScreen(){
  if(!state.model){
   const finished=state.status?.state==='completed';
@@ -194,7 +207,7 @@ function listScreen(){
  return `<div class="ci">${ciTop()}<h2>Review these changes</h2><p class="review-lede">Review the recorded behavior changes and their supporting evidence.</p>
  ${!all.length?(complete?'<div class="happy"><span class="face" aria-hidden="true">✓</span><h3>No governed changes require review</h3><p>Analysis passed. No review response is needed for this change.</p></div>':`<p class="empty-list">${empty}</p>`):''}${acceptanceNotice()}
  ${[['change','Behavioral review tiles'],['constraint','Constraint violation tiles']].map(([kind,title])=>{const group=all.filter(i=>i.status!=='unknown'&&i.kind===kind);return `<h3 class="review-section-title">${title} · ${group.length}</h3><div class="rows">${group.length?group.map(i=>row(i,kind)).join(''):'<p class="empty-list">No established items in this group.</p>'}</div>`;}).join('')}
- ${unknown?`<details class="rx-coverage review-gaps"><summary><b>Analysis coverage · ${unknown} unresolved items</b></summary><p>These are incomplete analyses or unresolved evidence, not established findings. They cannot be assessed as expected.</p>${all.filter(i=>i.status==='unknown').map(i=>row(i,'unknown')).join('')}</details>`:''}${coverage()}<details class="rx-coverage"><summary><b>Governance model for this PR</b> · workflows, obligations and method evidence</summary>${reviewExplorer.governanceCatalog(state.packet)}</details>${saveBar()}${provenance()}</div>`;
+ ${unknown?`<details class="rx-coverage review-gaps"><summary><b>Analysis coverage · ${unknown} unresolved items</b></summary><p>These are incomplete analyses or unresolved evidence, not established findings. They cannot be assessed as expected.</p>${all.filter(i=>i.status==='unknown').map(i=>row(i,'unknown')).join('')}</details>`:''}${summaryNotice()}${coverage()}<details class="rx-coverage"><summary><b>Governance model for this PR</b> · workflows, obligations and method evidence</summary>${reviewExplorer.governanceCatalog(state.packet)}</details>${saveBar()}${provenance()}</div>`;
 }
 function ciTop(){return `<div class="ci-top"><b>CodeIntent</b><a href="#" data-act="checks">← Pull request #${esc(pr||'—')}</a><span class="sp"></span><button type="button" class="btn" data-act="checks">Pipeline checks</button></div>`;}
 function detailScreen(item){
