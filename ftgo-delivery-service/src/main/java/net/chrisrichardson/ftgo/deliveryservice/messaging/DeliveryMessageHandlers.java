@@ -13,9 +13,14 @@ import net.chrisrichardson.ftgo.orderservice.api.events.OrderCreatedEvent;
 import net.chrisrichardson.ftgo.restaurantservice.RestaurantServiceChannels;
 import net.chrisrichardson.ftgo.restaurantservice.events.RestaurantCreated;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.LocalDateTime;
 
 public class DeliveryMessageHandlers {
+
+  private Logger logger = LoggerFactory.getLogger(getClass());
 
   private DeliveryService deliveryService;
 
@@ -36,8 +41,12 @@ public class DeliveryMessageHandlers {
   }
 
   public void handleRestaurantCreated(DomainEventEnvelope<RestaurantCreated> dee) {
-    Address address = RestaurantEventMapper.toAddress(dee.getEvent().getAddress());
-    deliveryService.createRestaurant(Long.parseLong(dee.getAggregateId()), dee.getEvent().getName(), address);
+    try {
+      Address address = RestaurantEventMapper.toAddress(dee.getEvent().getAddress());
+      deliveryService.createRestaurant(Long.parseLong(dee.getAggregateId()), dee.getEvent().getName(), address);
+    } catch (Exception e) {
+      logger.error("Could not create restaurant {} for delivery", dee.getAggregateId(), e);
+    }
   }
 
   public void handleOrderCreatedEvent(DomainEventEnvelope<OrderCreatedEvent> dee) {
