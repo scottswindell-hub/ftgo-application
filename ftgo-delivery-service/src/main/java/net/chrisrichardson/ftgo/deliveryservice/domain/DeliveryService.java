@@ -41,13 +41,17 @@ public class DeliveryService {
 
     // Stupid implementation
 
-    List<Courier> couriers = courierRepository.findAllAvailable();
-    Courier courier = couriers.get(random.nextInt(couriers.size()));
+    Courier courier = chooseAvailableCourier();
     courier.addAction(Action.makePickup(delivery.getId(), delivery.getPickupAddress(), readyBy));
     courier.addAction(Action.makeDropoff(delivery.getId(), delivery.getDeliveryAddress(), readyBy.plusMinutes(30)));
 
     delivery.schedule(readyBy, courier.getId());
 
+  }
+
+  private Courier chooseAvailableCourier() {
+    List<Courier> couriers = courierRepository.findAllAvailable();
+    return couriers.get(random.nextInt(couriers.size()));
   }
 
   public void cancelDelivery(long orderId) {
