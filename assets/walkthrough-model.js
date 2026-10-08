@@ -21,8 +21,11 @@ function phase(checks,ids,blockedBy){
  if(running){const step=currentStep(running);return {state:'running',line:[running.label,step?.label,step?.detail||(!step&&running.detail)].filter(Boolean).join(' · ')};}
  const actionable=rows.find(row=>!terminal.has(row.state));
  if(actionable)return {state:'running',line:[actionable.label,currentStep(actionable)?.label||actionable.detail].filter(Boolean).join(' · ')};
- const failed=rows.find(row=>['failed','error','blocked','stopped'].includes(row.state)&&!intentionalSkip(row,checks));
- if(failed)return {state:'error',line:[failed.label,failed.detail||'Could not complete'].join(' · ')};
+ // A failed boundary-question check alone reads as a warning; any other failure still reads as an error.
+ const boundary=row=>row.id==='intent_diff'&&row.state==='failed';
+ const failures=rows.filter(row=>['failed','error','blocked','stopped'].includes(row.state)&&!intentionalSkip(row,checks));
+ const failed=failures.find(row=>!boundary(row))||failures[0];
+ if(failed)return {state:boundary(failed)?'warn':'error',line:[failed.label,failed.detail||'Could not complete'].join(' · ')};
  const skipped=rows.filter(row=>intentionalSkip(row,checks)).length;
  return {state:'passed',line:skipped?`Completed · ${skipped} checks intentionally skipped for a below-threshold change`:`Completed · ${rows.length} checks`};
 }

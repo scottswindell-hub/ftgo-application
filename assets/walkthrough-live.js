@@ -122,8 +122,8 @@ async function poll(){
  if(!state.status||state.status.state!=='completed')pollTimer=setTimeout(poll,1500);
 }
 
-function iconFor(value){return value.state==='passed'?'<span class="dot ok">✓</span>':value.state==='error'?'<span class="dot bad">!</span>':'<span class="dot run"></span>';}
-function badgeFor(value){return value.state==='passed'?'<span class="verdict pass">PASS</span>':value.state==='error'?'<span class="verdict violation">REVIEW</span>':'';}
+function iconFor(value){return value.state==='passed'?'<span class="dot ok">✓</span>':value.state==='error'?'<span class="dot bad">!</span>':value.state==='warn'?'<span class="dot warn">!</span>':'<span class="dot run"></span>';}
+function badgeFor(value){return value.state==='passed'?'<span class="verdict pass">PASS</span>':value.state==='error'?'<span class="verdict violation">REVIEW</span>':value.state==='warn'?'<span class="verdict warn">REVIEW</span>':'';}
 function phaseRow(name,value){return `<div class="check" data-phase="${esc(name)}">${iconFor(value)}<span><b>CodeIntent / ${esc(name)}</b><small aria-live="polite">${esc(value.line)}</small></span>${badgeFor(value)}</div>`;}
 function verdict(){return state.status?.verdict||'';}
 function githubHead(){

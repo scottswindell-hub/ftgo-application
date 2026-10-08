@@ -87,8 +87,8 @@ function intentChangeMap(entries,options,state){
  if(!groups.size)return '<p class="note">No intent findings match the current filter.</p>';
  const current=groups.has(state.intentArea)?state.intentArea:groups.has('diffs')?'diffs':[...groups.keys()][0];
  const group=groups.get(current);
- const tone=g=>g.entries.some(e=>e.status==='action')?'violation':g.entries.some(e=>e.governanceDecision)?'unmapped':g.entries.some(e=>e.status==='gap')?'incomplete':'observed';
- const labels={violation:'Violation reported',unmapped:'Governance mapping needed',incomplete:'Assessment incomplete',observed:'Observed change'};
+ const tone=g=>g.entries.some(e=>e.status==='action'&&!e.tone)?'violation':g.entries.some(e=>e.tone==='amber')?'boundary':g.entries.some(e=>e.governanceDecision)?'unmapped':g.entries.some(e=>e.status==='gap')?'incomplete':'observed';
+ const labels={violation:'Violation reported',boundary:'Boundary violation reported',unmapped:'Governance mapping needed',incomplete:'Assessment incomplete',observed:'Observed change'};
  const name=value=>value.replace(/^FTGO-/,'').replaceAll('-',' ').toLowerCase().replace(/^./,x=>x.toUpperCase());
  return `<div class="intent-map"><h4>${options.intentImpactHtml?'Other intent changes':'Intent changes'}</h4><p class="note">${options.intentImpactHtml?'Changes that are not governed concepts, and missing evidence.':'Expand a change to inspect its intent DSL and source.'}</p><div class="intent-map-grid" role="group" aria-label="Intent review areas">${[...groups.values()].map(g=>`<button class="intent-map-block ${tone(g)}" data-intent-area="${esc(g.key)}" aria-pressed="${g.key===current}"><strong>${esc(name(g.area))}</strong><small>${g.entries.length}</small></button>`).join('')}</div><section class="intent-map-detail" aria-label="Selected intent area"><h4>${esc(name(group.area))}</h4><p class="note">${esc({diffs:'Compare recorded intent before and after the change, then inspect the DSL and source.',new:'New intent detected in this revision. Any request for governance is handled separately from this analysis.',related:'Related source and behavior changes recorded by the analysis.',gaps:'Missing context or evidence that limits this intent assessment.'}[group.key])}</p>${group.entries.length?`<div class="intent-collapsed-list">${group.entries.map(e=>`<details class="intent-change-item" data-intent-item="${esc(e.id)}"><summary><strong>${esc(e.title)}</strong><span class="pill ${e.status==='action'?'red':e.status==='gap'?'amber':''}">${esc(reviewEntryStatus(e))}</span></summary>${reviewEntryTile(e,options,state)}</details>`).join('')}</div>`:'<p class="note">No items match this area and the current filters.</p>'}</section></div>`;
 }
@@ -106,7 +106,7 @@ function reviewBoard(options) {
 function reviewEntryTile(e,options,state) {
   if(e.story)return intentStoryTile(e,options,state);
   const response=state.responses.get(e.id);
-  const color=e.status==='clear'?'green':e.status==='gap'?'amber':e.status==='not_applicable'?'':'red';
+  const color=e.tone||(e.status==='clear'?'green':e.status==='gap'?'amber':e.status==='not_applicable'?'':'red');
   const concept=e.concept&&!e.title.includes(e.concept)?(window.conceptLabel?conceptLabel(e.concept):e.concept).replaceAll('_',' '):'';
   const context=[concept,e.owner&&e.owner!=='Owner not supplied'?e.owner:''].filter(Boolean);
   const supporting=[...new Set(e.checks||[])].filter(x=>x.toLowerCase()!==e.category.toLowerCase());

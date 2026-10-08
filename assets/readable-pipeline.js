@@ -9,14 +9,18 @@ function groupState(rows){
  if(!rows.length)return 'pending';
  return rows.map(row=>row.state||'pending').sort((a,b)=>(rank[a]??4)-(rank[b]??4))[0];
 }
+// Boundary-question findings from intent_diff are labelled amber; the governance decision still enforces them.
+const boundaryFinding=row=>row.id==='intent_diff'&&row.state==='failed';
+function rowMeta(row){const meta=stateMeta(row.state);return boundaryFinding(row)?[meta[0],meta[1],'amber']:meta;}
 function stateMeta(state){return ({passed:['✓','Passed','green'],failed:['!','Issue found','red'],error:['!','Incomplete','red'],stopped:['!','Stopped','amber'],running:['●','Running','amber'],blocked:['○','Waiting','amber'],pending:['○','Queued',''],queued:['○','Queued',''],skipped:['–','Skipped','']})[state]||['○',state||'Pending',''];}
 function subcheck(row){
- const meta=stateMeta(row.state),detail=typeof customerDetail==='function'?customerDetail(row.detail||'Waiting to run'):row.detail||'Waiting to run';
+ const meta=rowMeta(row),detail=typeof customerDetail==='function'?customerDetail(row.detail||'Waiting to run'):row.detail||'Waiting to run';
  const label=typeof customerCheckLabel==='function'?customerCheckLabel(row):row.label||row.id;
- return `<li class="rr-subcheck ${escapeHtml(row.state||'pending')}"><span class="rr-subcheck-icon">${meta[0]}</span><div><b>${escapeHtml(label)}</b><small>${escapeHtml(detail)}</small>${typeof checkStepsMarkup==='function'?checkStepsMarkup(row):''}</div><span class="rr-subcheck-state ${meta[2]}">${escapeHtml(meta[1])}</span></li>`;
+ return `<li class="rr-subcheck ${escapeHtml(row.state||'pending')}${boundaryFinding(row)?' boundary':''}"><span class="rr-subcheck-icon">${meta[0]}</span><div><b>${escapeHtml(label)}</b><small>${escapeHtml(detail)}</small>${typeof checkStepsMarkup==='function'?checkStepsMarkup(row):''}</div><span class="rr-subcheck-state ${meta[2]}">${escapeHtml(meta[1])}</span></li>`;
 }
 function group(title,description,rows,review){
- const state=groupState(rows),meta=stateMeta(state);
+ const state=groupState(rows),worst=rows.filter(row=>(row.state||'pending')===state);
+ const meta=worst.length&&worst.every(boundaryFinding)?rowMeta(worst[0]):stateMeta(state);
  return `<section class="rr-pipeline-group"><header><span class="rr-pipeline-icon ${meta[2]}">${meta[0]}</span><div><h3>${escapeHtml(title)}</h3><p>${escapeHtml(description)}</p></div><span class="rr-pipeline-state ${meta[2]}">${escapeHtml(meta[1])}</span></header><ol>${rows.map(subcheck).join('')||'<li class="rr-no-checks">No pipeline stages were published.</li>'}</ol>${review&&['failed','error'].includes(state)?'<footer><button type="button" data-view="review">Review intent decisions →</button></footer>':''}</section>`;
 }
 function readablePipelineChecksMarkup(doc){
