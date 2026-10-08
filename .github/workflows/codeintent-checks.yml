@@ -345,13 +345,17 @@ jobs:
               fi
               acceptance=$(jq -r '.acceptance.status // "legacy"' <<<"$document")
               mode=$(jq -r '.acceptance.mode // "shadow"' <<<"$document")
-              if [ "$mode" = "enforce" ] && { [ "$acceptance" = "incomplete" ] || [ "$acceptance" = "review_required" ]; }; then
-                echo "Waiting for required intent assessment or authorized review..."
-                sleep 5
-                continue
-              fi
+              # A completed run cannot gain evidence by keeping a runner alive.
+              # Finish now; after the missing evidence or review is supplied, rerun.
               if [ "$mode" = "enforce" ] && [ "$acceptance" != "ready" ]; then
-                echo "::error::Governance acceptance is $acceptance; review the report."
+                reason=$(jq -r '.acceptance.reason // "Required governance acceptance is not ready"' <<<"$document")
+                printf 'Analysis finished with %s. Governance acceptance is %s.\n%s\n' "$verdict" "$acceptance" "$reason"
+                if [ "$acceptance" = "review_required" ]; then
+                  echo "Complete the authorized review, then rerun this check."
+                else
+                  echo "Resolve the missing governance evidence or authorization, then rerun this check."
+                fi
+                echo "::error::Governance acceptance is not ready. See the reason above and the live report."
                 exit 1
               fi
               [ "$verdict" = "PASS" ] && exit 0
