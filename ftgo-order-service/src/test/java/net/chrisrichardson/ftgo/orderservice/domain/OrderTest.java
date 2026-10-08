@@ -5,6 +5,7 @@ import net.chrisrichardson.ftgo.common.RevisedOrderLineItem;
 import net.chrisrichardson.ftgo.orderservice.OrderDetailsMother;
 import net.chrisrichardson.ftgo.orderservice.RestaurantMother;
 import net.chrisrichardson.ftgo.orderservice.api.events.OrderAuthorized;
+import net.chrisrichardson.ftgo.orderservice.api.events.OrderCancelled;
 import net.chrisrichardson.ftgo.orderservice.api.events.OrderCreatedEvent;
 import net.chrisrichardson.ftgo.orderservice.api.events.OrderDomainEvent;
 import net.chrisrichardson.ftgo.orderservice.api.events.OrderState;
@@ -50,6 +51,24 @@ public class OrderTest {
     List<OrderDomainEvent> events = order.noteApproved();
     assertEquals(singletonList(new OrderAuthorized()), events);
     assertEquals(OrderState.APPROVED, order.getState());
+  }
+
+  @Test
+  public void shouldCancelWhileApprovalIsPending() {
+    List<OrderDomainEvent> events = order.cancel();
+
+    assertEquals(singletonList(new OrderCancelled()), events);
+    assertEquals(OrderState.CANCELLED, order.getState());
+  }
+
+  @Test
+  public void shouldCancelImmediatelyAfterApproval() {
+    order.noteApproved();
+
+    List<OrderDomainEvent> events = order.cancel();
+
+    assertEquals(singletonList(new OrderCancelled()), events);
+    assertEquals(OrderState.CANCELLED, order.getState());
   }
 
   @Test

@@ -86,9 +86,10 @@ public class Order {
 
   public List<OrderDomainEvent> cancel() {
     switch (state) {
+      case APPROVAL_PENDING:
       case APPROVED:
-        this.state = OrderState.CANCEL_PENDING;
-        return emptyList();
+        this.state = OrderState.CANCELLED;
+        return singletonList(new OrderCancelled());
       default:
         throw new UnsupportedStateTransitionException(state);
     }
