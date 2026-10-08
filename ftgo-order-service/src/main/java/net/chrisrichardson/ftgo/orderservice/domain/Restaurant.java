@@ -2,10 +2,14 @@ package net.chrisrichardson.ftgo.orderservice.domain;
 
 import net.chrisrichardson.ftgo.kitchenservice.api.TicketDetails;
 import net.chrisrichardson.ftgo.orderservice.api.events.OrderDomainEvent;
+import net.chrisrichardson.ftgo.orderservice.api.events.OrderLineItem;
+import net.chrisrichardson.ftgo.orderservice.web.MenuItemIdAndQuantity;
 
 import javax.persistence.*;
 import java.util.List;
 import java.util.Optional;
+
+import static java.util.stream.Collectors.toList;
 
 @Entity
 @Table(name = "order_service_restaurants")
@@ -44,6 +48,13 @@ public class Restaurant {
 
   public Optional<MenuItem> findMenuItem(String menuItemId) {
     return menuItems.stream().filter(mi -> mi.getId().equals(menuItemId)).findFirst();
+  }
+
+  public List<OrderLineItem> makeOrderLineItems(List<MenuItemIdAndQuantity> lineItems) {
+    return lineItems.stream().map(li -> {
+      MenuItem om = findMenuItem(li.getMenuItemId()).orElseThrow(() -> new InvalidMenuItemIdException(li.getMenuItemId()));
+      return new OrderLineItem(li.getMenuItemId(), om.getName(), om.getPrice(), li.getQuantity());
+    }).collect(toList());
   }
 
   public List<MenuItem> getMenuItems() {

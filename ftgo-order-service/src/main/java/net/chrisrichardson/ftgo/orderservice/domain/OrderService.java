@@ -23,8 +23,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
 
-import static java.util.stream.Collectors.toList;
-
 public class OrderService {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -71,7 +69,7 @@ public class OrderService {
     Restaurant restaurant = restaurantRepository.findById(restaurantId)
             .orElseThrow(() -> new RestaurantNotFoundException(restaurantId));
 
-    List<OrderLineItem> orderLineItems = makeOrderLineItems(lineItems, restaurant);
+    List<OrderLineItem> orderLineItems = restaurant.makeOrderLineItems(lineItems);
 
     ResultWithDomainEvents<Order, OrderDomainEvent> orderAndEvents =
             Order.createOrder(consumerId, restaurant, deliveryInformation, orderLineItems);
@@ -89,14 +87,6 @@ public class OrderService {
     meterRegistry.ifPresent(mr -> mr.counter("placed_orders").increment());
 
     return order;
-  }
-
-
-  private List<OrderLineItem> makeOrderLineItems(List<MenuItemIdAndQuantity> lineItems, Restaurant restaurant) {
-    return lineItems.stream().map(li -> {
-      MenuItem om = restaurant.findMenuItem(li.getMenuItemId()).orElseThrow(() -> new InvalidMenuItemIdException(li.getMenuItemId()));
-      return new OrderLineItem(li.getMenuItemId(), om.getName(), om.getPrice(), li.getQuantity());
-    }).collect(toList());
   }
 
 
