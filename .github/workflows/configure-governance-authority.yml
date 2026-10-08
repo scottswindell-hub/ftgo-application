@@ -1,0 +1,91 @@
+name: Configure governance authority
+
+# Submits the governance ledger's `configure_authority` command for this
+# repository: the accepted role map, the trusted dispute relays, and a
+# re-registration of the ledger engine deployed now (its file hashes).
+#
+# Run it after deploying a ledger engine change, or to change who holds which
+# ledger role. The role map below is the whole accepted configuration: review
+# changes to it like any other code. The command revokes outstanding grants and
+# baseline delegations; the job prints the revoked revisions.
+#
+# Uses BASELINE_API_KEY from the `baseline-maintenance` environment (master
+# only). The ledger accepts configure_authority only from its
+# `api-key:baseline-admin` key; any other key is refused with HTTP 403 and
+# nothing changes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Why the authority or engine changes (recorded in the ledger)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: governance-authority
+  cancel-in-progress: false
+
+jobs:
+  configure:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    environment: baseline-maintenance
+    timeout-minutes: 5
+    env:
+      GOVERNANCE_LEDGER_API_URL: https://pnbiguovftpmrkck4mz3ey6fau0zawob.lambda-url.us-east-1.on.aws
+      GOVERNANCE_ADMIN_API_KEY: ${{ secrets.BASELINE_API_KEY }}
+      REASON: ${{ inputs.reason }}
+      IDEMPOTENCY_KEY: github-${{ github.run_id }}-${{ github.run_attempt }}-configure-authority
+    steps:
+      - name: Submit configure_authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GOVERNANCE_ADMIN_API_KEY" || { echo "::error::BASELINE_API_KEY is not set in the baseline-maintenance environment"; exit 1; }
+          test -n "$REASON"
+          # Writers only, no governance authority: the checks backend records
+          # check runs; the decisions backend (behind DRIFT_GATE_API_KEY) records
+          # /reject and /false-positive after verifying the commenter's write
+          # access, and reads the ledger for the status page.
+          jq -n \
+            --arg application "${{ github.repository }}" \
+            --arg reason "$REASON" \
+            --arg idempotency_key "$IDEMPOTENCY_KEY" \
+            '{application: $application, command: "configure_authority", idempotency_key: $idempotency_key,
+              arguments: {
+                reason: $reason,
+                permissions: {
+                  admins: ["api-key:baseline-admin", "api-key:rule-approver"],
+                  authors: ["api-key:rule-author"],
+                  validators: ["api-key:rule-validator"],
+                  approvers: ["api-key:rule-approver"],
+                  delegates: [],
+                  writers: ["governance-worker", "arn:aws:sts::241765568243:assumed-role/drift-gate-checks-lambda-role",
+                            "arn:aws:sts::241765568243:assumed-role/drift-gate-dummy-lambda-role"],
+                  readers: ["api-key:baseline-admin", "api-key:rule-author", "api-key:rule-validator",
+                            "api-key:rule-approver",
+                            "arn:aws:sts::241765568243:assumed-role/drift-gate-dummy-lambda-role"]
+                },
+                dispute_relays: ["arn:aws:sts::241765568243:assumed-role/drift-gate-dummy-lambda-role"]
+              }}' > request.json
+          status=$(curl --silent --show-error -o response.json -w '%{http_code}' \
+            -H 'content-type: application/json' \
+            -H "x-api-key: $GOVERNANCE_ADMIN_API_KEY" \
+            --data-binary @request.json \
+            "$GOVERNANCE_LEDGER_API_URL/v1/ledger/commands")
+          jq . response.json || cat response.json
+          if [ "$status" != 200 ]; then
+            echo "::error::configure_authority returned HTTP $status"
+            exit 1
+          fi
+          {
+            echo "### Governance authority configured"
+            echo
+            echo "- System revision: \`$(jq -r '.system_revision' response.json)\`"
+            echo "- Revoked grants: $(jq -r '.revoked_grant_revisions | length' response.json)"
+            echo "- Reason: $REASON"
+          } >> "$GITHUB_STEP_SUMMARY"
