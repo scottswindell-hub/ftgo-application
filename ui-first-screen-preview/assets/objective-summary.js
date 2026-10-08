@@ -55,6 +55,7 @@ window.intentSemanticLead=function(packet,summary){
  if(unjudged.length){const names=[...new Set(unjudged.map(row=>conceptLabel(row.boundary_id)))];parts.push(`${unjudged.length} additional recorded semantic change${unjudged.length===1?'':'s'} affect ${names.join(' and ')}, but no boundary judgment connects them to an accepted intent decision yet.`);}
  return parts.join(' ');
 };
+function behaviorReviewQuery(){const params=new URLSearchParams(location.search);params.set('view','review');return params.toString();}
 function objectiveSummaryMarkup(summary, packet) {
  if(!summary)return '<p>No cached objective summary is attached to this run. Review the recorded findings and governed objectives.</p>';
  const feedback=summary.presentation, violations=summary.violations||[],narrative=summary.behavior_narrative;
@@ -69,7 +70,7 @@ function objectiveSummaryMarkup(summary, packet) {
  return `<section class="objective-summary card"><div class="body"><h2 class="ask-intent-heading"><svg class="ask-intent-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M7 5h18a3 3 0 0 1 3 3v13a3 3 0 0 1-3 3H14l-7 5v-5a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m12 11-4 4 4 4m8-8 4 4-4 4m-3-8-2 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Ask Code Intent</h2><span class="note">Graph-grounded semantic explanation · Suggested corrections</span>
  ${governance.markup}
  ${lead?`<p class="ask-intent-lead">${esc(lead)}</p>`:'<p>Concise explanation unavailable. Recorded evidence remains available below.</p>'}
- ${narrative?.status==='recorded'?`<a class="behavior-explore-link" href="behavior.html?${esc(new URLSearchParams(location.search).toString())}">Explore behavior changes <span aria-hidden="true">↗</span></a>`:''}
+ ${narrative?.status==='recorded'?`<a class="behavior-explore-link" href="behavior.html?${esc(behaviorReviewQuery())}">Explore behavior changes <span aria-hidden="true">↗</span></a>`:''}
  ${violations.length?`<ul class="summary-findings">${violations.map(f=>{const item=feedback?.items.find(i=>i.finding_id===f.id);return `<li><button type="button" class="summary-finding-button" data-summary-finding="${esc(summaryFindingTarget(f))}"><span class="summary-finding-labels">${reviewFindingBadge(f,violations)}</span><span class="summary-finding-action" title="${esc(item?.correction||'Inspect the governed requirement before choosing a correction.')}">${esc(item?.correction||'Inspect the governed requirement before choosing a correction.')}</span><span class="note">${esc(window.semanticGroundingLabel?semanticGroundingLabel(item):'Semantic interpretation remains unresolved.')}</span></button></li>`;}).join('')}</ul>`:(governance.hasViolations?'':'<p>No additional findings in this cached review. Governance acceptance is shown separately.</p>')}
 
  ${summary.omitted_objectives?.length?'<p>Some objectives were omitted by the context budget.</p>':''}</div></section>`;

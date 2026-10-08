@@ -4,8 +4,6 @@
 const qs=new URLSearchParams(location.search);
 const screen=document.querySelector('#screen');
 const runContext=document.querySelector('#run-context');
-const urlLabel=document.querySelector('#url');
-const pullRequest=document.querySelector('#pull-request');
 const repo=qs.get('repo')||'';
 const sha=qs.get('sha')||'';
 const pr=qs.get('pr')||'';
@@ -13,7 +11,8 @@ const runId=qs.get('run_id')||'';
 const api=(qs.get('api')||'').replace(/\/+$/,'');
 let dataPath=qs.get('data')||'';
 const {ANALYSIS,REVIEW}=walkthroughPipeline;
-const state={status:null,packet:null,packetDigest:null,summary:null,model:null,view:'review',selected:null,explore:false,tab:'graph',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
+const initialView=qs.get('view')==='review'?'review':'checks';
+const state={status:null,packet:null,packetDigest:null,summary:null,model:null,view:initialView,selected:initialView==='review'?(qs.get('item')||null):null,explore:false,tab:'graph',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
 let pollTimer=null;
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -22,6 +21,19 @@ const label=value=>String(value||'').replace(/^FTGO-/,'').replaceAll('_',' ').re
 const checks=()=>state.status?.checks||state.status?.stages||[];
 const items=()=>state.model?[...state.model.changes,...state.model.constraints]:[];
 const decision=id=>state.drafts.get(id)||state.submitted.get(id)||'';
+
+function routeUrl(view,selected=null){
+ const url=new URL(location.href);
+ if(view==='review')url.searchParams.set('view','review');else url.searchParams.delete('view');
+ if(view==='review'&&selected)url.searchParams.set('item',selected);else url.searchParams.delete('item');
+ return url.href;
+}
+function navigate(view,selected=null){
+ state.view=view;state.selected=view==='review'?selected:null;
+ history.pushState(null,'',routeUrl(state.view,state.selected));
+ render();
+}
+
 function statusUrl(){
  const base=/\/status$/.test(api)?api:api+'/status';
  return base+'?'+new URLSearchParams({sha,repo,...(runId?{run_id:runId}:{})});
@@ -122,15 +134,14 @@ async function poll(){
  if(!state.status||state.status.state!=='completed')pollTimer=setTimeout(poll,1500);
 }
 
-function iconFor(value){return value.state==='passed'?'<span class="dot ok">✓</span>':value.state==='error'?'<span class="dot bad">!</span>':'<span class="dot run"></span>';}
-function badgeFor(value){return value.state==='passed'?'<span class="verdict pass">PASS</span>':value.state==='error'?'<span class="verdict violation">REVIEW</span>':'';}
+function iconFor(value){return value.state==='passed'?'<span class="dot ok">✓</span>':value.state==='error'?'<span class="dot bad">!</span>':value.state==='warn'?'<span class="dot warn">!</span>':'<span class="dot run"></span>';}
+function badgeFor(value){return value.state==='passed'?'<span class="verdict pass">PASS</span>':value.state==='error'?'<span class="verdict violation">REVIEW</span>':value.state==='warn'?'<span class="verdict warn">REVIEW</span>':'';}
 function phaseRow(name,value){return `<div class="check" data-phase="${esc(name)}">${iconFor(value)}<span><b>CodeIntent / ${esc(name)}</b><small aria-live="polite">${esc(value.line)}</small></span>${badgeFor(value)}</div>`;}
 function verdict(){return state.status?.verdict||'';}
 function githubHead(){
  const branch=sha.slice(0,12)||'candidate';
  return `<div class="gh-head"><h1>Review FTGO changes <span>#${esc(pr||'—')}</span></h1>
-  <div class="gh-meta"><span class="pill">Open</span><span><b>${esc(repo.split('/')[0]||'repository owner')}</b> wants to merge into <code>main</code> from <code>${esc(branch)}</code></span></div>
-  <div class="tabs"><span>Conversation</span><span>Commits</span><span class="on">Checks</span><span>Files changed</span></div></div>`;
+  <div class="gh-meta"><span class="pill">Open</span><span><b>${esc(repo.split('/')[0]||'repository owner')}</b> wants to merge into <code>main</code> from <code>${esc(branch)}</code></span></div></div>`;
 }
 function checksScreen(){
  const analysis=walkthroughPipeline.phase(checks(),ANALYSIS,'Waiting for source analysis');
@@ -148,7 +159,7 @@ function checksScreen(){
   after=`<div class="violation-box"><h3>${count?`${count} review item${count===1?'':'s'}`:'Review evidence is incomplete'}</h3><p style="margin:0">${esc(count?'Open CodeIntent to review each behavior, rule finding, and test finding.':state.status?.reason||'Open CodeIntent to review the recorded evidence.')}</p><p style="margin:0"><button type="button" class="btn blue" data-act="open">Review in CodeIntent →</button></p></div>`;
  }
  if(completed&&verdict()==='PASS'&&state.status?.acceptance?.mode==='enforce'&&state.status.acceptance.status!=='ready')top=top.replace('All checks have passed','Analysis passed').replace('2 successful CodeIntent checks','Governance acceptance is reported separately below.');
- return githubHead()+`<div class="merge">${top}${phaseRow('analysis',analysis)}${phaseRow('intent review',intent)}</div>${after}${acceptanceNotice()}${provenance()}`;
+ return githubHead()+`<div class="merge">${top}${phaseRow('analysis',analysis)}${phaseRow('intent review',intent)}</div>${after}${acceptanceNotice()}`;
 }
 
 function intentLines(value){
@@ -164,11 +175,7 @@ function intentLines(value){
  return lines;
 }
 function diffLines(before,after){return [...before.map(text=>['-',text]),...after.map(text=>['+',text])];}
-function sourceLines(item){
- const before=String(item.comparison?.before?.text||'Source comparison was not supplied.').split('\n');
- const after=String(item.comparison?.after?.text||'Source comparison was not supplied.').split('\n');
- return diffLines(before,after);
-}
+function sourceLines(item){return codeIntentSourceDiffLines(item.comparison);}
 function lines(rows){return rows.map(([mark,text])=>`<span class="${mark==='+'?'a':mark==='-'?'d':''}">${esc((mark||' ')+' '+text)}</span>`).join('');}
 function typeIcon(value){
  const type=['Bug','Architecture','Test','Standard','Business','Behavior'].includes(value)?value:'Behavior';
@@ -186,9 +193,8 @@ function row(item,kind){
  const answer=decision(item.id),submitted=state.submitted.has(item.id);
  const status=item.status==='unknown'?'Cannot be established':answer==='yes'?(submitted?'Expected · handed off':'Yes, I meant this'):answer==='no'?(submitted?'Investigating · handed off':'No, investigate'):'';
  const type=String(item.reviewType||'Behavior');
- return `<button type="button" class="row ${answer||''} ${submitted?'submitted':''}" data-row="${esc(item.id)}"><span class="t"><b>${esc(item.title||item.summary)}</b>${item.summary?`<span class="row-summary">${esc(item.summary)}</span>`:''}<small class="meta">${esc(item.concept||item.file||item.groundingLabel||'Recorded review evidence')}${item.objective?' · accepted constraint':''}</small></span><span class="row-side"><span class="type-name">${esc(type)}</span>${typeIcon(type)}${status?`<span class="st">${esc(status)}</span>`:''}</span></button>`;
+ return `<button type="button" class="row ${answer||''} ${submitted?'submitted':''}" data-row="${esc(item.id)}"><span class="t"><b>${esc(item.title||item.summary)}</b>${item.summary?`<span class="row-summary">${esc(item.summary)}</span>`:''}<small class="meta">${esc(item.concept||item.file||item.groundingLabel||'Recorded review evidence')}${item.objective?' · accepted constraint':''}</small></span><span class="row-side">${typeIcon(type)}${status?`<span class="st">${esc(status)}</span>`:''}</span></button>`;
 }
-function coverage(){return reviewExplorer.coverage(state.packet,state.summary,checks());}
 function saveBar(){return `<div class="actions rx-save"><span>${state.drafts.size} staged assessment${state.drafts.size===1?'':'s'} · governance changes are handed to protected GitHub Actions.</span><button type="button" class="btn" data-act="undo" ${state.drafts.size?'':'disabled'}>Discard staged</button><button type="button" class="btn blue" data-act="submit" ${state.drafts.size?'':'disabled'}>Continue to governance actions</button></div>`;}
 function summaryNotice(){
  const summary=state.summary?.intent_semantics;
@@ -202,14 +208,20 @@ function listScreen(){
   return `<div class="ci">${ciTop()}<div class="loading">Waiting for recorded review evidence…</div></div>`;
  }
  const all=items();
+ const reviewable=all.filter(item=>item.status!=='unknown');
+ const complete=(state.model.semanticStatus==='no_changes'||state.model.noGovernedChanges)&&verdict()==='PASS';
+ const empty=complete?'No change to evaluated governed behavior was established.':'Review evidence is incomplete. An empty list does not establish unchanged behavior.';
+ if(!reviewable.length)return `<div class="ci">${ciTop()}${complete?'<div class="happy"><span class="face" aria-hidden="true">✓</span><h3>No governed changes require review</h3><p>Analysis passed. No review response is needed for this change.</p></div>':`<p class="empty-list">${empty}</p>`}${acceptanceNotice()}${summaryNotice()}</div>`;
  const section=(kind,heading)=>{
-  const group=all.filter(item=>item.status!=='unknown'&&item.kind===kind);
-  return group.length?`<section class="review-section" aria-labelledby="${kind}-changes"><h1 id="${kind}-changes">${heading}</h1><ul class="review-list" tabindex="0" aria-label="${heading}">${group.map(item=>`<li><button class="review-item" type="button">${esc(item.summary||item.title)}</button></li>`).join('')}</ul></section>`:'';
+  const group=reviewable.filter(item=>item.kind===kind);
+  if(!group.length)return '';
+  const id=kind+'-findings';
+  return `<section class="findings-section" aria-labelledby="${id}"><h1 id="${id}">${heading}</h1><ul class="findings-list" aria-label="${heading}">${group.map(item=>`<li><button class="findings-item" type="button" data-row="${esc(item.id)}">${esc(item.summary||item.title)}</button></li>`).join('')}</ul></section>`;
  };
  const sections=[section('change','Did you intend these behavioral changes?'),section('constraint','Did you mean to change these constraints?')].filter(Boolean);
- return `<div class="ci simple-review section-count-${sections.length}">${sections.join('')}<div class="actions" aria-label="Review actions"><button type="button" disabled>Undo All</button><button type="button" disabled>Submit</button></div></div>`;
+ return `<div class="ci findings-review section-count-${sections.length}">${ciTop()}<div class="findings-sections">${sections.join('')}</div>${acceptanceNotice()}${summaryNotice()}</div>`;
 }
-function ciTop(){return '';}
+function ciTop(item=null){return `<div class="ci-top"><b>CodeIntent</b><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="${esc(routeUrl('checks'))}" data-act="checks">Pull request #${esc(pr||'—')}</a><span aria-hidden="true">/</span>${item?`<a href="${esc(routeUrl('review'))}" data-act="list">Review changes</a><span aria-hidden="true">/</span><span aria-current="page">${esc(item.title||'Review item')}</span>`:'<span aria-current="page">Review changes</span>'}</nav><span class="sp"></span><a class="btn" href="${esc(routeUrl('checks'))}" data-act="checks">Pipeline checks</a></div>`;}
 function detailScreen(item){
  const answer=decision(item.id),intent=diffLines(intentLines(item.intentBefore),intentLines(item.intentAfter));
  const connections=item.connections?.length?`<div class="holon"><b>Connected governed outcomes</b><ul>${item.connections.map(connection=>`<li><b>${esc(connection.title)}</b> · ${esc(connection.detail)}</li>`).join('')}</ul></div>`:'';
@@ -217,8 +229,8 @@ function detailScreen(item){
  const interpretation=`<div class="summary"><small>${esc(item.groundingLabel||'RECORDED PIPELINE EVIDENCE')}</small><p>${esc(item.detailSummary||item.summary)}</p></div>`;
  const question='Did you mean this?';
  const yes='Yes, I meant this',no='No, investigate';
- return `<div class="ci">${ciTop()}<button type="button" class="back" data-act="list">← All changes</button><article class="tile">
-  <div class="tile-head"><h3>${esc(item.title)}</h3><span class="tile-type">${esc(item.reviewType||'Behavior')}${typeIcon(item.reviewType||'Behavior')}</span></div>
+ return `<div class="ci">${ciTop(item)}<article class="tile">
+  <div class="tile-head"><h3>${esc(item.title)}</h3>${typeIcon(item.reviewType||'Behavior')}</div>
   <div class="tile-sub"><code>${esc(item.method||short(item.file))}</code></div>
   ${item.objective?`<div class="rule"><small>ACCEPTED CONSTRAINT</small><p>${esc(item.objective)}</p></div>`:item.concept?`<div class="rule boundary-context"><small>RECORDED REVIEW CONTEXT</small><p>${esc(item.concept)}</p></div>`:''}
   <div class="ba"><div><small>BEFORE</small>${esc(item.before)}</div><div class="after"><small>WITH THIS PR</small>${esc(item.after)}</div></div>
@@ -236,47 +248,14 @@ function acceptanceNotice(){
  if(a?.mode!=='enforce'||a.status==='ready')return '';
  return `<div class="notice"><b>Governance acceptance: ${esc(a.status||'unavailable')}</b><p>${esc(a.reason||'Acceptance is not ready.')}</p><p>This is separate from the source-analysis result.</p></div>`;
 }
-function provenance(){return `<p class="provenance">Pinned review <code>${esc((state.packet?.baseline_commit||'baseline pending').slice(0,12))}</code> → <code>${esc((sha||'candidate pending').slice(0,12))}</code>${state.status?.updated_at?` · updated ${esc(state.status.updated_at)}`:''}</p>`;}
 function render(){
  runContext.textContent=repo+(pr?' · Pull request #'+pr:'');
- if(pullRequest){pullRequest.textContent=`← Pull request #${pr||'—'}`;pullRequest.href=repo&&pr?`https://github.com/${repo.split('/').map(encodeURIComponent).join('/')}/pull/${encodeURIComponent(pr)}`:'#';}
- if(urlLabel)urlLabel.textContent=state.view==='checks'?`github.com/${repo||'repository'}/pull/${pr||'—'}/checks`:`codeintent.app/review/${repo||'repository'}/${pr||'—'}${state.selected?'/'+state.selected:''}`;
  document.title=`CodeIntent · ${repo||'review'}${pr?' #'+pr:''}`;
  if(state.error&&!state.status&&!state.packet){screen.innerHTML=`<div class="error-box"><b>CodeIntent could not load this run.</b><p>${esc(state.error)}</p><p><a href="/">Return to local PR runs</a></p></div>`;return;}
- if(state.selected){const item=items().find(value=>value.id===state.selected);screen.innerHTML=item?detailScreen(item):listScreen();}
+ if(state.view==='checks')screen.innerHTML=checksScreen();
+ else if(state.selected){const item=items().find(value=>value.id===state.selected);screen.innerHTML=item?detailScreen(item):listScreen();}
  else screen.innerHTML=listScreen();
  legacyMethodExplorer.hydrate();
- requestAnimationFrame(fitReviewLayout);
-}
-
-function fitReviewLayout(){
- const container=screen.querySelector('.simple-review');if(!container)return;
- container.classList.remove('is-scrollable');
- const viewport=container.parentElement;
- container.classList.toggle('is-scrollable',container.scrollHeight>viewport.clientHeight+1);
- updateScrollAffordances(container);
-}
-function updateScrollAffordances(container){
- container.querySelectorAll('.review-list').forEach(list=>{
-  const section=list.closest('.review-section');
-  const refresh=()=>{
-   const overflows=list.scrollHeight>list.clientHeight+1;
-   section.classList.toggle('has-scroll-overflow',overflows);
-   section.classList.toggle('has-more-below',overflows&&list.scrollTop+list.clientHeight<list.scrollHeight-1);
-   if(overflows){
-    const railHeight=list.clientHeight;
-    const thumbHeight=Math.max(26,Math.round(railHeight*(railHeight/list.scrollHeight)));
-    const travel=Math.max(0,railHeight-thumbHeight);
-    const scrollable=Math.max(1,list.scrollHeight-list.clientHeight);
-    section.style.setProperty('--scroll-rail-top',list.offsetTop+'px');
-    section.style.setProperty('--scroll-rail-height',railHeight+'px');
-    section.style.setProperty('--scroll-thumb-height',thumbHeight+'px');
-    section.style.setProperty('--scroll-thumb-top',Math.round(travel*(list.scrollTop/scrollable))+'px');
-   }else section.removeAttribute('style');
-  };
-  list.onscroll=refresh;
-  refresh();
- });
 }
 
 document.addEventListener('click',event=>{
@@ -288,9 +267,10 @@ document.addEventListener('click',event=>{
  if(action==='explore'){state.explore=!state.explore;render();return;}
  if(action==='graph-full'){state.full=!state.full;state.node=null;render();return;}
 
- if(action==='open'){state.view='review';state.selected=null;render();}
- else if(action==='checks'||action==='list'){event.preventDefault();state.view='review';state.selected=null;render();}
- else if(target.dataset.row){state.view='review';state.selected=target.dataset.row;state.explore=false;state.evidenceFile='';state.node=null;state.full=false;render();scrollTo(0,0);}
+ if(action==='open'){navigate('review');}
+ else if(action==='checks'){event.preventDefault();navigate('checks');}
+ else if(action==='list'){event.preventDefault();navigate('review');}
+ else if(target.dataset.row){state.explore=false;state.evidenceFile='';state.node=null;state.full=false;navigate('review',target.dataset.row);scrollTo(0,0);}
  else if(action==='yes'||action==='no'){const item=items().find(i=>i.id===state.selected);if(item&&item.status!=='unknown'&&item.status!=='watch')state.drafts.set(state.selected,action);render();}
  else if(action==='undo'){state.drafts.clear();render();}
  else if(action==='governance')window.codeIntentGovernanceActions.open({repo,pr,sha,responses:[]});
@@ -313,11 +293,14 @@ document.addEventListener('keydown',event=>{
  if(state.selected&&['y','n'].includes(event.key)){document.querySelector(`[data-act="${event.key==='y'?'yes':'no'}"]`)?.click();event.preventDefault();}
 });
 legacyMethodExplorer.setRender(render);
-document.querySelector('#governance-actions')?.addEventListener('click',()=>window.codeIntentGovernanceActions.open({repo,pr,sha,responses:[]}));
+addEventListener('popstate',()=>{
+ const route=new URLSearchParams(location.search),view=route.get('view')==='review'?'review':'checks';
+ state.view=view;state.selected=view==='review'?(route.get('item')||null):null;render();
+});
+document.querySelector('#governance-actions').addEventListener('click',()=>window.codeIntentGovernanceActions.open({repo,pr,sha,responses:[]}));
 const theme=document.querySelector('#theme');
-function setTheme(value){document.documentElement.dataset.theme=value;theme.setAttribute('aria-label',value==='dark'?'Switch to light theme':'Switch to dark theme');theme.title=theme.getAttribute('aria-label');}
+function setTheme(value){document.documentElement.dataset.theme=value;theme.textContent=value==='dark'?'Light':'Dark';}
 setTheme(localStorage.getItem('codeintent-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'));
 theme.addEventListener('click',()=>{const next=document.documentElement.dataset.theme==='dark'?'light':'dark';localStorage.setItem('codeintent-theme',next);setTheme(next);});
-addEventListener('resize',fitReviewLayout);
 render();poll();
 })();

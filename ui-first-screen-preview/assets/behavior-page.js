@@ -5,7 +5,9 @@
  const restoreTheme=()=>{let saved=null;try{saved=localStorage.getItem(themeKey);}catch(e){}applyTheme(['light','dark'].includes(saved)?saved:matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');};
  restoreTheme();addEventListener('pageshow',restoreTheme);addEventListener('storage',event=>{if(event.key===themeKey)restoreTheme();});
  themeButton.onclick=()=>{const t=root.dataset.theme==='dark'?'light':'dark';applyTheme(t);try{localStorage.setItem(themeKey,t);}catch(e){}};
- const back=new URL('./',location.href);back.search=params;back.searchParams.set('view','checks');document.querySelector('#back').href=back;
+ const pullRequest=new URL('./',location.href);pullRequest.search=params;pullRequest.searchParams.delete('view');pullRequest.searchParams.delete('item');
+ const review=new URL('./',location.href);review.search=params;review.searchParams.set('view','review');
+ const pr=params.get('pr'),item=params.get('item');document.querySelector('#pr-back').href=pullRequest;document.querySelector('#pr-back').textContent='Pull request'+(pr?' #'+pr:'');document.querySelector('#review-back').href=review;document.querySelector('#review-back').textContent=item?'Review item':'Review changes';
  async function bytes(url,limit=262144){if(url.origin!==location.origin)throw Error('Use same-origin evidence.');const response=await fetch(url,{cache:'no-store'});if(!response.ok)throw Error('Recorded evidence is not available.');const raw=await response.arrayBuffer();if(raw.byteLength>limit)throw Error('Evidence exceeds the view budget.');return raw;}
  const parse=raw=>JSON.parse(new TextDecoder().decode(raw));
  try{
