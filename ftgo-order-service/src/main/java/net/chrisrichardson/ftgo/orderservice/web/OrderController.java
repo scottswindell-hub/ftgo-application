@@ -51,6 +51,13 @@ public class OrderController {
     return new GetOrderResponse(order.getId(), order.getState(), order.getOrderTotal());
   }
 
+  @RequestMapping(path = "/{orderId}/total", method = RequestMethod.GET)
+  public ResponseEntity<String> getOrderTotal(@PathVariable long orderId) {
+    return orderRepository.findById(orderId)
+            .map(o -> new ResponseEntity<>(o.getOrderTotal().asString(), HttpStatus.OK))
+            .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
+  }
+
   @RequestMapping(path = "/{orderId}/cancel", method = RequestMethod.POST)
   public ResponseEntity<GetOrderResponse> cancel(@PathVariable long orderId) {
     try {
