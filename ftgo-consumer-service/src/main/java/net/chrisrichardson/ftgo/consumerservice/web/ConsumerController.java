@@ -19,6 +19,9 @@ public class ConsumerController {
 
   @RequestMapping(method= RequestMethod.POST)
   public CreateConsumerResponse create(@RequestBody CreateConsumerRequest request) {
+    if (request.getName() == null) {
+      throw new IllegalArgumentException("A consumer name is required");
+    }
     ResultWithEvents<Consumer> result = consumerService.create(request.getName());
     return new CreateConsumerResponse(result.result.getId());
   }
