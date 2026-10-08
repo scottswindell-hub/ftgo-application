@@ -79,6 +79,7 @@ public class OrderService {
     Order order = orderAndEvents.result;
     orderRepository.save(order);
 
+    // Publish OrderCreatedEvent before the saga is started
     orderAggregateEventPublisher.publish(order, orderAndEvents.events);
 
     OrderDetails orderDetails = new OrderDetails(consumerId, restaurantId, orderLineItems, order.getOrderTotal());
@@ -86,6 +87,7 @@ public class OrderService {
     CreateOrderSagaState data = new CreateOrderSagaState(order.getId(), orderDetails);
     sagaInstanceFactory.create(createOrderSaga, data);
 
+    // Metrics are optional: no MeterRegistry bean is present in some deployments
     meterRegistry.ifPresent(mr -> mr.counter("placed_orders").increment());
 
     return order;

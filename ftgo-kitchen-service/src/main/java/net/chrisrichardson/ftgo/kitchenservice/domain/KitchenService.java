@@ -114,6 +114,4 @@ public class KitchenService {
     domainEventPublisher.publish(ticket, events);
   }
 
-
-  // ...
 }
