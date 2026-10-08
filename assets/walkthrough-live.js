@@ -11,7 +11,7 @@ const runId=qs.get('run_id')||'';
 const api=(qs.get('api')||'').replace(/\/+$/,'');
 let dataPath=qs.get('data')||'';
 const {ANALYSIS,REVIEW}=walkthroughPipeline;
-const initialView=qs.get('view')==='review'?'review':'checks';
+const initialView=qs.get('view')==='checks'?'checks':'review';
 const state={status:null,packet:null,packetDigest:null,summary:null,model:null,view:initialView,selected:initialView==='review'?(qs.get('item')||null):null,explore:false,tab:'graph',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
 let pollTimer=null;
 
@@ -24,7 +24,7 @@ const decision=id=>state.drafts.get(id)||state.submitted.get(id)||'';
 
 function routeUrl(view,selected=null){
  const url=new URL(location.href);
- if(view==='review')url.searchParams.set('view','review');else url.searchParams.delete('view');
+ if(view==='checks')url.searchParams.set('view','checks');else url.searchParams.delete('view');
  if(view==='review'&&selected)url.searchParams.set('item',selected);else url.searchParams.delete('item');
  return url.href;
 }
@@ -293,7 +293,7 @@ document.addEventListener('keydown',event=>{
 });
 legacyMethodExplorer.setRender(render);
 addEventListener('popstate',()=>{
- const route=new URLSearchParams(location.search),view=route.get('view')==='review'?'review':'checks';
+ const route=new URLSearchParams(location.search),view=route.get('view')==='checks'?'checks':'review';
  state.view=view;state.selected=view==='review'?(route.get('item')||null):null;render();
 });
 const theme=document.querySelector('#theme');
