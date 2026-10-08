@@ -1,0 +1,6 @@
+apply plugin: FtgoServicePlugin
+
+dependencies {
+    compile project(":ftgo-common")
+    compile "org.springframework.boot:spring-boot-starter-web"
+}
