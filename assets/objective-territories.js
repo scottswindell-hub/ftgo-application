@@ -184,15 +184,19 @@ function governedMethodSourceMarkup(packet,method,direct){
  const anchors=concepts.filter(c=>c.changed?.file===method.file&&owner.endsWith(c.changed?.method||'\0')&&Number.isInteger(c.changed.line)).map(c=>({line:c.changed.line,deleted:Boolean(c.changed.deleted)}));
  return `<section class="governed-method-source"><h4>Source changes</h4><p class="note">− removed · + added · line numbers: baseline / PR</p><div class="ii-code" data-governed-source-file="${esc(method.file)}" data-source-anchors="${esc(JSON.stringify(anchors))}"><p class="note">Loading source changes…</p></div></section>`;
 }
+function terrainFlowMethodOwner(method){
+ const value=String(method||''),canonical=value.match(/(?:^|\.)([^.#]+)#([^/]+)\/\d+$/);
+ return canonical?`${canonical[1]}.${canonical[2]}`:value.split('::').pop().split(':')[0];
+}
 function terrainSourceChanges(packet,terrain){
  const mapped=new Map(),unmapped=[];
  const rows=new Map((terrain.methods||[]).map(row=>[row[0],row]));
  for(const flow of packet?.flows||[]){
-  if(!['source_changed','added','removed'].includes(flow.change_kind))continue;
+  if(!['source_changed','added','removed','governed_boundary_change'].includes(flow.change_kind))continue;
   const ids=new Set([...(flow.observed_deltas||[]).filter(d=>d.kind==='method_capsule').map(d=>d.unit_id),...(flow.potential_impact||[]).filter(d=>d.kind==='method_capsule').map(d=>d.id)]);
   let matches=[...ids].filter(id=>rows.has(id)&&terrain.files?.[rows.get(id)[1]]===flow.source?.file);
   if(!matches.length&&flow.method&&flow.source?.file){
-   const owner=String(flow.method).split('::').pop().split(':')[0];
+   const owner=terrainFlowMethodOwner(flow.method);
    matches=(terrain.methods||[]).filter(row=>terrain.files?.[row[1]]===flow.source.file&&(owner===row[2]||owner.endsWith('.'+row[2]))).map(row=>row[0]);
   }
   if(matches.length===1)mapped.set(matches[0],flow);else unmapped.push(flow);
