@@ -21,7 +21,7 @@ public class KitchenServiceCommandHandler {
 
   public CommandHandlers commandHandlers() {
     return SagaCommandHandlersBuilder
-            .fromChannel(KitchenServiceChannels.COMMAND_CHANNEL)
+            .fromChannel("kitchenService")
             .onMessage(CreateTicket.class, this::createTicket)
             .onMessage(ConfirmCreateTicket.class, this::confirmCreateTicket)
             .onMessage(CancelCreateTicket.class, this::cancelCreateTicket)
