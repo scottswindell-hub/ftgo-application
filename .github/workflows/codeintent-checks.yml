@@ -50,7 +50,9 @@ jobs:
           body="$marker
           ### CodeIntent checks
 
-          [▶ Watch the checks run live ↗]($dashboard_url)"
+          ## [<img src=\"${STATUS_PAGE_URL%/}/assets/checks-running.gif\" width=\"28\" height=\"28\" alt=\"Checks running\"> Watch the checks run live ↗]($dashboard_url)
+
+          Open the live review to follow progress and inspect findings as they arrive."
           comment_id=$(gh api "repos/$PR_FULL_REPO/issues/$PR_NUMBER/comments" --paginate --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$marker\"))) | .id" | head -1 || true)
           if [ -n "$comment_id" ]; then
             gh api --method PATCH "repos/$PR_FULL_REPO/issues/comments/$comment_id" -f body="$body" >/dev/null || \
@@ -328,7 +330,7 @@ jobs:
                   rows+=['',f"🟡 Intent outside governed objectives: {len(risks)} change(s); {len(acceptance.get('required_reviews',[]))} awaiting risk review."]
               if document.get('governance_run_id') and any(check.get('state')=='failed' and finding_lines(check) for check in checks):
                   rows+=['','Rule violation? Someone with write access decides: `/reject -- reason` closes this PR (the violation is real); `/false-positive F-xxxxxxxx -- reason` requests a rule fix (the PR stays blocked until the fixed rule is live).']
-              rows+=['',f'[▶ Open the checks and review ↗]({report_url})']
+              rows+=['',f'## [Open the checks and review ↗]({report_url})']
               return '\n'.join(rows)+'\n'
 
           import json, os
