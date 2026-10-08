@@ -2,9 +2,9 @@
 
 A real violation: comment `/reject -- reason`, and the PR is closed.
 A false detection: comment `/false-positive F-xxxxxxxx -- reason` (optionally
-`match="text"`), which requests a reviewed fix to the rule; the PR stays blocked
-until the changed rule is live. The workflow codeintent-violations.yml records
-both in the governance ledger. Commands are offered only for runs the ledger
+`match="text"`), which commits a rule exception to the PR's
+.codeintent/rule-exceptions.yaml and re-runs the checks. The workflow
+codeintent-violations.yml records both in the governance ledger. Commands are offered only for runs the ledger
 recorded (`governance_run_id`), and only on violations: findings of failed checks. */
 function decisionsEnabled(doc){return Boolean(doc&&doc.governance_run_id);}
 
@@ -19,7 +19,7 @@ function violationControlMarkup(f,doc,failed=true){
  const ref=decisionEscape(f.ref);
  if(doc&&doc.violation_status==='rejected')return `<p class="std-reject"><b>Rejected:</b> this violation was confirmed and the pull request was closed.</p>`;
  if(f.decision==='rule_change_requested')
-  return `<p class="std-reject"><b>${ref}</b> · Reported as a false detection: a rule change is requested. This pull request stays blocked until the changed rule is live.</p>`;
+  return `<p class="std-reject"><b>${ref}</b> · Reported as a false detection: a rule exception is committed to this pull request, and the checks re-run.</p>`;
  const reject='/reject -- ',fix=`/false-positive ${f.ref} -- `;
  return `<p class="std-reject">Someone with write access decides this violation:</p><ul class="std-reject">`+
   `<li>Real violation: <code>${decisionEscape(reject)}reason</code>${decisionCopyButton(reject,'Copy the reject command')} closes this pull request.</li>`+
