@@ -148,6 +148,14 @@ function githubHead(){
  return `<div class="gh-head"><h1>Review FTGO changes <span>#${esc(pr||'—')}</span></h1>
   <div class="gh-meta"><span class="pill">Open</span><span><b>${esc(repo.split('/')[0]||'repository owner')}</b> wants to merge into <code>main</code> from <code>${esc(branch)}</code></span></div></div>`;
 }
+function checkExplanation(){
+ const id=new URLSearchParams(location.search).get('check');
+ if(!id)return '';
+ const check=checks().find(value=>value.id===id);
+ if(!check)return `<section class="notice"><h2>Check explanation</h2><p>${state.status?'This check is not present in the recorded run.':'Loading the recorded check…'}</p></section>`;
+ const findings=(check.findings||[]).filter(value=>value&&typeof value==='object');
+ return `<section class="notice" id="check-explanation"><h2>${esc(check.label||check.id)}</h2><p><b>${esc(check.state||'pending')}</b>: ${esc(check.detail||check.summary||'No additional explanation was recorded.')}</p>${findings.length?`<ul>${findings.map(f=>`<li><b>${esc(f.title||f.rule_id||f.name||'Finding')}</b>${f.detail||f.reason||f.observation?`: ${esc(f.detail||f.reason||f.observation)}`:''}</li>`).join('')}</ul>`:''}<p><button type="button" class="btn blue" data-act="open">Review supporting evidence →</button></p></section>`;
+}
 function checksScreen(){
  const analysis=walkthroughPipeline.phase(checks(),ANALYSIS,'Waiting for source analysis');
  const intent=analysis.state==='running'?{state:'pending',line:'Waiting for CodeIntent / analysis'}:walkthroughPipeline.phase(checks(),REVIEW,'Waiting for intent review');
@@ -164,7 +172,7 @@ function checksScreen(){
   after=`<div class="violation-box"><h3>${count?`${count} review item${count===1?'':'s'}`:'Review evidence is incomplete'}</h3><p style="margin:0">${esc(count?'Open CodeIntent to review each behavior, rule finding, and test finding.':state.status?.reason||'Open CodeIntent to review the recorded evidence.')}</p><p style="margin:0"><button type="button" class="btn blue" data-act="open">Review in CodeIntent →</button></p></div>`;
  }
  if(completed&&verdict()==='PASS'&&state.status?.acceptance?.mode==='enforce'&&state.status.acceptance.status!=='ready')top=top.replace('All checks have passed','Analysis passed').replace('2 successful CodeIntent checks','Governance acceptance is reported separately below.');
- return githubHead()+`<div class="merge">${top}${phaseRow('analysis',analysis)}${phaseRow('intent review',intent)}</div>${after}${acceptanceNotice()}`;
+ return githubHead()+checkExplanation()+`<div class="merge">${top}${phaseRow('analysis',analysis)}${phaseRow('intent review',intent)}</div>${after}${acceptanceNotice()}`;
 }
 
 function intentLines(value){
