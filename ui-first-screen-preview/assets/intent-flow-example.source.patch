@@ -1,0 +1,19 @@
+diff --git a/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/domain/Order.java b/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/domain/Order.java
+index 84acc95..f231b23 100644
+--- a/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/domain/Order.java
++++ b/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/domain/Order.java
+@@ -85,9 +85,13 @@ public class Order {
+   }
+ 
+   public List<OrderDomainEvent> cancel() {
++    return beginPendingCancellation();
++  }
++
++  private List<OrderDomainEvent> beginPendingCancellation() {
+     switch (state) {
+       case APPROVED:
+-        this.state = OrderState.CANCEL_PENDING;
++        this.state = OrderState.APPROVED;
+         return emptyList();
+       default:
+         throw new UnsupportedStateTransitionException(state);

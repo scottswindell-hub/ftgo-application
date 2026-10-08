@@ -1,0 +1,121 @@
+diff --git a/ftgo-delivery-service/src/main/java/net/chrisrichardson/ftgo/deliveryservice/domain/Courier.java b/ftgo-delivery-service/src/main/java/net/chrisrichardson/ftgo/deliveryservice/domain/Courier.java
+index 42b4c06..5c0798d 100644
+--- a/ftgo-delivery-service/src/main/java/net/chrisrichardson/ftgo/deliveryservice/domain/Courier.java
++++ b/ftgo-delivery-service/src/main/java/net/chrisrichardson/ftgo/deliveryservice/domain/Courier.java
+@@ -21,6 +21,7 @@ public class Courier {
+   public Courier(long courierId) {
+     this.id = courierId;
+     this.plan = new Plan();
++    this.available = false;
+   }
+ 
+   public static Courier create(long courierId) {
+diff --git a/ftgo-delivery-service/src/test/java/net/chrisrichardson/ftgo/deliveryservice/domain/DeliveryServiceTest.java b/ftgo-delivery-service/src/test/java/net/chrisrichardson/ftgo/deliveryservice/domain/DeliveryServiceTest.java
+index 742a558..345d1a9 100644
+--- a/ftgo-delivery-service/src/test/java/net/chrisrichardson/ftgo/deliveryservice/domain/DeliveryServiceTest.java
++++ b/ftgo-delivery-service/src/test/java/net/chrisrichardson/ftgo/deliveryservice/domain/DeliveryServiceTest.java
+@@ -51,6 +51,11 @@ public class DeliveryServiceTest {
+     assertTrue(courier.isAvailable());
+   }
+ 
++  @Test
++  public void shouldCreateCourierAsUnavailable() {
++    assertFalse(courier.isAvailable());
++  }
++
+   // should Create Restaurant
+ 
+   @Test
+@@ -94,4 +99,4 @@ public class DeliveryServiceTest {
+     assertEquals(DeliveryServiceTestData.DELIVERY_ADDRESS, actions.get(1).getAddress());
+   }
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/domain/OrderLineItems.java b/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/domain/OrderLineItems.java
+index 3d4d05d..aab9a13 100644
+--- a/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/domain/OrderLineItems.java
++++ b/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/domain/OrderLineItems.java
+@@ -2,14 +2,11 @@ package net.chrisrichardson.ftgo.orderservice.domain;
+ 
+ import net.chrisrichardson.ftgo.common.Money;
+ import net.chrisrichardson.ftgo.orderservice.api.events.OrderLineItem;
+-import net.chrisrichardson.ftgo.common.RevisedOrderLineItem;
+ 
+ import javax.persistence.CollectionTable;
+ import javax.persistence.ElementCollection;
+ import javax.persistence.Embeddable;
+ import java.util.List;
+-import java.util.Objects;
+-import java.util.Optional;
+ 
+ @Embeddable
+ public class OrderLineItems {
+@@ -49,16 +46,9 @@ public class OrderLineItems {
+   }
+ 
+   void updateLineItems(OrderRevision orderRevision) {
+-    getLineItems().stream().forEach(li -> {
+-
+-      Optional<Integer> revised = orderRevision.getRevisedOrderLineItems()
+-              .stream()
+-              .filter(item -> Objects.equals(li.getMenuItemId(), item.getMenuItemId()))
+-              .map(RevisedOrderLineItem::getQuantity)
+-              .findFirst();
+-
+-      li.setQuantity(revised.orElseThrow(() ->
+-              new IllegalArgumentException(String.format("menu item id not found.", li.getMenuItemId()))));
++    orderRevision.getRevisedOrderLineItems().forEach(revisedLineItem -> {
++      OrderLineItem lineItem = findOrderLineItem(revisedLineItem.getMenuItemId());
++      lineItem.setQuantity(revisedLineItem.getQuantity());
+     });
+   }
+ 
+@@ -72,4 +62,4 @@ public class OrderLineItems {
+     Money newOrderTotal = currentOrderTotal.add(delta);
+     return new LineItemQuantityChange(currentOrderTotal, newOrderTotal, delta);
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/ftgo-order-service/src/test/java/net/chrisrichardson/ftgo/orderservice/domain/OrderTest.java b/ftgo-order-service/src/test/java/net/chrisrichardson/ftgo/orderservice/domain/OrderTest.java
+index ef3f93d..a44ae4b 100644
+--- a/ftgo-order-service/src/test/java/net/chrisrichardson/ftgo/orderservice/domain/OrderTest.java
++++ b/ftgo-order-service/src/test/java/net/chrisrichardson/ftgo/orderservice/domain/OrderTest.java
+@@ -7,10 +7,12 @@ import net.chrisrichardson.ftgo.orderservice.RestaurantMother;
+ import net.chrisrichardson.ftgo.orderservice.api.events.OrderAuthorized;
+ import net.chrisrichardson.ftgo.orderservice.api.events.OrderCreatedEvent;
+ import net.chrisrichardson.ftgo.orderservice.api.events.OrderDomainEvent;
++import net.chrisrichardson.ftgo.orderservice.api.events.OrderLineItem;
+ import net.chrisrichardson.ftgo.orderservice.api.events.OrderState;
+ import org.junit.Before;
+ import org.junit.Test;
+ 
++import java.util.ArrayList;
+ import java.util.Collections;
+ import java.util.List;
+ import java.util.Optional;
+@@ -67,4 +69,20 @@ public class OrderTest {
+ 
+     assertEquals(CHICKEN_VINDALOO_PRICE.multiply(10), order.getOrderTotal());
+   }
+-}
+\ No newline at end of file
++
++  @Test
++  public void shouldKeepUnchangedLineItemsWhenRevisingSubset() {
++    List<OrderLineItem> lineItems = new ArrayList<>(chickenVindalooLineItems());
++    lineItems.add(new OrderLineItem("2", "Lamb Korma", CHICKEN_VINDALOO_PRICE, 2));
++    Order order = Order.createOrder(CONSUMER_ID, AJANTA_RESTAURANT, DELIVERY_INFORMATION, lineItems).result;
++    order.noteApproved();
++
++    OrderRevision orderRevision = new OrderRevision(Optional.empty(), Collections.singletonList(new RevisedOrderLineItem(10, "1")));
++
++    order.revise(orderRevision);
++    order.confirmRevision(orderRevision);
++
++    assertEquals(10, order.getLineItems().get(0).getQuantity());
++    assertEquals(2, order.getLineItems().get(1).getQuantity());
++  }
++}

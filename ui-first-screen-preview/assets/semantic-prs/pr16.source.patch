@@ -1,0 +1,12 @@
+diff --git a/ftgo-kitchen-service/src/main/java/net/chrisrichardson/ftgo/kitchenservice/domain/Ticket.java b/ftgo-kitchen-service/src/main/java/net/chrisrichardson/ftgo/kitchenservice/domain/Ticket.java
+index f52eeef..d8e156a 100644
+--- a/ftgo-kitchen-service/src/main/java/net/chrisrichardson/ftgo/kitchenservice/domain/Ticket.java
++++ b/ftgo-kitchen-service/src/main/java/net/chrisrichardson/ftgo/kitchenservice/domain/Ticket.java
+@@ -141,6 +141,7 @@ public class Ticket {
+     switch (state) {
+       case AWAITING_ACCEPTANCE:
+       case ACCEPTED:
++      case PREPARING:
+         this.previousState = state;
+         this.state = TicketState.CANCEL_PENDING;
+         return emptyList();

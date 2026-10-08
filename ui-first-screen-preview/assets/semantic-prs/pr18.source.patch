@@ -1,0 +1,25 @@
+diff --git a/ftgo-order-history-service/src/main/java/net/chrisrichardson/ftgo/cqrs/orderhistory/messaging/OrderHistoryEventHandlers.java b/ftgo-order-history-service/src/main/java/net/chrisrichardson/ftgo/cqrs/orderhistory/messaging/OrderHistoryEventHandlers.java
+index 96b7d04..202d838 100644
+--- a/ftgo-order-history-service/src/main/java/net/chrisrichardson/ftgo/cqrs/orderhistory/messaging/OrderHistoryEventHandlers.java
++++ b/ftgo-order-history-service/src/main/java/net/chrisrichardson/ftgo/cqrs/orderhistory/messaging/OrderHistoryEventHandlers.java
+@@ -4,7 +4,6 @@ import io.eventuate.tram.events.subscriber.DomainEventEnvelope;
+ import io.eventuate.tram.events.subscriber.DomainEventHandlers;
+ import io.eventuate.tram.events.subscriber.DomainEventHandlersBuilder;
+ import net.chrisrichardson.ftgo.cqrs.orderhistory.DeliveryPickedUp;
+-import net.chrisrichardson.ftgo.cqrs.orderhistory.Location;
+ import net.chrisrichardson.ftgo.cqrs.orderhistory.OrderHistoryDao;
+ import net.chrisrichardson.ftgo.cqrs.orderhistory.dynamodb.Order;
+ import net.chrisrichardson.ftgo.cqrs.orderhistory.dynamodb.SourceEvent;
+@@ -24,12 +23,6 @@ public class OrderHistoryEventHandlers {
+ 
+   private Logger logger = LoggerFactory.getLogger(getClass());
+ 
+-  // TODO - determine events
+-
+-  private String orderId;
+-  private Order order;
+-  private Location location; //
+-
+   public DomainEventHandlers domainEventHandlers() {
+     return DomainEventHandlersBuilder
+             .forAggregateType("net.chrisrichardson.ftgo.orderservice.domain.Order")

@@ -1,0 +1,2 @@
+# Preserve unified-diff evidence bytes, including blank context-line prefixes.
+assets/*.source.patch -whitespace

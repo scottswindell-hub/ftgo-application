@@ -1,0 +1,19 @@
+diff --git a/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/sagas/createorder/CreateOrderSaga.java b/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/sagas/createorder/CreateOrderSaga.java
+index b7944ee..e86efed 100644
+--- a/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/sagas/createorder/CreateOrderSaga.java
++++ b/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/sagas/createorder/CreateOrderSaga.java
+@@ -4,14 +4,9 @@ import io.eventuate.tram.sagas.orchestration.SagaDefinition;
+ import io.eventuate.tram.sagas.simpledsl.SimpleSaga;
+ import net.chrisrichardson.ftgo.orderservice.sagaparticipants.*;
+ import net.chrisrichardson.ftgo.kitchenservice.api.CreateTicketReply;
+-import org.slf4j.Logger;
+-import org.slf4j.LoggerFactory;
+ 
+ public class CreateOrderSaga implements SimpleSaga<CreateOrderSagaState> {
+ 
+-
+-  private Logger logger = LoggerFactory.getLogger(getClass());
+-
+   private SagaDefinition<CreateOrderSagaState> sagaDefinition;
+ 
+   public CreateOrderSaga(OrderServiceProxy orderService, ConsumerServiceProxy consumerService, KitchenServiceProxy kitchenService,

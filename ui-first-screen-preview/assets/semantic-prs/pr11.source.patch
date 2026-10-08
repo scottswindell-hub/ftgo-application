@@ -1,0 +1,51 @@
+diff --git a/ftgo-kitchen-service/src/main/java/net/chrisrichardson/ftgo/kitchenservice/domain/Ticket.java b/ftgo-kitchen-service/src/main/java/net/chrisrichardson/ftgo/kitchenservice/domain/Ticket.java
+index f52eeef..4536a67 100644
+--- a/ftgo-kitchen-service/src/main/java/net/chrisrichardson/ftgo/kitchenservice/domain/Ticket.java
++++ b/ftgo-kitchen-service/src/main/java/net/chrisrichardson/ftgo/kitchenservice/domain/Ticket.java
+@@ -75,11 +75,12 @@ public class Ticket {
+   public List<TicketDomainEvent> accept(LocalDateTime readyBy) {
+     switch (state) {
+       case AWAITING_ACCEPTANCE:
+-        // Verify that readyBy is in the futurestate = TicketState.ACCEPTED;
++        // Verify that readyBy is in the future.
+         this.acceptTime = LocalDateTime.now();
+         if (!acceptTime.isBefore(readyBy))
+           throw new IllegalArgumentException(String.format("readyBy %s is not after now %s", readyBy, acceptTime));
+         this.readyBy = readyBy;
++        this.state = TicketState.ACCEPTED;
+         return singletonList(new TicketAcceptedEvent(readyBy));
+       default:
+         throw new UnsupportedStateTransitionException(state);
+diff --git a/ftgo-kitchen-service/src/test/java/net/chrisrichardson/ftgo/kitchenservice/domain/TicketTest.java b/ftgo-kitchen-service/src/test/java/net/chrisrichardson/ftgo/kitchenservice/domain/TicketTest.java
+new file mode 100644
+index 0000000..5f92350
+--- /dev/null
++++ b/ftgo-kitchen-service/src/test/java/net/chrisrichardson/ftgo/kitchenservice/domain/TicketTest.java
+@@ -0,0 +1,27 @@
++package net.chrisrichardson.ftgo.kitchenservice.domain;
++
++import net.chrisrichardson.ftgo.kitchenservice.api.TicketDetails;
++import net.chrisrichardson.ftgo.kitchenservice.api.events.TicketDomainEvent;
++import org.junit.Test;
++
++import java.time.LocalDateTime;
++import java.util.Collections;
++import java.util.List;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertTrue;
++
++public class TicketTest {
++
++  @Test
++  public void shouldAllowPreparingAfterTicketIsAccepted() {
++    Ticket ticket = new Ticket(1L, 2L, new TicketDetails(Collections.emptyList()));
++    ticket.confirmCreate();
++    ticket.accept(LocalDateTime.now().plusMinutes(1));
++
++    List<TicketDomainEvent> events = ticket.preparing();
++
++    assertEquals(1, events.size());
++    assertTrue(events.get(0) instanceof TicketPreparationStartedEvent);
++  }
++}

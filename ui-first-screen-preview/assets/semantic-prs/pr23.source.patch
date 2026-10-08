@@ -1,0 +1,141 @@
+diff --git a/demo-ui/src/FulfillmentHandoffReview.test.tsx b/demo-ui/src/FulfillmentHandoffReview.test.tsx
+index ca50b25..8eb60cf 100644
+--- a/demo-ui/src/FulfillmentHandoffReview.test.tsx
++++ b/demo-ui/src/FulfillmentHandoffReview.test.tsx
+@@ -3,22 +3,19 @@ import { describe, expect, it } from 'vitest';
+ import { FulfillmentHandoffReview } from './FulfillmentHandoffReview';
+ 
+ describe('FulfillmentHandoffReview', () => {
+-  it('defaults the courier to the pickup action', () => {
++  it('does not let a reviewer choose the next courier action', () => {
+     render(<FulfillmentHandoffReview />);
+ 
+-    expect(screen.getByLabelText('Next courier action')).toHaveValue('PICKUP');
++    expect(screen.queryByLabelText('Next courier action')).not.toBeInTheDocument();
+     expect(screen.getByLabelText('Selected next action')).toHaveTextContent('Pick up order');
+   });
+ 
+   it('updates the local snapshot without submitting a dispatch change', () => {
+     render(<FulfillmentHandoffReview />);
+ 
+-    fireEvent.change(screen.getByLabelText('Next courier action'), {
+-      target: { value: 'DROPOFF' },
+-    });
+     fireEvent.click(screen.getByRole('button', { name: 'Review handoff' }));
+ 
+-    expect(screen.getByLabelText('Selected next action')).toHaveTextContent('Drop off order');
++    expect(screen.getByLabelText('Selected next action')).toHaveTextContent('Pick up order');
+     expect(
+       screen.getByText('Review ready — demo only; no dispatch update was sent.'),
+     ).toBeInTheDocument();
+diff --git a/demo-ui/src/FulfillmentHandoffReview.tsx b/demo-ui/src/FulfillmentHandoffReview.tsx
+index bef09d8..ef5e4b8 100644
+--- a/demo-ui/src/FulfillmentHandoffReview.tsx
++++ b/demo-ui/src/FulfillmentHandoffReview.tsx
+@@ -3,7 +3,6 @@ import { decorativeCopy } from './decorativeCopy';
+ import {
+   actionLabel,
+   deliveryHandoffContract,
+-  type CourierAction,
+ } from './semanticContract';
+ 
+ type SemanticFieldProps = {
+@@ -23,14 +22,11 @@ function SemanticField({ children, hint, label }: SemanticFieldProps) {
+ }
+ 
+ export function FulfillmentHandoffReview() {
+-  const [nextAction, setNextAction] = useState<CourierAction>(
+-    deliveryHandoffContract.nextCourierAction.default,
+-  );
+   const [reviewStatus, setReviewStatus] = useState(
+     'Choose the handoff details, then prepare a local review.',
+   );
+ 
+-  const selectedActionLabel = actionLabel(nextAction);
++  const selectedActionLabel = actionLabel(deliveryHandoffContract.nextCourierAction.default);
+ 
+   function prepareReview() {
+     setReviewStatus(deliveryHandoffContract.reviewAction.outcome);
+@@ -90,25 +86,6 @@ export function FulfillmentHandoffReview() {
+                 </output>
+               </SemanticField>
+ 
+-              <SemanticField
+-                label="Next courier action"
+-                hint="FTGO schedules pickup before drop-off."
+-              >
+-                <select
+-                  aria-label="Next courier action"
+-                  data-demo-role="semantic"
+-                  data-semantic-key="next-courier-action"
+-                  onChange={(event) => setNextAction(event.target.value as CourierAction)}
+-                  value={nextAction}
+-                >
+-                  {deliveryHandoffContract.nextCourierAction.options.map((option) => (
+-                    <option key={option.value} value={option.value}>
+-                      {option.label}
+-                    </option>
+-                  ))}
+-                </select>
+-              </SemanticField>
+-
+               <SemanticField label="Ready by" hint="Restaurant handoff target">
+                 <output
+                   className="readonly-value"
+diff --git a/ftgo-consumer-service/src/main/java/net/chrisrichardson/ftgo/consumerservice/web/ConsumerController.java b/ftgo-consumer-service/src/main/java/net/chrisrichardson/ftgo/consumerservice/web/ConsumerController.java
+index 76b2761..5bd9b18 100644
+--- a/ftgo-consumer-service/src/main/java/net/chrisrichardson/ftgo/consumerservice/web/ConsumerController.java
++++ b/ftgo-consumer-service/src/main/java/net/chrisrichardson/ftgo/consumerservice/web/ConsumerController.java
+@@ -26,7 +26,7 @@ public class ConsumerController {
+   @RequestMapping(method= RequestMethod.GET,  path="/{consumerId}")
+   public ResponseEntity<GetConsumerResponse> get(@PathVariable long consumerId) {
+     return consumerService.findById(consumerId)
+-            .map(consumer -> new ResponseEntity<>(new GetConsumerResponse(consumer.getName()), HttpStatus.OK))
++            .map(consumer -> new ResponseEntity<>(new GetConsumerResponse(consumerId, consumer.getName()), HttpStatus.OK))
+             .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
+   }
+ }
+diff --git a/ftgo-consumer-service/src/main/java/net/chrisrichardson/ftgo/consumerservice/web/GetConsumerResponse.java b/ftgo-consumer-service/src/main/java/net/chrisrichardson/ftgo/consumerservice/web/GetConsumerResponse.java
+index 0185bb9..9f53284 100644
+--- a/ftgo-consumer-service/src/main/java/net/chrisrichardson/ftgo/consumerservice/web/GetConsumerResponse.java
++++ b/ftgo-consumer-service/src/main/java/net/chrisrichardson/ftgo/consumerservice/web/GetConsumerResponse.java
+@@ -9,8 +9,8 @@ public class GetConsumerResponse extends CreateConsumerResponse {
+     return name;
+   }
+ 
+-  public GetConsumerResponse(PersonName name) {
+-
++  public GetConsumerResponse(long consumerId, PersonName name) {
++    super(consumerId);
+     this.name = name;
+   }
+ }
+diff --git a/ftgo-consumer-service/src/test/java/net/chrisrichardson/ftgo/consumerservice/web/ConsumerControllerTest.java b/ftgo-consumer-service/src/test/java/net/chrisrichardson/ftgo/consumerservice/web/ConsumerControllerTest.java
+index 9ede24d..c307117 100644
+--- a/ftgo-consumer-service/src/test/java/net/chrisrichardson/ftgo/consumerservice/web/ConsumerControllerTest.java
++++ b/ftgo-consumer-service/src/test/java/net/chrisrichardson/ftgo/consumerservice/web/ConsumerControllerTest.java
+@@ -23,6 +23,7 @@ import java.nio.charset.Charset;
+ import java.util.Optional;
+ 
+ import static io.restassured.module.mockmvc.RestAssuredMockMvc.given;
++import static org.hamcrest.Matchers.equalTo;
+ import static org.mockito.Mockito.mock;
+ 
+ public class ConsumerControllerTest {
+@@ -46,7 +47,8 @@ public class ConsumerControllerTest {
+             when().
+             get("/consumers/1").
+             then().
+-            statusCode(200)
++            statusCode(200).
++            body("consumerId", equalTo(1))
+     ;
+ 
+   }
+@@ -77,4 +79,4 @@ public class ConsumerControllerTest {
+             .addInterceptors(validationInterceptor);
+   }
+ 
+-}
+\ No newline at end of file
++}

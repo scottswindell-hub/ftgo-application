@@ -1,0 +1,13 @@
+diff --git a/ftgo-order-history-service/src/main/java/net/chrisrichardson/ftgo/cqrs/orderhistory/messaging/OrderHistoryEventHandlers.java b/ftgo-order-history-service/src/main/java/net/chrisrichardson/ftgo/cqrs/orderhistory/messaging/OrderHistoryEventHandlers.java
+index 96b7d04..11b20fb 100644
+--- a/ftgo-order-history-service/src/main/java/net/chrisrichardson/ftgo/cqrs/orderhistory/messaging/OrderHistoryEventHandlers.java
++++ b/ftgo-order-history-service/src/main/java/net/chrisrichardson/ftgo/cqrs/orderhistory/messaging/OrderHistoryEventHandlers.java
+@@ -54,7 +54,7 @@ public class OrderHistoryEventHandlers {
+ 
+   public void handleOrderAuthorized(DomainEventEnvelope<OrderAuthorized> dee) {
+     logger.debug("handleOrderAuthorized called {}", dee);
+-    boolean result = orderHistoryDao.updateOrderState(dee.getAggregateId(), OrderState.APPROVED, makeSourceEvent(dee));
++    boolean result = orderHistoryDao.updateOrderState(dee.getAggregateId(), OrderState.REJECTED, makeSourceEvent(dee));
+     logger.debug("handleOrderAuthorized result {} {}", dee, result);
+   }
+ 

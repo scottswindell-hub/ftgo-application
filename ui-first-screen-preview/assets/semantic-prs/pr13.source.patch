@@ -1,0 +1,13 @@
+diff --git a/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/sagas/createorder/CreateOrderSagaState.java b/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/sagas/createorder/CreateOrderSagaState.java
+index 274cea7..72c7edd 100644
+--- a/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/sagas/createorder/CreateOrderSagaState.java
++++ b/ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/sagas/createorder/CreateOrderSagaState.java
+@@ -102,7 +102,7 @@ public class CreateOrderSagaState {
+   }
+ 
+   AuthorizeCommand makeAuthorizeCommand() {
+-    return new AuthorizeCommand().withConsumerId(getOrderDetails().getConsumerId()).withOrderId(getOrderId()).withOrderTotal(getOrderDetails().getOrderTotal().asString());
++    return new AuthorizeCommand().withConsumerId(getOrderId()).withOrderId(getOrderId()).withOrderTotal(getOrderDetails().getOrderTotal().asString());
+   }
+ 
+   ApproveOrderCommand makeApproveOrderCommand() {
