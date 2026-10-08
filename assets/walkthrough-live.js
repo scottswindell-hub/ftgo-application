@@ -51,7 +51,7 @@ async function loadArtifacts(){
  try{
   const reference=state.status?.review_artifact;
   const digest=reference?.name==='intent-flow.json'?reference.sha256:null;
-  const packet=await loadJson(dataPath,1024*1024,digest);if(!packet)return;
+  const packet=await loadJson(dataPath,2*1024*1024,digest);if(!packet)return;
   if(packet.schema!=='intent-flow-view-v1'||!Array.isArray(packet.flows))throw Error('Unsupported CodeIntent artifact.');
   if(packet.repository!==repo||packet.head_commit!==sha)throw Error('Artifact identity differs from this pull request.');
   if(runId&&packet.simulation?.run_id!==runId)throw Error('Artifact belongs to another local run.');
