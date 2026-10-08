@@ -238,3 +238,13 @@ details.quiet summary{cursor:pointer;color:var(--muted)}details.quiet summary b{
 .desc-page{padding-bottom:120px}
 .desc-assessment{position:fixed;bottom:max(12px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:min(1140px,calc(100% - 32px));box-sizing:border-box;z-index:20;border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:0 -3px 18px rgba(0,0,0,.15)}
 @media(max-width:600px){.desc-assessment{gap:8px;padding:12px}.desc-assessment b{flex-basis:100%}.desc-assessment .choice{flex:1;white-space:normal}}
+
+.desc-assessment{justify-content:flex-end}
+.desc-assessment b{margin-right:8px}
+.desc-assessment .choice:disabled{background:var(--sunk);border-color:var(--line);color:var(--muted);opacity:.6;cursor:not-allowed}
+.desc-assessment .yes.choice-selected{animation:assessment-yes .35s ease-out}
+.desc-assessment .no.choice-selected{animation:assessment-no .35s ease-out}
+@keyframes assessment-yes{from{background:var(--panel);color:var(--ink)}to{background:var(--ok);color:#fff}}
+@keyframes assessment-no{from{background:var(--panel);color:var(--ink)}to{background:var(--bad);color:#fff}}
+@media(prefers-reduced-motion:reduce){.desc-assessment .choice-selected{animation:none}}
+@media(max-width:600px){.desc-assessment b{text-align:right;margin-right:0}.desc-assessment .return-github{flex:2}}

@@ -234,8 +234,8 @@ function detailScreen(item){
  const connections=item.connections?.length?`<div class="holon"><b>Connected governed outcomes</b><ul>${item.connections.map(connection=>`<li><b>${esc(connection.title)}</b> · ${esc(connection.detail)}</li>`).join('')}</ul></div>`:'';
  const resolution=item.resolution?`<div class="rule"><small>HOW TO RESOLVE IT</small><p>${esc(item.resolution)}</p></div>`:'';
  const interpretation=`<div class="summary"><small>${esc(item.groundingLabel||'RECORDED PIPELINE EVIDENCE')}</small><p>${esc(item.detailSummary||item.summary)}</p></div>`;
- const question='Did you mean this?';
- const yes='Yes, I meant this',no='No, investigate';
+ const question='Was this an intended change?';
+ const yes='Yes',no='No';
  return `<div class="ci desc-page"><article class="tile">
   <div class="tile-head"><h3>${esc(item.title)}</h3>${typeIcon(item.reviewType||'Behavior')}</div>
   <div class="tile-sub"><code>${esc(item.method||short(item.file))}</code></div>
@@ -246,7 +246,7 @@ function detailScreen(item){
    <section class="pane"><header><b>Intent</b><span>${esc(label(item.concept))}</span></header>${intent.length?`<pre>${lines(intent)}</pre>`:'<p class="evidence-empty">No intent comparison recorded for this item.</p>'}</section>
    <section class="pane"><header><b>Code</b><span>${esc(short(item.file))}</span></header>${item.comparison?.before?.text!=null&&item.comparison?.after?.text!=null?`<pre>${lines(sourceLines(item))}</pre>${item.comparison.complete?'':'<p class="evidence-empty">Recorded source excerpt; open more evidence for context.</p>'}`:'<p class="evidence-empty">No source comparison recorded for this item. Check the source evidence view for available patches.</p>'}</section>
   </div>
-  ${item.status==='unknown'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>Cannot be established. Review the analysis gap; assessments are unavailable.</b></div>':item.status==='watch'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>No response required while this rule is under evaluation.</b></div>':`<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>${esc(question)}</b><button type="button" class="choice yes" data-act="yes" aria-pressed="${answer==='yes'}">${esc(yes)}</button><button type="button" class="choice no" data-act="no" aria-pressed="${answer==='no'}">${esc(no)}</button></div>`}
+  ${item.status==='unknown'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>Cannot be established. Review the analysis gap; assessments are unavailable.</b></div>':item.status==='watch'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>No response required while this rule is under evaluation.</b></div>':`<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>${esc(question)}</b><button type="button" class="choice yes" data-act="yes" aria-pressed="${answer==='yes'}">${esc(yes)}</button><button type="button" class="choice no" data-act="no" aria-pressed="${answer==='no'}">${esc(no)}</button><button type="button" class="choice return-github" data-act="return-github" ${answer&&pullRequestUrl()!=='#'?'':'disabled'}>Return to Github</button></div>`}
   <section class="compact-evidence" aria-labelledby="recorded-evidence-heading"><h4 id="recorded-evidence-heading">Recorded evidence</h4><div id="recorded-evidence">${resolution}${connections}${reviewExplorer.pane(item,state.packet,state.summary,checks(),{tab:state.tab,node:state.node,full:state.full,file:state.evidenceFile,methods:state.methods})}</div></section>
  ${saveBar()}</article></div>`;
 }
@@ -290,7 +290,8 @@ document.addEventListener('click',event=>{
  if(action==='open'){navigate('review');}
  else if(action==='checks'){event.preventDefault();navigate('checks');}
  else if(target.dataset.row){state.evidenceFile='';state.node=null;state.full=false;navigate('review',target.dataset.row);scrollTo(0,0);}
- else if(action==='yes'||action==='no'){const item=items().find(i=>i.id===state.selected);if(item&&item.status!=='unknown'&&item.status!=='watch')state.drafts.set(state.selected,action);render();}
+ else if(action==='yes'||action==='no'){const item=items().find(i=>i.id===state.selected);if(item&&item.status!=='unknown'&&item.status!=='watch')state.drafts.set(state.selected,action);render();document.querySelector(`.desc-assessment [data-act="${action}"]`)?.classList.add('choice-selected');}
+ else if(action==='return-github'){if(decision(state.selected)&&pullRequestUrl()!=='#')location.assign(pullRequestUrl());}
  else if(action==='undo'){state.drafts.clear();render();}
  else if(action==='submit'){
   const responses=[];
