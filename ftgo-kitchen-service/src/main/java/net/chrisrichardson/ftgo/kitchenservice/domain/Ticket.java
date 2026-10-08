@@ -140,7 +140,6 @@ public class Ticket {
   public List<TicketDomainEvent> cancel() {
     switch (state) {
       case AWAITING_ACCEPTANCE:
-      case ACCEPTED:
         this.previousState = state;
         this.state = TicketState.CANCEL_PENDING;
         return emptyList();
