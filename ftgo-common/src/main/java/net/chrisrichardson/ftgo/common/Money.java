@@ -66,6 +66,7 @@ public class Money {
   }
 
   public String asString() {
+    // Preserve the plain decimal representation used by API and message boundaries.
     return amount.toPlainString();
   }
 
