@@ -3,6 +3,8 @@
 'use strict';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const json=v=>esc(JSON.stringify(v??null,null,2));
+const pipeline=root.walkthroughPipeline||(typeof require==='function'?require('./walkthrough-model.js'):null);
+const gap=(check,checks)=>['error','blocked'].includes(check.state)&&!pipeline?.intentionalSkip(check,checks);
 const tabs=[['graph','Impact graph'],['path','Behavior path'],['src','Source evidence'],['obj','Governed objective'],['analysis','Analysis details'],['ask','Ask CodeIntent']];
 function enrich(model,packet,summary,checks){
  const result={...model,changes:[...model.changes],constraints:[...model.constraints]};
@@ -11,13 +13,14 @@ function enrich(model,packet,summary,checks){
   for(const flow of packet.flows||[]){if(flow.change_kind==='context_only')continue;const file=flow.source?.file||'Unlocated evidence';if(!groups.has(file))groups.set(file,[]);groups.get(file).push(flow);}
   for(const [file,flows] of groups)result.changes.push({id:'recorded:'+file,kind:'change',status:'unknown',file,title:file.split('/').pop(),method:'',summary:`${flows.length} recorded analysis entries; semantic outcome not established.`,before:'Inspect the recorded baseline evidence.',after:'Inspect the recorded candidate evidence.',connections:[],intentBefore:[],intentAfter:[],reviewType:'Behavior',groundingLabel:'RECORDED EVIDENCE · OUTCOME UNRESOLVED',qualification:'Source changes and extraction differences alone do not establish a behavior change.'});
  }
- for(const check of checks||[]){if(!['error','blocked'].includes(check.state))continue;result.changes.push({id:'coverage:'+check.id,kind:'change',status:'unknown',file:'',title:check.label||check.id,summary:check.detail||'Required analysis is incomplete.',before:'An established comparison is required.',after:'Cannot be established from this run.',connections:[],reviewType:'Behavior',groundingLabel:'RECORDED ANALYSIS GAP',check});}
+ for(const check of checks||[]){if(!gap(check,checks))continue;result.changes.push({id:'coverage:'+check.id,kind:'change',status:'unknown',file:'',title:check.label||check.id,summary:check.detail||'Required analysis is incomplete.',before:'An established comparison is required.',after:'Cannot be established from this run.',connections:[],reviewType:'Behavior',groundingLabel:'RECORDED ANALYSIS GAP',check});}
+ result.noGovernedChanges=Boolean(checks?.length)&&checks.every(c=>['passed','skipped'].includes(c.state)||pipeline?.intentionalSkip(c,checks))&&!(packet.flows||[]).some(f=>f.change_kind!=='context_only')&&!result.changes.length&&!result.constraints.length&&checks?.some(c=>c.id==='intent_diff'&&c.state==='passed')&&checks?.some(c=>c.id==='governance_decision'&&c.state==='passed');
  return result;
 }
 function flowsFor(item,packet){return (packet?.flows||[]).filter(f=>f.id===item.id||(item.file&&f.source?.file===item.file));}
 function coverage(packet,summary,checks){
  const flows=packet?.flows||[];const methods=new Set(flows.filter(f=>f.change_kind==='source_changed').map(f=>f.method).filter(Boolean));
- const gaps=(checks||[]).filter(c=>['error','blocked'].includes(c.state));
+ const gaps=(checks||[]).filter(c=>gap(c,checks));
  return `<details class="rx-coverage"><summary><b>Unchanged results and analysis coverage</b> · ${methods.size} changed methods represented · ${gaps.length} incomplete checks</summary><p>Counts describe the supplied artifact, not the entire pull request. Recorded graph differences do not by themselves establish changed behavior.</p><ul>${gaps.map(c=>`<li><b>${esc(c.label||c.id)}:</b> ${esc(c.detail)}</li>`).join('')||'<li>No incomplete checks reported.</li>'}</ul><p>Explanation: ${esc(summary?.intent_semantics?.status||'unavailable')}. ${esc(summary?.intent_semantics?.reason||'')}</p>${(summary?.intent_semantics?.omitted_change_ids||[]).length?`<p>${summary.intent_semantics.omitted_change_ids.length} changes omitted from the explanation.</p>`:''}<p>${esc(packet?.qualification||'No claim is made about behavior outside the evaluated scope.')}</p></details>`;
 }
 function graphData(item,packet,full){
