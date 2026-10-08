@@ -277,7 +277,7 @@ jobs:
               printf '%s' "$document" > /tmp/codeintent-status.json
               python3 <<'PY' > /tmp/codeintent-comment.md
           """One compact GitHub comment over native results and separate acceptance policy."""
-          from urllib.parse import urljoin, urlsplit, urlunsplit, parse_qsl, urlencode
+          from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
           MARKER = '<!-- codeintent-checks -->'
           ICONS = {'passed':'✅','failed':'❌','error':'⚠️','stopped':'➖','blocked':'➖','pending':'⏳','running':'⏳'}
@@ -362,9 +362,6 @@ jobs:
               risks=(acceptance.get('intent_risks') or {}).get('assessments',[])
               if risks:
                   rows+=['',f"🟡 Intent outside governed objectives: {len(risks)} change(s); {len(acceptance.get('required_reviews',[]))} awaiting risk review."]
-              # The review is where findings are addressed, so its link is a button. The image ships with the review page.
-              button=urljoin(report_url,'assets/open-review-button.svg')
-              rows+=['',f'[![Open the checks and review]({button})]({report_url})']
               return '\n'.join(rows)+'\n'
 
           import json, os
