@@ -12,7 +12,7 @@ const api=(qs.get('api')||'').replace(/\/+$/,'');
 let dataPath=qs.get('data')||'';
 const {ANALYSIS,REVIEW}=walkthroughPipeline;
 const initialView=qs.get('view')==='checks'?'checks':'review';
-const state={status:null,packet:null,packetDigest:null,summary:null,model:null,view:initialView,selected:initialView==='review'?(qs.get('item')||null):null,explore:false,tab:'graph',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
+const state={desc:qs.get('view')==='desc',status:null,packet:null,packetDigest:null,summary:null,model:null,view:initialView,selected:initialView==='review'?(qs.get('item')||null):null,explore:false,tab:'graph',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
 let pollTimer=null;
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -29,12 +29,13 @@ function pullRequestUrl(){
 
 function routeUrl(view,selected=null){
  const url=new URL(location.href);
+ url.searchParams.delete('issue');url.searchParams.delete('check');
  if(view==='checks')url.searchParams.set('view','checks');else url.searchParams.delete('view');
  if(view==='review'&&selected)url.searchParams.set('item',selected);else url.searchParams.delete('item');
  return url.href;
 }
 function navigate(view,selected=null){
- state.view=view;state.selected=view==='review'?selected:null;
+ state.desc=false;state.view=view;state.selected=view==='review'?selected:null;
  history.pushState(null,'',routeUrl(state.view,state.selected));
  render();
 }
@@ -265,7 +266,12 @@ function render(){
  runContext.textContent=repo+(pr?' · Pull request #'+pr:'');
  document.title=`CodeIntent · ${repo||'review'}${pr?' #'+pr:''}`;
  if(state.error&&!state.status&&!state.packet){screen.innerHTML=`<div class="error-box"><b>CodeIntent could not load this run.</b><p>${esc(state.error)}</p><p><a href="/">Return to local PR runs</a></p></div>`;return;}
- if(state.view==='checks')screen.innerHTML=checksScreen();
+ if(state.desc){
+  const route=new URLSearchParams(location.search);
+  const item=walkthroughPipeline.descriptionItem(items(),state.packet,state.summary,checks(),route.get('check'),route.get('issue'));
+  if(item){state.selected=item.id;screen.innerHTML=detailScreen(item);}
+  else screen.innerHTML=`<div class="notice"><h2>${state.model?'Description unavailable':'Loading issue description…'}</h2><p>${state.model?'No matching description was recorded for this issue.':'Loading the pinned review evidence.'}</p>${state.model?checkExplanation():''}</div>`;
+ }else if(state.view==='checks')screen.innerHTML=checksScreen();
  else if(state.selected){const item=items().find(value=>value.id===state.selected);screen.innerHTML=item?detailScreen(item):listScreen();}
  else screen.innerHTML=listScreen();
  legacyMethodExplorer.hydrate();
@@ -307,7 +313,7 @@ document.addEventListener('keydown',event=>{
 legacyMethodExplorer.setRender(render);
 addEventListener('popstate',()=>{
  const route=new URLSearchParams(location.search),view=route.get('view')==='checks'?'checks':'review';
- state.view=view;state.selected=view==='review'?(route.get('item')||null):null;render();
+ state.desc=route.get('view')==='desc';state.view=view;state.selected=view==='review'?(route.get('item')||null):null;render();
 });
 const theme=document.querySelector('#theme');
 function setTheme(value){document.documentElement.dataset.theme=value;theme.textContent=value==='dark'?'Light':'Dark';}
