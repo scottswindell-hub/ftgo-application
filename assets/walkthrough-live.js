@@ -185,7 +185,7 @@ function row(item,kind){
  const answer=decision(item.id),submitted=state.submitted.has(item.id);
  const status=item.status==='unknown'?'Cannot be established':answer==='yes'?(submitted?'Expected · handed off':'Yes, I meant this'):answer==='no'?(submitted?'Investigating · handed off':'No, investigate'):'';
  const type=String(item.reviewType||'Behavior');
- return `<button type="button" class="row ${answer||''} ${submitted?'submitted':''}" data-row="${esc(item.id)}"><span class="t"><b>${esc(item.title||item.summary)}</b>${item.summary?`<span class="row-summary">${esc(item.summary)}</span>`:''}<small class="meta">${esc(item.concept||item.file||item.groundingLabel||'Recorded review evidence')}${item.objective?' · accepted constraint':''}</small></span><span class="row-side"><span class="type-name">${esc(type)}</span>${typeIcon(type)}${status?`<span class="st">${esc(status)}</span>`:''}</span></button>`;
+ return `<button type="button" class="row ${answer||''} ${submitted?'submitted':''}" data-row="${esc(item.id)}"><span class="t"><b>${esc(item.title||item.summary)}</b>${item.summary?`<span class="row-summary">${esc(item.summary)}</span>`:''}<small class="meta">${esc(item.concept||item.file||item.groundingLabel||'Recorded review evidence')}${item.objective?' · accepted constraint':''}</small></span><span class="row-side">${typeIcon(type)}${status?`<span class="st">${esc(status)}</span>`:''}</span></button>`;
 }
 function saveBar(){return `<div class="actions rx-save"><span>${state.drafts.size} staged assessment${state.drafts.size===1?'':'s'} · governance changes are handed to protected GitHub Actions.</span><button type="button" class="btn" data-act="undo" ${state.drafts.size?'':'disabled'}>Discard staged</button><button type="button" class="btn blue" data-act="submit" ${state.drafts.size?'':'disabled'}>Continue to governance actions</button></div>`;}
 function summaryNotice(){
@@ -216,7 +216,7 @@ function detailScreen(item){
  const question='Did you mean this?';
  const yes='Yes, I meant this',no='No, investigate';
  return `<div class="ci">${ciTop()}<button type="button" class="back" data-act="list">← All changes</button><article class="tile">
-  <div class="tile-head"><h3>${esc(item.title)}</h3><span class="tile-type">${esc(item.reviewType||'Behavior')}${typeIcon(item.reviewType||'Behavior')}</span></div>
+  <div class="tile-head"><h3>${esc(item.title)}</h3>${typeIcon(item.reviewType||'Behavior')}</div>
   <div class="tile-sub"><code>${esc(item.method||short(item.file))}</code></div>
   ${item.objective?`<div class="rule"><small>ACCEPTED CONSTRAINT</small><p>${esc(item.objective)}</p></div>`:item.concept?`<div class="rule boundary-context"><small>RECORDED REVIEW CONTEXT</small><p>${esc(item.concept)}</p></div>`:''}
   <div class="ba"><div><small>BEFORE</small>${esc(item.before)}</div><div class="after"><small>WITH THIS PR</small>${esc(item.after)}</div></div>
