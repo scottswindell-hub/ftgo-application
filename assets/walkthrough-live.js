@@ -16,6 +16,7 @@ const initialView=qs.get('view')==='checks'?'checks':'review';
 const state={desc:qs.get('view')==='desc',status:null,packet:null,packetDigest:null,summary:null,model:null,view:initialView,selected:initialView==='review'?(qs.get('item')||null):null,tab:'obj',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
 let pollTimer=null;
 let assessmentResize=null;
+let returnCommentId=/^[0-9]+$/.test(qs.get('comment')||'')?qs.get('comment'):null;
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const short=value=>String(value||'').split('/').pop();
@@ -27,6 +28,22 @@ function pullRequestUrl(){
  const parts=repo.split('/');
  return parts.length===2&&parts.every(Boolean)&&/^\d+$/.test(pr)
   ? `https://github.com/${parts.map(encodeURIComponent).join('/')}/pull/${encodeURIComponent(pr)}`:'#';
+}
+
+function returnToCommentUrl(){return returnCommentId&&pullRequestUrl()!=='#'?`${pullRequestUrl()}#issuecomment-${returnCommentId}`:null;}
+async function resolveReturnComment(){
+ if(returnCommentId||pullRequestUrl()==='#')return;
+ try{
+  for(let page=1;page<=10;page++){
+   const response=await fetch(`https://api.github.com/repos/${repo.split('/').map(encodeURIComponent).join('/')}/issues/${encodeURIComponent(pr)}/comments?per_page=100&page=${page}`,{headers:{Accept:'application/vnd.github+json'}});
+   if(!response.ok)throw Error('Comment lookup unavailable');
+   const comments=await response.json();
+   const comment=comments.find(row=>row.user?.login==='github-actions[bot]'&&row.body?.includes('<!-- codeintent-checks -->'));
+   if(comment){returnCommentId=String(comment.id);break;}
+   if(comments.length<100)break;
+  }
+ }catch(error){/* Keep return disabled rather than navigate to an unrelated destination. */}
+ render();
 }
 
 function routeUrl(view,selected=null){
@@ -246,7 +263,7 @@ function detailScreen(item){
    <section class="pane"><header><b>Intent</b><span>${esc(label(item.concept))}</span></header>${intent.length?`<pre>${lines(intent)}</pre>`:'<p class="evidence-empty">No intent comparison recorded for this item.</p>'}</section>
    <section class="pane"><header><b>Code</b><span>${esc(short(item.file))}</span></header>${item.comparison?.before?.text!=null&&item.comparison?.after?.text!=null?`<pre>${lines(sourceLines(item))}</pre>${item.comparison.complete?'':'<p class="evidence-empty">Recorded source excerpt; open more evidence for context.</p>'}`:'<p class="evidence-empty">No source comparison recorded for this item. Check the source evidence view for available patches.</p>'}</section>
   </div>
-  ${item.status==='unknown'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>Cannot be established. Review the analysis gap; assessments are unavailable.</b></div>':item.status==='watch'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>No response required while this rule is under evaluation.</b></div>':`<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>${esc(question)}</b><button type="button" class="choice yes" data-act="yes" aria-pressed="${answer==='yes'}">${esc(yes)}</button><button type="button" class="choice no" data-act="no" aria-pressed="${answer==='no'}">${esc(no)}</button><button type="button" class="choice return-github" data-act="return-github" ${answer&&pullRequestUrl()!=='#'?'':'disabled'}>Return to Github</button></div>`}
+  ${item.status==='unknown'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>Cannot be established. Review the analysis gap; assessments are unavailable.</b></div>':item.status==='watch'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>No response required while this rule is under evaluation.</b></div>':`<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>${esc(question)}</b><button type="button" class="choice yes" data-act="yes" aria-pressed="${answer==='yes'}">${esc(yes)}</button><button type="button" class="choice no" data-act="no" aria-pressed="${answer==='no'}">${esc(no)}</button><button type="button" class="choice return-github" data-act="return-github" ${answer&&returnToCommentUrl()?'':'disabled'}>Return to Github</button></div>`}
   <section class="compact-evidence" aria-labelledby="recorded-evidence-heading"><h4 id="recorded-evidence-heading">Recorded evidence</h4><div id="recorded-evidence">${resolution}${connections}${reviewExplorer.pane(item,state.packet,state.summary,checks(),{tab:state.tab,node:state.node,full:state.full,file:state.evidenceFile,methods:state.methods})}</div></section>
  ${saveBar()}</article></div>`;
 }
@@ -291,7 +308,7 @@ document.addEventListener('click',event=>{
  else if(action==='checks'){event.preventDefault();navigate('checks');}
  else if(target.dataset.row){state.evidenceFile='';state.node=null;state.full=false;navigate('review',target.dataset.row);scrollTo(0,0);}
  else if(action==='yes'||action==='no'){const item=items().find(i=>i.id===state.selected);if(item&&item.status!=='unknown'&&item.status!=='watch')state.drafts.set(state.selected,action);render();document.querySelector(`.desc-assessment [data-act="${action}"]`)?.classList.add('choice-selected');}
- else if(action==='return-github'){if(decision(state.selected)&&pullRequestUrl()!=='#')location.assign(pullRequestUrl());}
+ else if(action==='return-github'){if(decision(state.selected)&&returnToCommentUrl())location.assign(returnToCommentUrl());}
  else if(action==='undo'){state.drafts.clear();render();}
  else if(action==='submit'){
   const responses=[];
@@ -325,5 +342,5 @@ function setTheme(value){
 }
 setTheme(localStorage.getItem('codeintent-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'));
 theme.addEventListener('click',()=>{const next=document.documentElement.dataset.theme==='dark'?'light':'dark';localStorage.setItem('codeintent-theme',next);setTheme(next);});
-render();poll();
+render();poll();resolveReturnComment();
 })();
