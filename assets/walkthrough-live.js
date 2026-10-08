@@ -175,11 +175,7 @@ function intentLines(value){
  return lines;
 }
 function diffLines(before,after){return [...before.map(text=>['-',text]),...after.map(text=>['+',text])];}
-function sourceLines(item){
- const before=String(item.comparison?.before?.text||'Source comparison was not supplied.').split('\n');
- const after=String(item.comparison?.after?.text||'Source comparison was not supplied.').split('\n');
- return diffLines(before,after);
-}
+function sourceLines(item){return codeIntentSourceDiffLines(item.comparison);}
 function lines(rows){return rows.map(([mark,text])=>`<span class="${mark==='+'?'a':mark==='-'?'d':''}">${esc((mark||' ')+' '+text)}</span>`).join('');}
 function typeIcon(value){
  const type=['Bug','Architecture','Test','Standard','Business','Behavior'].includes(value)?value:'Behavior';

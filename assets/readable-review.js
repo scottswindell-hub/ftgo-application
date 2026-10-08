@@ -19,13 +19,17 @@ function comparisons(summary){
 function patchComparison(packet,file){
  const patch=packet?.source_diff?.content;
  if(!file||typeof patch!=='string')return null;
- const lines=patch.split('\n');let selected=false,before=[],after=[];
+ const lines=patch.split('\n');let selected=false,before=[],after=[],diffLines=[],added=false,removed=false;
  for(const line of lines){
   if(line.startsWith('diff --git ')){
    const match=line.match(/^diff --git a\/(.+) b\/(.+)$/);
    selected=Boolean(match&&(match[1]===file||match[2]===file));
    continue;
   }
+  if(selected&&line==='--- /dev/null')added=true;
+  if(selected&&line==='+++ /dev/null')removed=true;
+  if(selected&&line.startsWith('@@'))diffLines.push([' ',line]);
+  if(selected&&/^[ +\-]/.test(line)&&!line.startsWith('--- ')&&!line.startsWith('+++ '))diffLines.push([line[0],line.slice(1)]);
   if(!selected||line.startsWith('index ')||line.startsWith('new file ')||
      line.startsWith('deleted file ')||line.startsWith('--- ')||line.startsWith('+++ ')||
      line.startsWith('@@'))continue;
@@ -34,9 +38,9 @@ function patchComparison(packet,file){
   else if(line.startsWith(' ')){before.push(line.slice(1));after.push(line.slice(1));}
  }
  if(!before.length&&!after.length)return null;
- return {complete:true,file,method:'',
-  before:{text:before.join('\n')||'(file did not exist in the accepted baseline)'},
-  after:{text:after.join('\n')||'(file was removed in this revision)'},
+ return {complete:false,file,method:'',diffLines,
+  before:{text:added?'(file did not exist in the accepted baseline)':before.join('\n')},
+  after:{text:removed?'(file was removed in this revision)':after.join('\n')},
   qualification:'Exact changed hunk from the digest-verified PR source patch.'};
 }
 
@@ -86,10 +90,26 @@ function sourceComparison(packet,summary,row,flow,index){
  return patchComparison(packet,row.changed_source?.file||file);
 }
 
+function evidenceGap(flow){
+ const judgment=flow?.behavior_judgment||{};
+ return flow?.change_kind==='boundary_evidence_gap'||judgment.verdict==='gap'||judgment.answer==='insufficient_evidence'||
+  (flow?.findings||[]).some(row=>row.domain==='evidence_coverage'&&row.severity==='gap');
+}
+function modelFromEvidenceGaps(packet){
+ return (packet?.flows||[]).filter(evidenceGap).map(flow=>({
+  id:flow.id,kind:'change',status:'unknown',title:'Behavior could not be established',
+  concept:flow.boundary_id||flow.title,file:flow.source?.file||'',method:shortMethod(flow.method),
+  before:'Baseline behavior is not established by this comparison.',
+  after:'A behavior change cannot be established from the available evidence.',
+  summary:'Analysis has an evidence gap; this is not an established behavior change.',
+  detailSummary:'',connections:[],intentBefore:flowFacts(flow,'before'),intentAfter:flowFacts(flow,'after'),
+  comparison:patchComparison(packet,flow.source?.file),reviewType:'Behavior',groundingLabel:'RECORDED ANALYSIS GAP'
+ }));
+}
 function modelFromSemantics(packet,summary){
  const byFlow=new Map((packet?.flows||[]).map(flow=>[flow.id,flow]));
  const rows=summary?.intent_semantics?.status==='recorded'?summary.intent_semantics.explanations||[]:[];
- return rows.map((row,index)=>{
+ return rows.filter(row=>!(row.member_change_ids||[row.change_id]).some(id=>evidenceGap(byFlow.get(id)))).map((row,index)=>{
   const related=(row.member_change_ids||[row.change_id]).map(id=>byFlow.get(id)).filter(Boolean);
   const flow=related[0]||{};
   const paths=row.graph_path||[];
@@ -114,11 +134,12 @@ function modelFromSemantics(packet,summary){
  });
 }
 
-function modelFromNarrative(summary){
+function modelFromNarrative(summary,packet){
+ const gaps=new Set((packet?.flows||[]).filter(evidenceGap).map(flow=>flow.id));
  const narrative=summary?.behavior_narrative;
  if(narrative?.status!=='recorded')return [];
  const changes=narrative.packet?.changes||{};
- return (narrative.stories||[]).map((story,index)=>{
+ return (narrative.stories||[]).filter(story=>!(story.change_ids||[]).some(id=>gaps.has(id))).map((story,index)=>{
   const related=(story.change_ids||[]).map(id=>changes[id]).filter(Boolean);
   const change=related[0]||{},comparison=change.source_comparison||null;
   return {id:story.story_id||`narrative-${index}`,kind:'change',status:'review',
@@ -162,6 +183,7 @@ function publicJudgment(flow,checks){
 function modelFromGovernedFlows(packet,checks){
  const grouped=new Map();
  for(const flow of packet?.flows||[]){
+  if(evidenceGap(flow))continue;
   const judgment=publicJudgment(flow,checks);
   if(!judgment.question_id||!/^supported_boundary_/.test(judgment.status||''))continue;
   if(!grouped.has(judgment.question_id))grouped.set(judgment.question_id,[]);
@@ -249,7 +271,7 @@ function reviewFindingItems(packet,summary,items,checks){
 
 function codeIntentReviewModel(packet,summary,entries=[],checks=[]){
  const items=modelFromSemantics(packet,summary);
- const narrativeItems=modelFromNarrative(summary);
+ const narrativeItems=modelFromNarrative(summary,packet);
  const semanticStatus=summary?.intent_semantics?.status||'unavailable';
  const intentCheck=(checks||[]).find(check=>check.id==='intent_diff');
  const confirmedNoChange=semanticStatus==='no_changes'&&intentCheck?.state==='passed';
@@ -258,7 +280,7 @@ function codeIntentReviewModel(packet,summary,entries=[],checks=[]){
  const effective=items.length||confirmedNoChange?items:usingNarrative?narrativeItems:
   entryItems.length?entryItems:modelFromGovernedFlows(packet,checks);
  const unique=[];const seen=new Set();
- for(const item of effective){if(seen.has(item.id))continue;seen.add(item.id);unique.push(item);}
+ for(const item of [...modelFromEvidenceGaps(packet),...effective]){if(seen.has(item.id))continue;seen.add(item.id);unique.push(item);}
  for(const item of reviewFindingItems(packet,summary,unique,checks)){if(!seen.has(item.id)){seen.add(item.id);unique.push(item);}}
  const changes=unique.filter(item=>item.kind==='change'&&item.status!=='preserved');
  const constraints=unique.filter(item=>item.kind==='constraint'&&item.status!=='preserved');
@@ -296,10 +318,28 @@ function intentText(value){
  }
  return lines.join('\n')||'Not represented';
 }
-function comparisonMarkup(before,after,formatter){
- const block=(value,kind,mark)=>formatter(value).split('\n').map(line=>`<span class="${kind}">${mark} ${escapeHtml(line)}</span>`).join('');
- return `<pre class="rr-diff">${block(before,'rr-del','−')}<span class="rr-divider">  THIS REVISION</span>${block(after,'rr-add','+')}</pre>`;
+function sourceDiffLines(comparison){
+ if(comparison?.diffLines)return comparison.diffLines;
+ const split=text=>text===''?[]:String(text??'').split('\n');
+ const before=split(comparison?.before?.text),after=split(comparison?.after?.text);
+ // Refuse an oversized calculation rather than display a fabricated full replacement.
+ if((before.length+1)*(after.length+1)>1000000)return [[' ','Source comparison is too large for the compact diff. Open Source evidence.']];
+ const dp=Array.from({length:before.length+1},()=>new Uint32Array(after.length+1));
+ for(let i=before.length-1;i>=0;i--)for(let j=after.length-1;j>=0;j--)
+  dp[i][j]=before[i]===after[j]?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
+ const rows=[];let i=0,j=0;
+ while(i<before.length||j<after.length){
+  if(i<before.length&&j<after.length&&before[i]===after[j]){rows.push([' ',before[i++]]);j++;}
+  else if(i<before.length&&(j===after.length||dp[i+1][j]>=dp[i][j+1]))rows.push(['-',before[i++]]);
+  else rows.push(['+',after[j++]]);
+ }
+ return rows;
 }
+function comparisonMarkup(before,after,formatter){
+ const rows=sourceDiffLines({before:{text:formatter(before)},after:{text:formatter(after)}});
+ return `<pre class="rr-diff">${rows.map(([mark,text])=>`<span class="${mark==='-'?'rr-del':mark==='+'?'rr-add':''}">${mark} ${escapeHtml(text)}</span>`).join('')}</pre>`;
+}
+
 function codeText(comparison,side){return comparison?.[side]?.text||'Source comparison was not supplied for this intent change.';}
 function violationMarkup(item){
  // A rule violation is decided in a PR comment by one person with write access (codeintent-violations.yml).
@@ -322,7 +362,7 @@ function detailMarkup(item,state){
   <div class="rr-evidence ${item.intentBefore?.length||item.intentAfter?.length?'':'source-only'}">${item.intentBefore?.length||item.intentAfter?.length?`<section><header><b>Intent</b><span>${escapeHtml(words(item.concept))}</span></header>${comparisonMarkup(item.intentBefore,item.intentAfter,intentText)}</section>`:''}
   <section><header><b>Code</b><span title="${escapeHtml(item.file)}">${escapeHtml(shortFile(item.file))}</span></header>${comparisonMarkup(codeText(item.comparison,'before'),codeText(item.comparison,'after'),valueText)}</section></div>
   ${connections}<details class="rr-grounding"><summary>How this answer was produced</summary><p>${escapeHtml(item.qualification)}</p><p><code>${escapeHtml(item.file||'No source anchor supplied')}</code></p></details>
-  ${violationMarkup(item)}<footer><b>Did you mean this?</b><div><button type="button" data-rr-answer="yes" data-rr-id="${escapeHtml(item.id)}" aria-pressed="${answer==='yes'}">Yes, I meant this</button><button type="button" data-rr-answer="no" data-rr-id="${escapeHtml(item.id)}" aria-pressed="${answer==='no'}">No, investigate</button></div></footer>
+  ${violationMarkup(item)}${item.status==='unknown'?'<footer>Assessment is unavailable until the evidence gap is resolved.</footer>':`<footer><b>Did you mean this?</b><div><button type="button" data-rr-answer="yes" data-rr-id="${escapeHtml(item.id)}" aria-pressed="${answer==='yes'}">Yes, I meant this</button><button type="button" data-rr-answer="no" data-rr-id="${escapeHtml(item.id)}" aria-pressed="${answer==='no'}">No, investigate</button></div></footer>`}
  </article>`;
 }
 function codeIntentReviewMarkup(model,scope){
@@ -357,8 +397,9 @@ function renderCodeIntentReview(target,model,options){
  root.__readableReviewScope=options.scope;target.innerHTML=codeIntentReviewMarkup(model,options.scope);bindReadableReview(options.render);
 }
 
+root.codeIntentSourceDiffLines=sourceDiffLines;
 root.codeIntentReviewModel=codeIntentReviewModel;
 root.codeIntentReviewMarkup=codeIntentReviewMarkup;
 root.renderCodeIntentReview=renderCodeIntentReview;
-if(typeof module!=='undefined')module.exports={codeIntentReviewModel,codeIntentReviewMarkup};
+if(typeof module!=='undefined')module.exports={codeIntentReviewModel,codeIntentReviewMarkup,sourceDiffLines};
 })(typeof window!=='undefined'?window:globalThis);
