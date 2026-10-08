@@ -21,6 +21,11 @@ const label=value=>String(value||'').replace(/^FTGO-/,'').replaceAll('_',' ').re
 const checks=()=>state.status?.checks||state.status?.stages||[];
 const items=()=>state.model?[...state.model.changes,...state.model.constraints]:[];
 const decision=id=>state.drafts.get(id)||state.submitted.get(id)||'';
+function pullRequestUrl(){
+ const parts=repo.split('/');
+ return parts.length===2&&parts.every(Boolean)&&/^\d+$/.test(pr)
+  ? `https://github.com/${parts.map(encodeURIComponent).join('/')}/pull/${encodeURIComponent(pr)}`:'#';
+}
 
 function routeUrl(view,selected=null){
  const url=new URL(location.href);
@@ -204,7 +209,7 @@ function listScreen(){
  if(!state.model){
   const finished=state.status?.state==='completed';
   const failures=checks().filter(check=>check.state==='error'||check.state==='failed');
-  if(finished||state.error)return `<div class="ci">${ciTop()}<div class="error-box" role="status"><h2>Review evidence unavailable</h2><p>${esc(state.error||(failures.length?'Analysis finished with errors; review evidence could not be produced.':'Analysis finished without a recorded review artifact.'))}</p>${failures.length?`<ul>${failures.map(check=>`<li><b>${esc(check.label||check.id)}</b>: ${esc(check.detail||check.summary||'Analysis unavailable')}</li>`).join('')}</ul>`:''}<button type="button" class="btn" data-act="checks">View checks</button></div></div>`;
+  if(finished||state.error)return `<div class="ci">${ciTop()}<div class="error-box" role="status"><h2>Review evidence unavailable</h2><p>${esc(state.error||(failures.length?'Analysis finished with errors; review evidence could not be produced.':'Analysis finished without a recorded review artifact.'))}</p>${failures.length?`<ul>${failures.map(check=>`<li><b>${esc(check.label||check.id)}</b>: ${esc(check.detail||check.summary||'Analysis unavailable')}</li>`).join('')}</ul>`:''}<a class="btn" href="${esc(pullRequestUrl())}">Back to PR</a></div></div>`;
   return `<div class="ci">${ciTop()}<div class="loading">Waiting for recorded review evidence…</div></div>`;
  }
  const all=items();
@@ -221,7 +226,7 @@ function listScreen(){
  const sections=[section('change','Did you intend these behavioral changes?'),section('constraint','Did you mean to change these constraints?')].filter(Boolean);
  return `<div class="ci findings-review section-count-${sections.length}">${ciTop()}<div class="findings-sections">${sections.join('')}</div>${acceptanceNotice()}${summaryNotice()}</div>`;
 }
-function ciTop(item=null){return `<div class="ci-top"><b>CodeIntent</b><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="${esc(routeUrl('checks'))}" data-act="checks">Pull request #${esc(pr||'—')}</a><span aria-hidden="true">/</span>${item?`<a href="${esc(routeUrl('review'))}" data-act="list">Review changes</a><span aria-hidden="true">/</span><span aria-current="page">${esc(item.title||'Review item')}</span>`:'<span aria-current="page">Review changes</span>'}</nav><span class="sp"></span><a class="btn" href="${esc(routeUrl('checks'))}" data-act="checks">Pipeline checks</a></div>`;}
+function ciTop(item=null){return `<div class="ci-top"><b>CodeIntent</b><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="${esc(pullRequestUrl())}">Pull request #${esc(pr||'—')}</a><span aria-hidden="true">/</span>${item?`<a href="${esc(routeUrl('review'))}" data-act="list">Review changes</a><span aria-hidden="true">/</span><span aria-current="page">${esc(item.title||'Review item')}</span>`:'<span aria-current="page">Review changes</span>'}</nav><span class="sp"></span><a class="btn" href="${esc(pullRequestUrl())}">Back to PR</a></div>`;}
 function detailScreen(item){
  const answer=decision(item.id),intent=diffLines(intentLines(item.intentBefore),intentLines(item.intentAfter));
  const connections=item.connections?.length?`<div class="holon"><b>Connected governed outcomes</b><ul>${item.connections.map(connection=>`<li><b>${esc(connection.title)}</b> · ${esc(connection.detail)}</li>`).join('')}</ul></div>`:'';
