@@ -12,10 +12,13 @@ import static io.eventuate.tram.commands.consumer.CommandHandlerReplyBuilder.wit
 
 public class ConsumerServiceCommandHandlers  {
 
+  private static final org.slf4j.Logger auditLog = org.slf4j.LoggerFactory.getLogger("audit");
+
   @Autowired
   private ConsumerService consumerService;
 
   public CommandHandlers commandHandlers() {
+    auditLog.info("commandHandlers called");
     return SagaCommandHandlersBuilder
               .fromChannel("consumerService")
               .onMessage(ValidateOrderByConsumer.class, this::validateOrderForConsumer)

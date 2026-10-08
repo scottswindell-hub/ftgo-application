@@ -10,6 +10,8 @@ import net.chrisrichardson.ftgo.restaurantservice.events.RestaurantMenuRevised;
 
 public class OrderEventConsumer {
 
+  private static final org.slf4j.Logger auditLog = org.slf4j.LoggerFactory.getLogger("audit");
+
   private OrderService orderService;
 
   public OrderEventConsumer(OrderService orderService) {
@@ -17,6 +19,7 @@ public class OrderEventConsumer {
   }
 
   public DomainEventHandlers domainEventHandlers() {
+    auditLog.info("domainEventHandlers called");
     return DomainEventHandlersBuilder
             .forAggregateType("net.chrisrichardson.ftgo.restaurantservice.domain.Restaurant")
             .onEvent(RestaurantCreated.class, this::createMenu)
@@ -31,6 +34,7 @@ public class OrderEventConsumer {
   }
 
   public void reviseMenu(DomainEventEnvelope<RestaurantMenuRevised> de) {
+    auditLog.info("reviseMenu called");
     String restaurantIds = de.getAggregateId();
     long id = Long.parseLong(restaurantIds);
     orderService.reviseMenu(id, RestaurantEventMapper.toMenuItems(de.getEvent().getMenu().getMenuItems()));

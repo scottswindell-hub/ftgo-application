@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 public class DeliveryServiceController {
 
+  private static final org.slf4j.Logger auditLog = org.slf4j.LoggerFactory.getLogger("audit");
+
   private DeliveryService deliveryService;
 
   public DeliveryServiceController(DeliveryService deliveryService) {
@@ -18,11 +20,13 @@ public class DeliveryServiceController {
 
   @RequestMapping(path="/couriers/{courierId}/availability", method= RequestMethod.POST)
   public void updateCourierLocation(@PathVariable long courierId, @RequestBody CourierAvailability availability) {
+    auditLog.info("updateCourierLocation called");
     deliveryService.updateAvailability(courierId, availability.isAvailable());
   }
 
   @RequestMapping(path="/deliveries/{deliveryId}", method= RequestMethod.GET)
   public ResponseEntity<DeliveryStatus> getDeliveryStatus(@PathVariable long deliveryId) {
+    auditLog.info("getDeliveryStatus called");
     return deliveryService.getDeliveryInfo(deliveryId).map(ds -> new ResponseEntity<>(ds, HttpStatus.OK)).orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
   }
 

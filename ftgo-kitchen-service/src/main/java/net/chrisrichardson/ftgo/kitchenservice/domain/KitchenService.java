@@ -13,6 +13,8 @@ import java.util.Map;
 
 public class KitchenService {
 
+  private static final org.slf4j.Logger auditLog = org.slf4j.LoggerFactory.getLogger("audit");
+
   @Autowired
   private TicketRepository ticketRepository;
 
@@ -23,17 +25,20 @@ public class KitchenService {
   private RestaurantRepository restaurantRepository;
 
   public void createMenu(long id, RestaurantMenu menu) {
+    auditLog.info("createMenu called");
     Restaurant restaurant = new Restaurant(id, menu.getMenuItems());
     restaurantRepository.save(restaurant);
   }
 
   public void reviseMenu(long ticketId, RestaurantMenu revisedMenu) {
+    auditLog.info("reviseMenu called");
     Restaurant restaurant = restaurantRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
     restaurant.reviseMenu(revisedMenu);
   }
 
   public Ticket createTicket(long restaurantId, Long ticketId, TicketDetails ticketDetails) {
+    auditLog.info("createTicket called");
     ResultWithDomainEvents<Ticket, TicketDomainEvent> rwe = Ticket.create(restaurantId, ticketId, ticketDetails);
     ticketRepository.save(rwe.result);
     domainEventPublisher.publish(rwe.result, rwe.events);
@@ -42,6 +47,7 @@ public class KitchenService {
 
   @Transactional
   public void accept(long ticketId, LocalDateTime readyBy) {
+    auditLog.info("accept called");
     Ticket ticket = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
     List<TicketDomainEvent> events = ticket.accept(readyBy);
@@ -49,6 +55,7 @@ public class KitchenService {
   }
 
   public void confirmCreateTicket(Long ticketId) {
+    auditLog.info("confirmCreateTicket called");
     Ticket ro = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
     List<TicketDomainEvent> events = ro.confirmCreate();
@@ -56,6 +63,7 @@ public class KitchenService {
   }
 
   public void cancelCreateTicket(Long ticketId) {
+    auditLog.info("cancelCreateTicket called");
     Ticket ro = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
     List<TicketDomainEvent> events = ro.cancelCreate();
@@ -64,6 +72,7 @@ public class KitchenService {
 
 
   public void cancelTicket(long restaurantId, long ticketId) {
+    auditLog.info("cancelTicket called");
     Ticket ticket = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
     // TODO - verify restaurant id
@@ -73,6 +82,7 @@ public class KitchenService {
 
 
   public void confirmCancelTicket(long restaurantId, long ticketId) {
+    auditLog.info("confirmCancelTicket called");
     Ticket ticket = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
     // TODO - verify restaurant id
@@ -81,6 +91,7 @@ public class KitchenService {
   }
 
   public void undoCancel(long restaurantId, long ticketId) {
+    auditLog.info("undoCancel called");
     Ticket ticket = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
     // TODO - verify restaurant id
@@ -90,6 +101,7 @@ public class KitchenService {
   }
 
   public void beginReviseOrder(long restaurantId, Long ticketId, List<RevisedOrderLineItem> revisedOrderLineItems) {
+    auditLog.info("beginReviseOrder called");
     Ticket ticket = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
     // TODO - verify restaurant id
@@ -99,6 +111,7 @@ public class KitchenService {
   }
 
   public void undoBeginReviseOrder(long restaurantId, Long ticketId) {
+    auditLog.info("undoBeginReviseOrder called");
     Ticket ticket = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
     // TODO - verify restaurant id
@@ -107,6 +120,7 @@ public class KitchenService {
   }
 
   public void confirmReviseTicket(long restaurantId, long ticketId, List<RevisedOrderLineItem> revisedOrderLineItems) {
+    auditLog.info("confirmReviseTicket called");
     Ticket ticket = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
     // TODO - verify restaurant id

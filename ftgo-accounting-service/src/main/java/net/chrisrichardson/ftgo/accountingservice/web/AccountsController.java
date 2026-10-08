@@ -16,11 +16,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping(path="/accounts")
 public class AccountsController {
 
+  private static final org.slf4j.Logger auditLog = org.slf4j.LoggerFactory.getLogger("audit");
+
   @Autowired
   private AggregateRepository<Account, AccountCommand> accountRepository;
 
   @RequestMapping(path="/{accountId}", method= RequestMethod.GET)
   public ResponseEntity<GetAccountResponse> getAccount(@PathVariable String accountId) {
+    auditLog.info("getAccount called");
        try {
           return new ResponseEntity<>(new GetAccountResponse(accountId), HttpStatus.OK);
        } catch (EntityNotFoundException e) {
