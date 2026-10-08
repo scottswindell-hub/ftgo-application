@@ -275,6 +275,8 @@ jobs:
               fi
               echo "[Open the live report ↗]($DASHBOARD_URL)" >> "$GITHUB_STEP_SUMMARY"
               printf '%s' "$document" > /tmp/codeintent-status.json
+              comment_id=$(gh api "repos/$PR_FULL_REPO/issues/$PR_NUMBER/comments" --paginate --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- codeintent-checks -->"))) | .id' | head -1 || true)
+              export CODEINTENT_COMMENT_ID="$comment_id"
               python3 <<'PY' > /tmp/codeintent-comment.md
           """One compact GitHub comment over native results and separate acceptance policy."""
           from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
@@ -314,6 +316,11 @@ jobs:
           def render_run_comment(document, report_url):
               if urlsplit(report_url).scheme not in {'http','https'}:
                   raise ValueError('Report URL must be HTTP(S)')
+              comment_id=str(document.get('github_comment_id') or '')
+              if comment_id.isdigit():
+                  url=urlsplit(report_url)
+                  query=[(key,value) for key,value in parse_qsl(url.query,keep_blank_values=True) if key!='comment']
+                  report_url=urlunsplit((url.scheme,url.netloc,url.path,urlencode([*query,('comment',comment_id)]),url.fragment))
               checks=document.get('checks') or document.get('stages') or []
               verdict=document.get('verdict')
               acceptance=document.get('acceptance') or {}
@@ -367,9 +374,9 @@ jobs:
           import json, os
           with open('/tmp/codeintent-status.json') as stream:
               doc=json.load(stream)
+          doc['github_comment_id']=os.environ.get('CODEINTENT_COMMENT_ID','')
           print(render_run_comment(doc, os.environ['DASHBOARD_URL']), end='')
           PY
-              comment_id=$(gh api "repos/$PR_FULL_REPO/issues/$PR_NUMBER/comments" --paginate --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- codeintent-checks -->"))) | .id' | head -1 || true)
               if [ -n "$comment_id" ]; then
                 gh api --method PATCH "repos/$PR_FULL_REPO/issues/comments/$comment_id" -F body=@/tmp/codeintent-comment.md >/dev/null || echo "::warning::Could not update governance comment."
               fi
