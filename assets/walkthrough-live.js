@@ -15,6 +15,7 @@ const {ANALYSIS,REVIEW}=walkthroughPipeline;
 const initialView=qs.get('view')==='checks'?'checks':'review';
 const state={desc:qs.get('view')==='desc',status:null,packet:null,packetDigest:null,summary:null,model:null,view:initialView,selected:initialView==='review'?(qs.get('item')||null):null,tab:'obj',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
 let pollTimer=null;
+let assessmentResize=null;
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const short=value=>String(value||'').split('/').pop();
@@ -235,7 +236,7 @@ function detailScreen(item){
  const interpretation=`<div class="summary"><small>${esc(item.groundingLabel||'RECORDED PIPELINE EVIDENCE')}</small><p>${esc(item.detailSummary||item.summary)}</p></div>`;
  const question='Did you mean this?';
  const yes='Yes, I meant this',no='No, investigate';
- return `<div class="ci"><article class="tile">
+ return `<div class="ci desc-page"><article class="tile">
   <div class="tile-head"><h3>${esc(item.title)}</h3>${typeIcon(item.reviewType||'Behavior')}</div>
   <div class="tile-sub"><code>${esc(item.method||short(item.file))}</code></div>
   ${item.objective?`<div class="rule"><small>ACCEPTED CONSTRAINT</small><p>${esc(item.objective)}</p></div>`:item.concept?`<div class="rule boundary-context"><small>RECORDED REVIEW CONTEXT</small><p>${esc(item.concept)}</p></div>`:''}
@@ -245,7 +246,7 @@ function detailScreen(item){
    <section class="pane"><header><b>Intent</b><span>${esc(label(item.concept))}</span></header>${intent.length?`<pre>${lines(intent)}</pre>`:'<p class="evidence-empty">No intent comparison recorded for this item.</p>'}</section>
    <section class="pane"><header><b>Code</b><span>${esc(short(item.file))}</span></header>${item.comparison?.before?.text!=null&&item.comparison?.after?.text!=null?`<pre>${lines(sourceLines(item))}</pre>${item.comparison.complete?'':'<p class="evidence-empty">Recorded source excerpt; open more evidence for context.</p>'}`:'<p class="evidence-empty">No source comparison recorded for this item. Check the source evidence view for available patches.</p>'}</section>
   </div>
-  ${item.status==='unknown'?'<div class="ask"><b>Cannot be established. Review the analysis gap; assessments are unavailable.</b></div>':item.status==='watch'?'<div class="ask"><b>No response required while this rule is under evaluation.</b></div>':`<div class="ask"><b>${esc(question)}</b><button type="button" class="choice yes" data-act="yes" aria-pressed="${answer==='yes'}">${esc(yes)}</button><button type="button" class="choice no" data-act="no" aria-pressed="${answer==='no'}">${esc(no)}</button></div>`}
+  ${item.status==='unknown'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>Cannot be established. Review the analysis gap; assessments are unavailable.</b></div>':item.status==='watch'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>No response required while this rule is under evaluation.</b></div>':`<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>${esc(question)}</b><button type="button" class="choice yes" data-act="yes" aria-pressed="${answer==='yes'}">${esc(yes)}</button><button type="button" class="choice no" data-act="no" aria-pressed="${answer==='no'}">${esc(no)}</button></div>`}
   <section class="compact-evidence" aria-labelledby="recorded-evidence-heading"><h4 id="recorded-evidence-heading">Recorded evidence</h4><div id="recorded-evidence">${resolution}${connections}${reviewExplorer.pane(item,state.packet,state.summary,checks(),{tab:state.tab,node:state.node,full:state.full,file:state.evidenceFile,methods:state.methods})}</div></section>
  ${saveBar()}</article></div>`;
 }
@@ -267,6 +268,14 @@ function render(){
  }else if(state.view==='checks')screen.innerHTML=checksScreen();
  else if(state.selected){const item=items().find(value=>value.id===state.selected);screen.innerHTML=item?detailScreen(item):listScreen();}
  else screen.innerHTML=listScreen();
+ assessmentResize?.disconnect();
+ const assessment=screen.querySelector('.desc-assessment');
+ const desc=screen.querySelector('.desc-page');
+ document.documentElement.style.removeProperty('scroll-padding-bottom');
+ if(assessment&&desc){
+  const reserve=()=>{const height=assessment.getBoundingClientRect().height+32;desc.style.paddingBottom=height+'px';document.documentElement.style.scrollPaddingBottom=height+'px';};
+  assessmentResize=new ResizeObserver(reserve);assessmentResize.observe(assessment);reserve();
+ }
  legacyMethodExplorer.hydrate();
 }
 
