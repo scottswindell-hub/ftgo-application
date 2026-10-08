@@ -4,7 +4,6 @@ import net.chrisrichardson.ftgo.common.Address;
 import net.chrisrichardson.ftgo.deliveryservice.api.web.ActionInfo;
 import net.chrisrichardson.ftgo.deliveryservice.api.web.DeliveryInfo;
 import net.chrisrichardson.ftgo.deliveryservice.api.web.DeliveryStatus;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -73,15 +72,6 @@ public class DeliveryService {
 
   void noteUnavailable(long courierId) {
     courierRepository.findOrCreateCourier(courierId).noteUnavailable();
-  }
-
-  private Courier findOrCreateCourier(long courierId) {
-    Courier courier = Courier.create(courierId);
-    try {
-      return courierRepository.save(courier);
-    } catch (DuplicateKeyException e) {
-      return courierRepository.findById(courierId).get();
-    }
   }
 
   @Transactional
