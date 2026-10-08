@@ -94,4 +94,21 @@ public class DeliveryServiceTest {
     assertEquals(DeliveryServiceTestData.DELIVERY_ADDRESS, actions.get(1).getAddress());
   }
 
+  @Test
+  public void shouldCancelDeliveryAndRemoveCourierActions() {
+    Delivery delivery = Delivery.create(ORDER_ID, RESTAURANT_ID,
+            DeliveryServiceTestData.PICKUP_ADDRESS, DeliveryServiceTestData.DELIVERY_ADDRESS);
+    delivery.schedule(READY_BY, COURIER_ID);
+    courier.addAction(Action.makePickup(ORDER_ID, DeliveryServiceTestData.PICKUP_ADDRESS, READY_BY));
+    courier.addAction(Action.makeDropoff(ORDER_ID, DeliveryServiceTestData.DELIVERY_ADDRESS, READY_BY.plusMinutes(30)));
+    when(deliveryRepository.findById(ORDER_ID)).thenReturn(Optional.of(delivery));
+    when(courierRepository.findById(COURIER_ID)).thenReturn(Optional.of(courier));
+
+    deliveryService.cancelDelivery(ORDER_ID);
+
+    assertEquals(DeliveryState.CANCELLED, delivery.getState());
+    assertNull(delivery.getAssignedCourier());
+    assertTrue(courier.actionsForDelivery(ORDER_ID).isEmpty());
+  }
+
 }

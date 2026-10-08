@@ -42,23 +42,33 @@ public class DeliveryService {
     // Stupid implementation
 
     List<Courier> couriers = courierRepository.findAllAvailable();
-    Courier courier = couriers.get(random.nextInt(couriers.size()));
-    courier.addAction(Action.makePickup(delivery.getId(), delivery.getPickupAddress(), readyBy));
-    courier.addAction(Action.makeDropoff(delivery.getId(), delivery.getDeliveryAddress(), readyBy.plusMinutes(30)));
+    Courier courier = selectCourier(couriers);
+    addDeliveryActions(courier, delivery, readyBy);
 
     delivery.schedule(readyBy, courier.getId());
+  }
 
+  private Courier selectCourier(List<Courier> couriers) {
+    return couriers.get(random.nextInt(couriers.size()));
+  }
+
+  private void addDeliveryActions(Courier courier, Delivery delivery, LocalDateTime readyBy) {
+    courier.addAction(Action.makePickup(delivery.getId(), delivery.getPickupAddress(), readyBy));
+    courier.addAction(Action.makeDropoff(delivery.getId(), delivery.getDeliveryAddress(), readyBy.plusMinutes(30)));
   }
 
   public void cancelDelivery(long orderId) {
     Delivery delivery = deliveryRepository.findById(orderId).get();
     Long assignedCourierId = delivery.getAssignedCourier();
     delivery.cancel();
+    removeDeliveryActions(delivery.getId(), assignedCourierId);
+  }
+
+  private void removeDeliveryActions(long deliveryId, Long assignedCourierId) {
     if (assignedCourierId != null) {
       Courier courier = courierRepository.findById(assignedCourierId).get();
-      courier.cancelDelivery(delivery.getId());
+      courier.cancelDelivery(deliveryId);
     }
-
   }
 
 
