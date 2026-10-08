@@ -129,8 +129,7 @@ function verdict(){return state.status?.verdict||'';}
 function githubHead(){
  const branch=sha.slice(0,12)||'candidate';
  return `<div class="gh-head"><h1>Review FTGO changes <span>#${esc(pr||'—')}</span></h1>
-  <div class="gh-meta"><span class="pill">Open</span><span><b>${esc(repo.split('/')[0]||'repository owner')}</b> wants to merge into <code>main</code> from <code>${esc(branch)}</code></span></div>
-  <div class="tabs"><span>Conversation</span><span>Commits</span><span class="on">Checks</span><span>Files changed</span></div></div>`;
+  <div class="gh-meta"><span class="pill">Open</span><span><b>${esc(repo.split('/')[0]||'repository owner')}</b> wants to merge into <code>main</code> from <code>${esc(branch)}</code></span></div></div>`;
 }
 function checksScreen(){
  const analysis=walkthroughPipeline.phase(checks(),ANALYSIS,'Waiting for source analysis');
@@ -188,7 +187,6 @@ function row(item,kind){
  const type=String(item.reviewType||'Behavior');
  return `<button type="button" class="row ${answer||''} ${submitted?'submitted':''}" data-row="${esc(item.id)}"><span class="t"><b>${esc(item.title||item.summary)}</b>${item.summary?`<span class="row-summary">${esc(item.summary)}</span>`:''}<small class="meta">${esc(item.concept||item.file||item.groundingLabel||'Recorded review evidence')}${item.objective?' · accepted constraint':''}</small></span><span class="row-side"><span class="type-name">${esc(type)}</span>${typeIcon(type)}${status?`<span class="st">${esc(status)}</span>`:''}</span></button>`;
 }
-function coverage(){return reviewExplorer.coverage(state.packet,state.summary,checks());}
 function saveBar(){return `<div class="actions rx-save"><span>${state.drafts.size} staged assessment${state.drafts.size===1?'':'s'} · governance changes are handed to protected GitHub Actions.</span><button type="button" class="btn" data-act="undo" ${state.drafts.size?'':'disabled'}>Discard staged</button><button type="button" class="btn blue" data-act="submit" ${state.drafts.size?'':'disabled'}>Continue to governance actions</button></div>`;}
 function summaryNotice(){
  const summary=state.summary?.intent_semantics;
@@ -201,13 +199,13 @@ function listScreen(){
   if(finished||state.error)return `<div class="ci">${ciTop()}<div class="error-box" role="status"><h2>Review evidence unavailable</h2><p>${esc(state.error||(failures.length?'Analysis finished with errors; review evidence could not be produced.':'Analysis finished without a recorded review artifact.'))}</p>${failures.length?`<ul>${failures.map(check=>`<li><b>${esc(check.label||check.id)}</b>: ${esc(check.detail||check.summary||'Analysis unavailable')}</li>`).join('')}</ul>`:''}<button type="button" class="btn" data-act="checks">View checks</button></div></div>`;
   return `<div class="ci">${ciTop()}<div class="loading">Waiting for recorded review evidence…</div></div>`;
  }
- const all=items(),unknown=all.filter(i=>i.status==='unknown').length;
+ const all=items();
  const complete=(state.model.semanticStatus==='no_changes'||state.model.noGovernedChanges)&&verdict()==='PASS';
  const empty=complete?'No change to evaluated governed behavior was established.':'Review evidence is incomplete. An empty list does not establish unchanged behavior.';
  return `<div class="ci">${ciTop()}<h2>Review these changes</h2><p class="review-lede">Review the recorded behavior changes and their supporting evidence.</p>
  ${!all.length?(complete?'<div class="happy"><span class="face" aria-hidden="true">✓</span><h3>No governed changes require review</h3><p>Analysis passed. No review response is needed for this change.</p></div>':`<p class="empty-list">${empty}</p>`):''}${acceptanceNotice()}
  ${[['change','Behavioral review tiles'],['constraint','Constraint violation tiles']].map(([kind,title])=>{const group=all.filter(i=>i.status!=='unknown'&&i.kind===kind);return `<h3 class="review-section-title">${title} · ${group.length}</h3><div class="rows">${group.length?group.map(i=>row(i,kind)).join(''):'<p class="empty-list">No established items in this group.</p>'}</div>`;}).join('')}
- ${unknown?`<details class="rx-coverage review-gaps"><summary><b>Analysis coverage · ${unknown} unresolved items</b></summary><p>These are incomplete analyses or unresolved evidence, not established findings. They cannot be assessed as expected.</p>${all.filter(i=>i.status==='unknown').map(i=>row(i,'unknown')).join('')}</details>`:''}${summaryNotice()}${coverage()}<details class="rx-coverage"><summary><b>Governance model for this PR</b> · workflows, obligations and method evidence</summary>${reviewExplorer.governanceCatalog(state.packet)}</details>${saveBar()}${provenance()}</div>`;
+ ${summaryNotice()}${saveBar()}${provenance()}</div>`;
 }
 function ciTop(){return `<div class="ci-top"><b>CodeIntent</b><a href="#" data-act="checks">← Pull request #${esc(pr||'—')}</a><span class="sp"></span><button type="button" class="btn" data-act="checks">Pipeline checks</button></div>`;}
 function detailScreen(item){

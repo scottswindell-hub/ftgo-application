@@ -53,8 +53,6 @@ code{font:12px var(--mono)}
 .gh-head h1 span{color:var(--muted)}
 .gh-meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 18px;color:var(--muted)}
 .pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:4px 12px;font-weight:600;font-size:13px;color:#fff;background:var(--ok)}
-.tabs{display:flex;gap:18px;border-bottom:1px solid var(--line);margin-bottom:16px;font-size:13.5px}
-.tabs span{padding:8px 2px;color:var(--muted)}.tabs span.on{color:var(--ink);font-weight:600;border-bottom:2px solid #fd8c73}
 .merge{border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .merge-top{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-bottom:1px solid var(--line)}
 .merge-top .ic{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;flex:none}
@@ -224,7 +222,6 @@ details.quiet summary{cursor:pointer;color:var(--muted)}details.quiet summary b{
 .evidence-empty{padding:10px 12px;margin:0;color:var(--muted);font-size:12px}
 .compact-evidence{margin:8px 16px 16px}
 .compact-evidence>button{width:100%;text-align:left;background:var(--sunk)}
-.review-gaps .row{margin-top:8px}
 @media(max-width:650px){.row-side{max-width:110px}.tile-type{margin-left:0}.diffs{grid-template-columns:1fr}}
 
 .review-section-title{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:24px 0 8px}
