@@ -36,6 +36,17 @@ public class DeliveryService {
     deliveryRepository.save(Delivery.create(orderId, restaurantId, restaurant.getAddress(), deliveryAddress));
   }
 
+  public void cancelDelivery(long orderId) {
+    Delivery delivery = deliveryRepository.findById(orderId).get();
+    Long assignedCourierId = delivery.getAssignedCourier();
+    delivery.cancel();
+    if (assignedCourierId != null) {
+      Courier courier = courierRepository.findById(assignedCourierId).get();
+      courier.cancelDelivery(delivery.getId());
+    }
+
+  }
+
   public void scheduleDelivery(long orderId, LocalDateTime readyBy) {
     Delivery delivery = deliveryRepository.findById(orderId).get();
 
@@ -49,18 +60,6 @@ public class DeliveryService {
     delivery.schedule(readyBy, courier.getId());
 
   }
-
-  public void cancelDelivery(long orderId) {
-    Delivery delivery = deliveryRepository.findById(orderId).get();
-    Long assignedCourierId = delivery.getAssignedCourier();
-    delivery.cancel();
-    if (assignedCourierId != null) {
-      Courier courier = courierRepository.findById(assignedCourierId).get();
-      courier.cancelDelivery(delivery.getId());
-    }
-
-  }
-
 
 
   // notePickedUp
