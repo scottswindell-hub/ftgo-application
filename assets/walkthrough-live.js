@@ -182,7 +182,12 @@ function row(item,kind){
 function coverage(){return reviewExplorer.coverage(state.packet,state.summary,checks());}
 function saveBar(){return `<div class="actions rx-save"><span>${state.drafts.size} staged assessment${state.drafts.size===1?'':'s'} · governance changes are handed to protected GitHub Actions.</span><button type="button" class="btn" data-act="undo" ${state.drafts.size?'':'disabled'}>Discard staged</button><button type="button" class="btn blue" data-act="submit" ${state.drafts.size?'':'disabled'}>Continue to governance actions</button></div>`;}
 function listScreen(){
- if(!state.model)return `<div class="ci">${ciTop()}<div class="loading">Waiting for recorded review evidence…</div></div>`;
+ if(!state.model){
+  const finished=state.status?.state==='completed';
+  const failures=checks().filter(check=>check.state==='error'||check.state==='failed');
+  if(finished||state.error)return `<div class="ci">${ciTop()}<div class="error-box" role="status"><h2>Review evidence unavailable</h2><p>${esc(state.error||(failures.length?'Analysis finished with errors; review evidence could not be produced.':'Analysis finished without a recorded review artifact.'))}</p>${failures.length?`<ul>${failures.map(check=>`<li><b>${esc(check.label||check.id)}</b>: ${esc(check.detail||check.summary||'Analysis unavailable')}</li>`).join('')}</ul>`:''}<button type="button" class="btn" data-act="checks">View checks</button></div></div>`;
+  return `<div class="ci">${ciTop()}<div class="loading">Waiting for recorded review evidence…</div></div>`;
+ }
  const all=items(),unknown=all.filter(i=>i.status==='unknown').length;
  const complete=(state.model.semanticStatus==='no_changes'||state.model.noGovernedChanges)&&verdict()==='PASS';
  const empty=complete?'No change to evaluated governed behavior was established.':'Review evidence is incomplete. An empty list does not establish unchanged behavior.';
