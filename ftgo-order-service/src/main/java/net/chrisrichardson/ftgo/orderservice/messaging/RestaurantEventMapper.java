@@ -5,6 +5,7 @@ import net.chrisrichardson.ftgo.restaurantservice.events.Address;
 import net.chrisrichardson.ftgo.restaurantservice.events.MenuItem;
 import org.jetbrains.annotations.NotNull;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -12,7 +13,12 @@ public class RestaurantEventMapper {
 
   @NotNull
   public static List<MenuItem> fromMenuItems(List<net.chrisrichardson.ftgo.orderservice.domain.MenuItem> menuItems) {
-    return menuItems.stream().map(mi -> new MenuItem().withId(mi.getId()).withName(mi.getName()).withPrice(mi.getPrice().asString())).collect(Collectors.toList());
+    return menuItems.stream()
+            .map(mi -> new MenuItem()
+                    .withId(mi.getId())
+                    .withName(mi.getName())
+                    .withPrice(toMinorUnits(mi.getPrice())))
+            .collect(Collectors.toList());
   }
 
   public static Address fromAddress(net.chrisrichardson.ftgo.common.Address a) {
@@ -20,7 +26,18 @@ public class RestaurantEventMapper {
   }
 
   public static List<net.chrisrichardson.ftgo.orderservice.domain.MenuItem> toMenuItems(List<MenuItem> menuItems) {
-    return menuItems.stream().map(mi -> new net.chrisrichardson.ftgo.orderservice.domain.MenuItem(mi.getId(), mi.getName(), new Money(mi.getPrice()))).collect(Collectors.toList());
+    return menuItems.stream()
+            .map(mi -> new net.chrisrichardson.ftgo.orderservice.domain.MenuItem(
+                    mi.getId(), mi.getName(), fromMinorUnits(mi.getPrice())))
+            .collect(Collectors.toList());
+  }
+
+  private static String toMinorUnits(Money price) {
+    return Long.toString(price.asLong());
+  }
+
+  private static Money fromMinorUnits(String price) {
+    return new Money(new BigDecimal(price).movePointLeft(2));
   }
 
 }
