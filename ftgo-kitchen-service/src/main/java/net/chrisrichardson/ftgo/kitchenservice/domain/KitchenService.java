@@ -22,6 +22,78 @@ public class KitchenService {
   @Autowired
   private RestaurantRepository restaurantRepository;
 
+  public void cancelTicket(long restaurantId, long ticketId) {
+    Ticket ticket = findTicket(ticketId);
+    // TODO - verify restaurant id
+    List<TicketDomainEvent> events = ticket.cancel();
+    publish(ticket, events);
+  }
+
+  public void confirmCancelTicket(long restaurantId, long ticketId) {
+    Ticket ticket = findTicket(ticketId);
+    // TODO - verify restaurant id
+    List<TicketDomainEvent> events = ticket.confirmCancel();
+    publish(ticket, events);
+  }
+
+  public void undoCancel(long restaurantId, long ticketId) {
+    Ticket ticket = findTicket(ticketId);
+    // TODO - verify restaurant id
+    List<TicketDomainEvent> events = ticket.undoCancel();
+    publish(ticket, events);
+
+  }
+
+  public void beginReviseOrder(long restaurantId, Long ticketId, List<RevisedOrderLineItem> revisedOrderLineItems) {
+    Ticket ticket = findTicket(ticketId);
+    // TODO - verify restaurant id
+    List<TicketDomainEvent> events = ticket.beginReviseOrder(revisedOrderLineItems);
+    publish(ticket, events);
+
+  }
+
+  public void confirmReviseTicket(long restaurantId, long ticketId, List<RevisedOrderLineItem> revisedOrderLineItems) {
+    Ticket ticket = findTicket(ticketId);
+    // TODO - verify restaurant id
+    List<TicketDomainEvent> events = ticket.confirmReviseTicket(revisedOrderLineItems);
+    publish(ticket, events);
+  }
+
+  public void undoBeginReviseOrder(long restaurantId, Long ticketId) {
+    Ticket ticket = findTicket(ticketId);
+    // TODO - verify restaurant id
+    List<TicketDomainEvent> events = ticket.undoBeginReviseOrder();
+    publish(ticket, events);
+  }
+
+
+  public Ticket createTicket(long restaurantId, Long ticketId, TicketDetails ticketDetails) {
+    ResultWithDomainEvents<Ticket, TicketDomainEvent> rwe = Ticket.create(restaurantId, ticketId, ticketDetails);
+    ticketRepository.save(rwe.result);
+    domainEventPublisher.publish(rwe.result, rwe.events);
+    return rwe.result;
+  }
+
+
+  public void confirmCreateTicket(Long ticketId) {
+    Ticket ro = findTicket(ticketId);
+    List<TicketDomainEvent> events = ro.confirmCreate();
+    publish(ro, events);
+  }
+
+  public void cancelCreateTicket(Long ticketId) {
+    Ticket ro = findTicket(ticketId);
+    List<TicketDomainEvent> events = ro.cancelCreate();
+    publish(ro, events);
+  }
+
+  @Transactional
+  public void accept(long ticketId, LocalDateTime readyBy) {
+    Ticket ticket = findTicket(ticketId);
+    List<TicketDomainEvent> events = ticket.accept(readyBy);
+    publish(ticket, events);
+  }
+
   public void createMenu(long id, RestaurantMenu menu) {
     Restaurant restaurant = new Restaurant(id, menu.getMenuItems());
     restaurantRepository.save(restaurant);
@@ -33,87 +105,13 @@ public class KitchenService {
     restaurant.reviseMenu(revisedMenu);
   }
 
-  public Ticket createTicket(long restaurantId, Long ticketId, TicketDetails ticketDetails) {
-    ResultWithDomainEvents<Ticket, TicketDomainEvent> rwe = Ticket.create(restaurantId, ticketId, ticketDetails);
-    ticketRepository.save(rwe.result);
-    domainEventPublisher.publish(rwe.result, rwe.events);
-    return rwe.result;
+
+  private Ticket findTicket(Long ticketId) {
+    return ticketRepository.findById(ticketId)
+            .orElseThrow(() -> new TicketNotFoundException(ticketId));
   }
 
-  @Transactional
-  public void accept(long ticketId, LocalDateTime readyBy) {
-    Ticket ticket = ticketRepository.findById(ticketId)
-            .orElseThrow(() -> new TicketNotFoundException(ticketId));
-    List<TicketDomainEvent> events = ticket.accept(readyBy);
+  private void publish(Ticket ticket, List<TicketDomainEvent> events) {
     domainEventPublisher.publish(ticket, events);
   }
-
-  public void confirmCreateTicket(Long ticketId) {
-    Ticket ro = ticketRepository.findById(ticketId)
-            .orElseThrow(() -> new TicketNotFoundException(ticketId));
-    List<TicketDomainEvent> events = ro.confirmCreate();
-    domainEventPublisher.publish(ro, events);
-  }
-
-  public void cancelCreateTicket(Long ticketId) {
-    Ticket ro = ticketRepository.findById(ticketId)
-            .orElseThrow(() -> new TicketNotFoundException(ticketId));
-    List<TicketDomainEvent> events = ro.cancelCreate();
-    domainEventPublisher.publish(ro, events);
-  }
-
-
-  public void cancelTicket(long restaurantId, long ticketId) {
-    Ticket ticket = ticketRepository.findById(ticketId)
-            .orElseThrow(() -> new TicketNotFoundException(ticketId));
-    // TODO - verify restaurant id
-    List<TicketDomainEvent> events = ticket.cancel();
-    domainEventPublisher.publish(ticket, events);
-  }
-
-
-  public void confirmCancelTicket(long restaurantId, long ticketId) {
-    Ticket ticket = ticketRepository.findById(ticketId)
-            .orElseThrow(() -> new TicketNotFoundException(ticketId));
-    // TODO - verify restaurant id
-    List<TicketDomainEvent> events = ticket.confirmCancel();
-    domainEventPublisher.publish(ticket, events);
-  }
-
-  public void undoCancel(long restaurantId, long ticketId) {
-    Ticket ticket = ticketRepository.findById(ticketId)
-            .orElseThrow(() -> new TicketNotFoundException(ticketId));
-    // TODO - verify restaurant id
-    List<TicketDomainEvent> events = ticket.undoCancel();
-    domainEventPublisher.publish(ticket, events);
-
-  }
-
-  public void beginReviseOrder(long restaurantId, Long ticketId, List<RevisedOrderLineItem> revisedOrderLineItems) {
-    Ticket ticket = ticketRepository.findById(ticketId)
-            .orElseThrow(() -> new TicketNotFoundException(ticketId));
-    // TODO - verify restaurant id
-    List<TicketDomainEvent> events = ticket.beginReviseOrder(revisedOrderLineItems);
-    domainEventPublisher.publish(ticket, events);
-
-  }
-
-  public void undoBeginReviseOrder(long restaurantId, Long ticketId) {
-    Ticket ticket = ticketRepository.findById(ticketId)
-            .orElseThrow(() -> new TicketNotFoundException(ticketId));
-    // TODO - verify restaurant id
-    List<TicketDomainEvent> events = ticket.undoBeginReviseOrder();
-    domainEventPublisher.publish(ticket, events);
-  }
-
-  public void confirmReviseTicket(long restaurantId, long ticketId, List<RevisedOrderLineItem> revisedOrderLineItems) {
-    Ticket ticket = ticketRepository.findById(ticketId)
-            .orElseThrow(() -> new TicketNotFoundException(ticketId));
-    // TODO - verify restaurant id
-    List<TicketDomainEvent> events = ticket.confirmReviseTicket(revisedOrderLineItems);
-    domainEventPublisher.publish(ticket, events);
-  }
-
-
-  // ...
 }
