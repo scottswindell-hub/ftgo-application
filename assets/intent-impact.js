@@ -483,9 +483,9 @@ window.decisionSection=function(liveDoc,packet){
   const blocks=rows.filter(r=>r.blocks),incomplete=rows.filter(r=>r.incomplete);
   const headline=verdict==='PASS'?'<b class="ok">Ready to merge</b><span>Every required check passed for this revision.</span>':
     blocks.length?`<b>Blocked</b><span>${e(blocks.map(r=>NAME[r.id]).join(' and '))} ${blocks.length===1?'reports':'report'} a required finding.${incomplete.length?' The assessment is also incomplete, so a fix must be re-analyzed before approval.':''}</span>`:
-    `<b class="gap">Incomplete</b><span>No required finding, but ${e(incomplete.map(r=>NAME[r.id]).join(' and ')||'some checks')} could not finish.</span>`;
+    `<b class="gap">LACKS_DETERMINISTIC_EVIDENCE</b><span>No required finding, but ${e(incomplete.map(r=>NAME[r.id]).join(' and ')||'some checks')} could not finish.</span>`;
   return tile({id:'rt-decision',crumbs:['Governance decision','This pull request'],name:'Governance decision',badge:'Decision',
-    status:verdict==='PASS'?'clear':blocks.length?'changed':'gap',label:verdict||'Pending',steps:[],
+    status:verdict==='PASS'?'clear':blocks.length?'changed':'gap',label:verdict==='UNKNOWN'?'LACKS_DETERMINISTIC_EVIDENCE':verdict||'Pending',steps:[],
     custom:`${policyStrip(liveDoc,packet)}<div class="pt-verdict">${headline}</div><ul class="pt-checklist">${[...blocks,...incomplete,...rows.filter(r=>!blocks.includes(r)&&!incomplete.includes(r))].map(r=>r.html).join('')}</ul>${weightLegend()}`,
     io:[['Intended','A pull request merges only when every governed concept is preserved and the evidence is complete.'],
         ['This PR',verdict==='PASS'?'Ready for owner review.':blocks.length?`Resolve the findings in ${e(blocks.map(r=>NAME[r.id]).join(' and '))}${incomplete.length?', supply the missing evidence,':''} then rerun.`:'Supply the missing evidence, then rerun.']]});

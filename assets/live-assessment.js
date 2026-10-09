@@ -3,7 +3,7 @@ function liveAssessmentMarkup(doc, acceptanceRenderer) {
  const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const acceptance=doc?.acceptance||{};
  const state=doc?.state||'pending';
- const nativeVerdict=doc?.verdict||'Not available';
+ const nativeVerdict=doc?.verdict==='UNKNOWN'?'LACKS_DETERMINISTIC_EVIDENCE':doc?.verdict||'Not available';
  const acceptanceStatus=acceptance.status;
  const blocked=acceptanceStatus==='blocked';
  const incomplete=acceptanceStatus==='incomplete';

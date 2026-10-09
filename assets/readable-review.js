@@ -97,7 +97,7 @@ function evidenceGap(flow){
 }
 function modelFromEvidenceGaps(packet){
  return (packet?.flows||[]).filter(evidenceGap).map(flow=>({
-  id:flow.id,kind:'change',status:'unknown',title:'Behavior could not be established',
+  id:flow.id,kind:'change',status:'unknown',title:'LACKS_DETERMINISTIC_EVIDENCE',
   concept:flow.boundary_id||flow.title,file:flow.source?.file||'',method:shortMethod(flow.method),
   before:'Baseline behavior is not established by this comparison.',
   after:'A behavior change cannot be established from the available evidence.',

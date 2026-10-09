@@ -31,7 +31,7 @@ function readablePipelineChecksMarkup(doc){
  analysis.push(...checks.filter(row=>!known.has(row.id)));
  const baseline=doc.governance_baseline||{};
  const baselineText=baseline.governance_version?`${baseline.workflows||0} accepted workflows · ${baseline.accepted_obligations||0} proved obligations · ${baseline.governance_version}`:'Accepted baseline identity has not been published yet.';
- return `<article class="rr-pipeline"><header><div><h2>CodeIntent checks</h2><p>The existing Lambda checks grouped into analysis and intent review.</p></div><span class="pill ${doc.verdict==='PASS'?'green':doc.verdict==='VIOLATION'?'red':'amber'}">${escapeHtml(doc.verdict||doc.state||'Running')}</span></header>
+ return `<article class="rr-pipeline"><header><div><h2>CodeIntent checks</h2><p>The existing Lambda checks grouped into analysis and intent review.</p></div><span class="pill ${doc.verdict==='PASS'?'green':doc.verdict==='VIOLATION'?'red':'amber'}">${escapeHtml(doc.verdict==='UNKNOWN'?'LACKS_DETERMINISTIC_EVIDENCE':doc.verdict||doc.state||'Running')}</span></header>
   ${group('CodeIntent / analysis','Read the PR, build semantic evidence, and run adopted quality checks.',analysis,false)}
   ${group('CodeIntent / intent review','Compare intent, apply accepted governance, and produce the review decision.',review,true)}
   <details class="rr-pipeline-baseline"><summary>Accepted baseline and run identity</summary><p>${escapeHtml(baselineText)}</p><p><code>${escapeHtml(doc.sha||'Commit unavailable')}</code></p></details>
