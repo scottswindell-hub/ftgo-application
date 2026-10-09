@@ -40,6 +40,13 @@ public class Consumer {
     return id;
   }
 
+  public ConsumerPublicId getPublicId() {
+    if (id == null) {
+      throw new IllegalStateException("The consumer has not been saved yet");
+    }
+    return ConsumerPublicId.of(id);
+  }
+
   public PersonName getName() {
     return name;
   }

@@ -20,7 +20,7 @@ public class ConsumerController {
   @RequestMapping(method= RequestMethod.POST)
   public CreateConsumerResponse create(@RequestBody CreateConsumerRequest request) {
     ResultWithEvents<Consumer> result = consumerService.create(request.getName());
-    return new CreateConsumerResponse(result.result.getId());
+    return new CreateConsumerResponse(result.result.getId(), result.result.getPublicId().value());
   }
 
   @RequestMapping(method= RequestMethod.GET,  path="/{consumerId}")

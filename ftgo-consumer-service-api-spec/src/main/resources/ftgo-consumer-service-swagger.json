@@ -101,6 +101,10 @@
         "consumerId": {
           "type": "integer",
           "format": "int64"
+        },
+        "publicId": {
+          "type": "string",
+          "pattern": "^[0-9]{10}$"
         }
       },
       "title": "CreateConsumerResponse"
@@ -111,6 +115,10 @@
         "consumerId": {
           "type": "integer",
           "format": "int64"
+        },
+        "publicId": {
+          "type": "string",
+          "pattern": "^[0-9]{10}$"
         },
         "name": {
           "$ref": "#/definitions/PersonName"
