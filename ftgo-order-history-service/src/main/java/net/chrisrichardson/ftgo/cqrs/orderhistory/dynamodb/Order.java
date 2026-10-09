@@ -14,6 +14,7 @@ public class Order {
   private String orderId;
   private List<OrderLineItem> lineItems;
   private Money orderTotal;
+  private Money tip = Money.ZERO;
   private long restaurantId;
   private String restaurantName;
 
@@ -25,6 +26,15 @@ public class Order {
     this.orderTotal = orderTotal;
     this.restaurantId = restaurantId;
     this.restaurantName = restaurantName;
+  }
+
+  /** The consumer's tip, included in the order total. */
+  public Money getTip() {
+    return tip;
+  }
+
+  public void setTip(Money tip) {
+    this.tip = tip == null ? Money.ZERO : tip;
   }
 
   public String getRestaurantName() {

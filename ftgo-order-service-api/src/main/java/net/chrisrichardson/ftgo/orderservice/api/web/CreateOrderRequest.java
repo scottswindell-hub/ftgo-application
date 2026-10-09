@@ -1,6 +1,7 @@
 package net.chrisrichardson.ftgo.orderservice.api.web;
 
 import net.chrisrichardson.ftgo.common.Address;
+import net.chrisrichardson.ftgo.common.Money;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -13,6 +14,9 @@ public class CreateOrderRequest {
   private List<LineItem> lineItems;
   private Address deliveryAddress;
 
+  /** Optional tip for the courier, added to the amount charged. Absent means no tip. */
+  private Money tip;
+
   public CreateOrderRequest(long consumerId, long restaurantId, Address deliveryAddress, LocalDateTime deliveryTime, List<LineItem> lineItems) {
     this.restaurantId = restaurantId;
     this.consumerId = consumerId;
@@ -22,7 +26,20 @@ public class CreateOrderRequest {
 
   }
 
+  public CreateOrderRequest(long consumerId, long restaurantId, Address deliveryAddress, LocalDateTime deliveryTime, List<LineItem> lineItems, Money tip) {
+    this(consumerId, restaurantId, deliveryAddress, deliveryTime, lineItems);
+    this.tip = tip;
+  }
+
   private CreateOrderRequest() {
+  }
+
+  public Money getTip() {
+    return tip;
+  }
+
+  public void setTip(Money tip) {
+    this.tip = tip;
   }
 
   public long getRestaurantId() {
