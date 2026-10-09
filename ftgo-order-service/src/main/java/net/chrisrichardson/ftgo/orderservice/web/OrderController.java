@@ -1,5 +1,7 @@
 package net.chrisrichardson.ftgo.orderservice.web;
 
+import net.chrisrichardson.ftgo.common.Money;
+
 import net.chrisrichardson.ftgo.orderservice.api.web.CreateOrderRequest;
 import net.chrisrichardson.ftgo.orderservice.api.web.CreateOrderResponse;
 import net.chrisrichardson.ftgo.orderservice.api.web.ReviseOrderRequest;
@@ -35,7 +37,8 @@ public class OrderController {
     Order order = orderService.createOrder(request.getConsumerId(),
             request.getRestaurantId(),
             new DeliveryInformation(request.getDeliveryTime(), request.getDeliveryAddress()),
-            request.getLineItems().stream().map(x -> new MenuItemIdAndQuantity(x.getMenuItemId(), x.getQuantity())).collect(toList())
+            request.getLineItems().stream().map(x -> new MenuItemIdAndQuantity(x.getMenuItemId(), x.getQuantity())).collect(toList()),
+            request.getTip() == null ? Money.ZERO : request.getTip()
     );
     return new CreateOrderResponse(order.getId());
   }
@@ -48,7 +51,7 @@ public class OrderController {
   }
 
   private GetOrderResponse makeGetOrderResponse(Order order) {
-    return new GetOrderResponse(order.getId(), order.getState(), order.getOrderTotal());
+    return new GetOrderResponse(order.getId(), order.getState(), order.getOrderTotal(), order.getTip());
   }
 
   @RequestMapping(path = "/{orderId}/cancel", method = RequestMethod.POST)
