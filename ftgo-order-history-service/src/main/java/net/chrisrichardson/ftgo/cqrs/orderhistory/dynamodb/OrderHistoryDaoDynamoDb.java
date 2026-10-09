@@ -56,6 +56,8 @@ public class OrderHistoryDaoDynamoDb implements OrderHistoryDao {
   public static final String ORDER_STATUS_FIELD = "orderStatus";
   private static final String DELIVERY_STATUS_FIELD = "deliveryStatus";
 
+  private static final ObjectMapper TOKEN_MAPPER = new ObjectMapper();
+
   private final DynamoDB dynamoDB;
 
   private Table table;
@@ -102,75 +104,40 @@ public class OrderHistoryDaoDynamoDb implements OrderHistoryDao {
     }
   }
 
-////  @Override
-//  public void addOrderV1(Order order, Optional<SourceEvent> eventSource) {
-//    Map<String, AttributeValue> keyMapBuilder = makeKey1(order.getOrderId());
-//    AvMapBuilder expressionAttrs = new AvMapBuilder(":orderStatus", new
-// AttributeValue(order.getStatus().toString()))
-//            .add(":cd", new AttributeValue().withN(Long.toString(order
-// .getCreationDate().getMillis())))
-//            .add(":consumerId", order.getConsumerId())
-//            .add(":lineItems", mapLineItems(order.getLineItems()))
-//            .add(":keywords", mapKeywords(order))
-//            .add(":restaurantName", order.getRestaurantId())
-//            ;
-//
-//
-//    UpdateItemRequest uir = new UpdateItemRequest()
-//            .withTableName(FTGO_ORDER_HISTORY_BY_ID)
-//            .withKey(keyMapBuilder)
-//            .withUpdateExpression("SET orderStatus = :orderStatus,
-// creationDate = :cd, consumerId = :consumerId, lineItems = :lineItems,
-// keywords = :keywords, restaurantName = :restaurantName")
-//            .withConditionExpression("attribute_not_exists(orderStatus)")
-//            .withExpressionAttributeValues(expressionAttrs.map());
-//    try {
-//      client.updateItem(uir);
-//    } catch (ConditionalCheckFailedException e) {
-//      // Do nothing
-//    }
-//  }
-
-  private Set mapKeywords(Order order) {
-    Set<String> keywords = new HashSet<>();
-    keywords.addAll(tokenize(order.getRestaurantName()));
-    keywords.addAll(tokenize(order.getLineItems().stream().map
-            (OrderLineItem::getName).collect(toList())));
+  private Set<String> mapKeywords(Order order) {
+    List<String> lineItemNames = order.getLineItems().stream()
+            .map(OrderLineItem::getName)
+            .collect(toList());
+    Set<String> keywords = new HashSet<>(tokenize(order.getRestaurantName()));
+    keywords.addAll(tokenize(lineItemNames));
     return keywords;
   }
 
-  private Set<String> tokenize(Collection<String> text) {
-    return text.stream().flatMap(t -> tokenize(t).stream()).collect(toSet());
+  private Set<String> tokenize(Collection<String> texts) {
+    return texts.stream()
+            .flatMap(text -> tokenize(text).stream())
+            .collect(toSet());
   }
 
   private Set<String> tokenize(String text) {
-    Set<String> result = new HashSet<>();
-    BreakIterator bi = BreakIterator.getWordInstance();
-    bi.setText(text);
-    int lastIndex = bi.first();
-    while (lastIndex != BreakIterator.DONE) {
-      int firstIndex = lastIndex;
-      lastIndex = bi.next();
-      if (lastIndex != BreakIterator.DONE
-              && Character.isLetterOrDigit(text.charAt(firstIndex))) {
-        String word = text.substring(firstIndex, lastIndex);
-        result.add(word);
+    Set<String> words = new HashSet<>();
+    BreakIterator boundaries = BreakIterator.getWordInstance();
+    boundaries.setText(text);
+    int start = boundaries.first();
+    for (int end = boundaries.next(); end != BreakIterator.DONE; start = end, end = boundaries.next()) {
+      if (Character.isLetterOrDigit(text.charAt(start))) {
+        words.add(text.substring(start, end));
       }
     }
-    return result;
+    return words;
   }
 
-  private List mapLineItems(List<OrderLineItem> lineItems) {
-    return lineItems.stream().map(this::mapOrderLineItem).collect(toList());
+  private List<Map<String, Object>> mapLineItems(List<OrderLineItem> lineItems) {
+    return lineItems.stream()
+            .map(this::mapOrderLineItem)
+            .collect(toList());
   }
-//  private AttributeValue mapLineItems(List<OrderLineItem> lineItems) {
-//    AttributeValue result = new AttributeValue();
-//    result.withL(lineItems.stream().map(this::mapOrderLineItem).collect
-// (toList()));
-//    return result;
-//  }
-
-  private Map mapOrderLineItem(OrderLineItem orderLineItem) {
+  private Map<String, Object> mapOrderLineItem(OrderLineItem orderLineItem) {
     return new Maps()
             .add("menuItemName", orderLineItem.getName())
             .add("menuItemId", orderLineItem.getMenuItemId())
@@ -178,14 +145,6 @@ public class OrderHistoryDaoDynamoDb implements OrderHistoryDao {
             .add("quantity", orderLineItem.getQuantity())
             .map();
   }
-//  private AttributeValue mapOrderLineItem(OrderLineItem orderLineItem) {
-//    AttributeValue result = new AttributeValue();
-//    result.addMEntry("menuItem", new AttributeValue(orderLineItem
-// .getName()));
-//    return result;
-//  }
-
-
   private Map<String, AttributeValue> makeKey1(String orderId) {
     return new AvMapBuilder("orderId", new AttributeValue(orderId)).map();
   }
@@ -229,118 +188,55 @@ public class OrderHistoryDaoDynamoDb implements OrderHistoryDao {
   }
 
   private PrimaryKey toStartingPrimaryKey(String token) {
-    ObjectMapper om = new ObjectMapper();
-    Map<String, Object> map;
+    Map<String, Object> components;
     try {
-      map = om.readValue(token, Map.class);
+      components = TOKEN_MAPPER.readValue(token, Map.class);
     } catch (IOException e) {
       throw new RuntimeException();
     }
-    PrimaryKey pk = new PrimaryKey();
-    map.entrySet().forEach(key -> {
-      pk.addComponent(key.getKey(), key.getValue());
-    });
-    return pk;
+    PrimaryKey primaryKey = new PrimaryKey();
+    for (Map.Entry<String, Object> component : components.entrySet()) {
+      primaryKey.addComponent(component.getKey(), component.getValue());
+    }
+    return primaryKey;
   }
 
   private String toStartKeyToken(Map<String, AttributeValue> lastEvaluatedKey) {
-    Map<String, Object> map = new HashMap<>();
-    lastEvaluatedKey.entrySet().forEach(entry -> {
-      String value = entry.getValue().getS();
-      if (value == null) {
-        value = entry.getValue().getN();
-        map.put(entry.getKey(), Long.parseLong(value));
+    Map<String, Object> components = new HashMap<>();
+    for (Map.Entry<String, AttributeValue> entry : lastEvaluatedKey.entrySet()) {
+      String stringValue = entry.getValue().getS();
+      if (stringValue == null) {
+        components.put(entry.getKey(), Long.parseLong(entry.getValue().getN()));
       } else {
-        map.put(entry.getKey(), value);
+        components.put(entry.getKey(), stringValue);
       }
-    });
-    ObjectMapper om = new ObjectMapper();
+    }
     try {
-      return om.writeValueAsString(map);
+      return TOKEN_MAPPER.writeValueAsString(components);
     } catch (JsonProcessingException e) {
       throw new RuntimeException();
     }
   }
 
-  private Optional<String> statusFilterExpression(Map<String, Object>
-                                                          expressionAttributeValuesBuilder, Optional<OrderState> status) {
-    return status.map(s -> {
-      expressionAttributeValuesBuilder.put(":orderStatus", s.toString());
+  private Optional<String> statusFilterExpression(Map<String, Object> expressionAttributeValues,
+                                                  Optional<OrderState> status) {
+    return status.map(orderState -> {
+      expressionAttributeValues.put(":orderStatus", orderState.toString());
       return "orderStatus = :orderStatus";
     });
   }
 
-  private String keywordFilterExpression(Map<String, Object>
-                                                 expressionAttributeValuesBuilder, Set<String> kw) {
-    Set<String> keywords = tokenize(kw);
-    if (keywords.isEmpty()) {
-      return "";
-    }
-    String cuisinesExpression = "";
+  private String keywordFilterExpression(Map<String, Object> expressionAttributeValues, Set<String> keywordText) {
+    String filterExpression = "";
     int idx = 0;
-    for (String cuisine : keywords) {
-      String var = ":keyword" + idx;
-      String cuisineExpression = String.format("contains(keywords, %s)", var);
-      cuisinesExpression = Expressions.or(cuisinesExpression, cuisineExpression);
-      expressionAttributeValuesBuilder.put(var, cuisine);
+    for (String keyword : tokenize(keywordText)) {
+      String placeholder = ":keyword" + idx;
+      String containsKeyword = String.format("contains(keywords, %s)", placeholder);
+      filterExpression = Expressions.or(filterExpression, containsKeyword);
+      expressionAttributeValues.put(placeholder, keyword);
     }
-
-    return cuisinesExpression;
+    return filterExpression;
   }
-
-//  @Override
-//  public OrderHistory findOrderHistory(String consumerId,
-// OrderHistoryFilter filter) {
-//    AvMapBuilder expressionAttributeValuesBuilder = new AvMapBuilder
-// (":cid", new AttributeValue(consumerId))
-//            .add(":oct", new AttributeValue().withN(Long.toString(filter
-// .getSince().getMillis())));
-//    StringBuilder filterExpression = new StringBuilder();
-//    Set<String> keywords = tokenize(filter.getKeywords());
-//    if (!keywords.isEmpty()) {
-//      if (filterExpression.length() > 0)
-//        filterExpression.append(" AND ");
-//      filterExpression.append(" ( ");
-//      int idx = 0;
-//      for (String cuisine : keywords) {
-//        if (idx++ > 0) {
-//          filterExpression.append(" OR ");
-//        }
-//        String var = ":keyword" + idx;
-//        filterExpression.append("contains(keywords, ").append(var).append
-// (')');
-//        expressionAttributeValuesBuilder.add(var, cuisine);
-//      }
-//
-//      filterExpression.append(" ) ");
-//    }
-//    filter.getStatus().ifPresent(status -> {
-//      if (filterExpression.length() > 0)
-//        filterExpression.append(" AND ");
-//      filterExpression.append("orderStatus = :orderStatus");
-//      expressionAttributeValuesBuilder.add(":orderStatus", status.toString
-// ());
-//    });
-//    QueryRequest ar = new QueryRequest()
-//            .withTableName(FTGO_ORDER_HISTORY_BY_ID)
-//            .withIndexName(FTGO_ORDER_HISTORY_BY_CONSUMER_ID_AND_DATE)
-//            .withScanIndexForward(false)
-//            .withKeyConditionExpression("consumerId = :cid AND
-// creationDate > :oct")
-//            .withExpressionAttributeValues
-// (expressionAttributeValuesBuilder.map());
-//    System.out.print("filterExpression.toString()=" + filterExpression
-// .toString());
-//    if (filterExpression.length() > 0)
-//      ar.withFilterExpression(filterExpression.toString());
-//
-//    QuerySpec spec = new QuerySpec();
-//    ItemCollection<QueryOutcome> result = table.query(spec);
-//
-//    List<Map<String, AttributeValue>> items = client.query(ar).getItems();
-//    return new OrderHistory(items.stream().map(this::toOrder).collect
-// (toList()));
-//  }
 
   @Override
   public boolean updateOrderState(String orderId, OrderState newState, Optional<SourceEvent> eventSource) {
@@ -404,32 +300,31 @@ public class OrderHistoryDaoDynamoDb implements OrderHistoryDao {
   }
 
 
-  private Order toOrder(Item avs) {
-    Order order = new Order(avs.getString("orderId"),
-            avs.getString("consumerId"),
-            OrderState.valueOf(avs.getString("orderStatus")),
-            toLineItems2(avs.getList("lineItems")),
+  private Order toOrder(Item item) {
+    Order order = new Order(item.getString("orderId"),
+            item.getString("consumerId"),
+            OrderState.valueOf(item.getString("orderStatus")),
+            toLineItems(item.getList("lineItems")),
             null,
-            avs.getLong("restaurantId"),
-            avs.getString("restaurantName"));
-    if (avs.hasAttribute("creationDate"))
-      order.setCreationDate(new DateTime(avs.getLong("creationDate")));
+            item.getLong("restaurantId"),
+            item.getString("restaurantName"));
+    if (item.hasAttribute("creationDate")) {
+      order.setCreationDate(new DateTime(item.getLong("creationDate")));
+    }
     return order;
   }
 
-
-  private List<OrderLineItem> toLineItems2(List<LinkedHashMap<String,
-          Object>> lineItems) {
-    return lineItems.stream().map(this::toLineItem2).collect(toList());
+  private List<OrderLineItem> toLineItems(List<LinkedHashMap<String, Object>> lineItems) {
+    return lineItems.stream()
+            .map(this::toLineItem)
+            .collect(toList());
   }
 
-  private OrderLineItem toLineItem2(LinkedHashMap<String, Object>
-                                            attributeValue) {
-    return new OrderLineItem((String) attributeValue.get("menuItemId"),
-                             (String) attributeValue.get("menuItemName"),
-                             new Money((String) attributeValue.get("price")),
-                            ((BigDecimal) attributeValue.get("quantity")).intValue()
-            );
+  private OrderLineItem toLineItem(LinkedHashMap<String, Object> attributes) {
+    return new OrderLineItem((String) attributes.get("menuItemId"),
+            (String) attributes.get("menuItemName"),
+            new Money((String) attributes.get("price")),
+            ((BigDecimal) attributes.get("quantity")).intValue());
   }
 
 }

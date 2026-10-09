@@ -7,23 +7,22 @@ import java.util.Map;
 
 public class AvMapBuilder {
 
-  private Map<String, AttributeValue> eav = new HashMap<>();
+  private final Map<String, AttributeValue> attributes = new HashMap<>();
 
   public AvMapBuilder(String key, AttributeValue value) {
-    eav.put(key, value);
+    attributes.put(key, value);
   }
 
   public AvMapBuilder add(String key, String value) {
-    eav.put(key, new AttributeValue(value));
-    return this;
+    return add(key, new AttributeValue(value));
   }
 
   public AvMapBuilder add(String key, AttributeValue value) {
-    eav.put(key, value);
+    attributes.put(key, value);
     return this;
   }
 
   public Map<String, AttributeValue> map() {
-    return eav;
+    return attributes;
   }
 }

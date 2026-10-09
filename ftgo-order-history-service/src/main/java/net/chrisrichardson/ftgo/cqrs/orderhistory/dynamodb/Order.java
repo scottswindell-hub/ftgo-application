@@ -8,14 +8,14 @@ import org.joda.time.DateTime;
 import java.util.List;
 
 public class Order {
-  private String consumerId;
+  private final String orderId;
+  private final String consumerId;
+  private final OrderState status;
+  private final List<OrderLineItem> lineItems;
+  private final Money orderTotal;
+  private final long restaurantId;
+  private final String restaurantName;
   private DateTime creationDate = DateTime.now();
-  private OrderState status;
-  private String orderId;
-  private List<OrderLineItem> lineItems;
-  private Money orderTotal;
-  private long restaurantId;
-  private String restaurantName;
 
   public Order(String orderId, String consumerId, OrderState status, List<OrderLineItem> lineItems, Money orderTotal, long restaurantId, String restaurantName) {
     this.orderId = orderId;
@@ -38,7 +38,7 @@ public class Order {
   public long getRestaurantId() {
     return restaurantId;
   }
-  
+
   public List<OrderLineItem> getLineItems() {
     return lineItems;
   }
@@ -62,6 +62,4 @@ public class Order {
   public OrderState getStatus() {
     return status;
   }
-
-
 }

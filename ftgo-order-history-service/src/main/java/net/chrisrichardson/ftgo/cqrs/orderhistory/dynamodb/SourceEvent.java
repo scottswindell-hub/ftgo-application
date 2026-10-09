@@ -21,13 +21,13 @@ public class SourceEvent {
   }
 
   public UpdateItemSpec addDuplicateDetection(UpdateItemSpec spec) {
-    HashMap<String, String> nameMap = spec.getNameMap() == null ? new HashMap<>() : new HashMap<>(spec.getNameMap());
-    nameMap.put("#duplicateDetection", "events." + aggregateType + aggregateId);
-    HashMap<String, Object> valueMap = new HashMap<>(spec.getValueMap());
-    valueMap.put(":eventId", eventId);
+    HashMap<String, String> names = spec.getNameMap() == null ? new HashMap<>() : new HashMap<>(spec.getNameMap());
+    names.put("#duplicateDetection", "events." + aggregateType + aggregateId);
+    HashMap<String, Object> values = new HashMap<>(spec.getValueMap());
+    values.put(":eventId", eventId);
     return spec.withUpdateExpression(String.format("%s , #duplicateDetection = :eventId", spec.getUpdateExpression()))
-            .withNameMap(nameMap)
-            .withValueMap(valueMap)
+            .withNameMap(names)
+            .withValueMap(values)
             .withConditionExpression(Expressions.and(spec.getConditionExpression(), "attribute_not_exists(#duplicateDetection) OR #duplicateDetection < :eventId"));
   }
 
