@@ -30,6 +30,9 @@ function phase(checks,ids,blockedBy){
  const skipped=rows.filter(row=>intentionalSkip(row,checks)).length;
  return {state:'passed',line:skipped?`Completed · ${skipped} checks intentionally skipped for a below-threshold change`:`Completed · ${rows.length} checks`};
 }
+function isDescriptionRoute(params){
+ return params.get('view')==='desc'||Boolean(params.get('check')||params.get('issue'));
+}
 function descriptionItem(items,packet,summary,checks,checkId,issue){
  const check=(checks||[]).find(row=>row.id===checkId);
  const finding=(check?.findings||[]).find(row=>row.id===issue||row.ref===issue)||(!issue?check?.findings?.[0]:null);
@@ -45,6 +48,6 @@ function descriptionItem(items,packet,summary,checks,checkId,issue){
  return referenced.length===1?referenced[0]:referenced.length===0&&finding?.band==='fyi'?
   root.codeIntentAdvisoryDescription?.(packet,summary,check,finding)||null:null;
 }
-root.walkthroughPipeline={ANALYSIS,REVIEW,phase,intentionalSkip,descriptionItem,demoEvidenceGap};
+root.walkthroughPipeline={ANALYSIS,REVIEW,phase,intentionalSkip,descriptionItem,isDescriptionRoute,demoEvidenceGap};
 if(typeof module!=='undefined')module.exports=root.walkthroughPipeline;
 })(typeof window!=='undefined'?window:globalThis);

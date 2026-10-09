@@ -13,7 +13,7 @@ const api=(qs.get('api')||'').replace(/\/+$/,'');
 let dataPath=qs.get('data')||'';
 const {ANALYSIS,REVIEW}=walkthroughPipeline;
 const initialView=qs.get('view')==='checks'?'checks':'review';
-const state={desc:qs.get('view')==='desc',status:null,packet:null,packetDigest:null,summary:null,model:null,view:initialView,selected:initialView==='review'?(qs.get('item')||null):null,tab:'obj',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),saves:new Map(),reviewScope:null,commentBody:'',commentChecked:0,error:'',loadingArtifact:false};
+const state={desc:walkthroughPipeline.isDescriptionRoute(qs),status:null,packet:null,packetDigest:null,summary:null,model:null,view:initialView,selected:initialView==='review'?(qs.get('item')||null):null,tab:'obj',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),saves:new Map(),reviewScope:null,commentBody:'',commentChecked:0,error:'',loadingArtifact:false};
 let pollTimer=null;
 let assessmentResize=null;
 let returnCommentId=/^[0-9]+$/.test(qs.get('comment')||'')?qs.get('comment'):null;
@@ -201,7 +201,7 @@ function checkExplanation(){
  const check=checks().find(value=>value.id===id);
  if(!check)return `<section class="notice"><h2>Check explanation</h2><p>${state.status?'This check is not present in the recorded run.':'Loading the recorded check…'}</p></section>`;
  const findings=(check.findings||[]).filter(value=>value&&typeof value==='object');
- return `<section class="notice" id="check-explanation"><h2>${esc(check.label||check.id)}</h2><p><b>${esc(check.state||'pending')}</b>: ${esc(check.detail||check.summary||'No additional explanation was recorded.')}</p>${findings.length?`<ul>${findings.map(f=>`<li><b>${esc(f.title||f.rule_id||f.name||'Finding')}</b>${f.detail||f.reason||f.observation?`: ${esc(f.detail||f.reason||f.observation)}`:''}</li>`).join('')}</ul>`:''}<p><button type="button" class="btn blue" data-act="open">Review supporting evidence →</button></p></section>`;
+ return `<section class="notice" id="check-explanation"><h2>${esc(check.label||check.id)}</h2><p><b>${esc(check.state||'pending')}</b>: ${esc(check.detail||check.summary||'No additional explanation was recorded.')}</p>${findings.length?`<ul>${findings.map(f=>`<li><b>${esc(f.title||f.rule_id||f.name||'Finding')}</b>${f.detail||f.reason||f.observation?`: ${esc(f.detail||f.reason||f.observation)}`:''}</li>`).join('')}</ul>`:''}</section>`;
 }
 function checksScreen(){
  const analysis=walkthroughPipeline.phase(checks(),ANALYSIS,'Waiting for source analysis');
@@ -389,7 +389,7 @@ document.addEventListener('keydown',event=>{
 legacyMethodExplorer.setRender(render);
 addEventListener('popstate',()=>{
  const route=new URLSearchParams(location.search),view=route.get('view')==='checks'?'checks':'review';
- state.desc=route.get('view')==='desc';state.view=view;state.selected=view==='review'?(route.get('item')||null):null;render();
+ state.desc=walkthroughPipeline.isDescriptionRoute(route);state.view=view;state.selected=view==='review'?(route.get('item')||null):null;render();
 });
 const theme=document.querySelector('#theme');
 function setTheme(value){
