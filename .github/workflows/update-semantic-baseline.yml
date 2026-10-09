@@ -116,7 +116,9 @@ jobs:
                           'To accept the baseline this PR produces, someone other than its author submits an '
                           '**Approve** review on this exact commit containing this line:\n\n'
                           f'```\nAccept baseline {result["candidate"]}\n```\n\n'
-                          'A new push prepares a new candidate and replaces this comment. When the PR merges, '
+                          'Every CodeIntent finding for this exact evidence must also be answered Yes; a No, '
+                          'withdrawn, missing, or stale answer blocks publication. A new push prepares a new '
+                          'candidate and replaces this comment. When the PR merges, '
                           f'the approved candidate is published. [Candidate evidence]({os.environ["RUN_URL"]})')
                   break
               if result['status'] == 'failed':

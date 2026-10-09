@@ -14,6 +14,7 @@ permissions:
   contents: read
   issues: write
   pull-requests: write
+  statuses: write
 concurrency:
   group: codeintent-review-sync-${{ inputs.pull_request }}
   cancel-in-progress: false
@@ -85,6 +86,23 @@ jobs:
                   github(f'/repos/{repo}/issues/comments/{bot["id"]}', 'PATCH', {'body': body})
               else:
                   github(f'/repos/{repo}/issues/{number}/comments', 'POST', {'body': body})
+              gate = document.get('finding_review_gate') or {}
+              if (gate.get('application') != repo or gate.get('pull_request') != int(number)
+                      or gate.get('head_commit') != sha):
+                  raise SystemExit('Missing exact finding-review merge gate')
+              status = gate.get('status')
+              required, accepted = gate.get('required', 0), gate.get('accepted', 0)
+              state = 'success' if status in {'ready', 'not_required'} else 'error' if status == 'unavailable' else 'failure'
+              description = (f'All {required} review finding(s) accepted for this evidence'
+                             if state == 'success' else 'Finding-review authority is unavailable'
+                             if state == 'error' else f'{accepted} of {required} review finding(s) accepted')
+              owner, name = repo.split('/', 1)
+              report = f'https://{owner.lower()}.github.io/{name}/?' + urlencode(
+                  {'repo': repo, 'pr': number, 'sha': sha,
+                   'api': 'https://qgd63ljozc.execute-api.us-east-1.amazonaws.com/demo'})
+              github(f'/repos/{repo}/statuses/{sha}', 'POST', {
+                  'state': state, 'context': 'CodeIntent / Finding review',
+                  'description': description[:140], 'target_url': report})
           except (Exception, SystemExit):
               # Do not leave a spinner forever, or overwrite a newer pipeline comment.
               if bot and pending:

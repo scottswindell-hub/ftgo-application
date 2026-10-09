@@ -15,6 +15,7 @@ permissions:
   contents: read
   issues: write
   pull-requests: write
+  statuses: write
 
 concurrency:
   group: codeintent-${{ github.event.pull_request.number }}
@@ -47,6 +48,10 @@ jobs:
           set -euo pipefail
           dashboard_url=$(python3 -c 'import os,urllib.parse; print(os.environ["STATUS_PAGE_URL"].rstrip("/") + "/?" + urllib.parse.urlencode({"sha":os.environ["PR_SHA"],"api":os.environ["STATUS_API_URL"].rsplit("/status",1)[0],"pr":os.environ["PR_NUMBER"],"repo":os.environ["PR_FULL_REPO"]}))')
           echo "DASHBOARD_URL=$dashboard_url" >> "$GITHUB_ENV"
+          gh api --method POST "repos/$PR_FULL_REPO/statuses/$PR_SHA" \
+            -f state=pending -f context='CodeIntent / Finding review' \
+            -f description='Analysis and finding review are in progress' \
+            -f target_url="$dashboard_url" >/dev/null
           marker='<!-- codeintent-checks -->'
           body="$marker
           ### CodeIntent checks
@@ -459,6 +464,22 @@ jobs:
                 gh api --method PATCH "repos/$PR_FULL_REPO/issues/comments/$comment_id" -F body=@/tmp/codeintent-comment.md >/dev/null || echo "::warning::Could not update governance comment."
               fi
               fi
+              gate_status=$(jq -r '.finding_review_gate.status // "unavailable"' <<<"$document")
+              required=$(jq -r '.finding_review_gate.required // 0' <<<"$document")
+              accepted=$(jq -r '.finding_review_gate.accepted // 0' <<<"$document")
+              if [ "$gate_status" = ready ] || [ "$gate_status" = not_required ]; then
+                review_state=success
+                review_description="All $required review finding(s) accepted for this evidence"
+              elif [ "$gate_status" = unavailable ]; then
+                review_state=error
+                review_description='Finding-review authority is unavailable'
+              else
+                review_state=failure
+                review_description="$accepted of $required review finding(s) accepted"
+              fi
+              gh api --method POST "repos/$PR_FULL_REPO/statuses/$PR_SHA" \
+                -f state="$review_state" -f context='CodeIntent / Finding review' \
+                -f description="$review_description" -f target_url="$DASHBOARD_URL" >/dev/null
               acceptance=$(jq -r '.acceptance.status // "legacy"' <<<"$document")
               mode=$(jq -r '.acceptance.mode // "shadow"' <<<"$document")
               # A completed run cannot gain evidence by keeping a runner alive.
