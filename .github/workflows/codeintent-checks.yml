@@ -27,7 +27,8 @@ jobs:
     env:
       API_URL: ${{ vars.CODEINTENT_API_URL || 'https://qgd63ljozc.execute-api.us-east-1.amazonaws.com/demo/verify-checks' }}
       STATUS_API_URL: ${{ vars.CODEINTENT_STATUS_API_URL || 'https://qgd63ljozc.execute-api.us-east-1.amazonaws.com/demo/status' }}
-      STATUS_PAGE_URL: ${{ vars.CODEINTENT_STATUS_PAGE_URL || 'https://scottswindell-hub.github.io/ftgo-application/' }}
+      STATUS_PAGE_URL: ${{ vars.CODEINTENT_STATUS_PAGE_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
+      FTGO_DEMO_REPOSITORIES: scottswindell-hub/ftgo-application,Holonic-Technologies/ftgo-application
       API_KEY: ${{ secrets.DRIFT_GATE_API_KEY }}
       GH_TOKEN: ${{ github.token }}
       PR_OWNER: ${{ github.repository_owner }}
@@ -279,10 +280,20 @@ jobs:
               export CODEINTENT_COMMENT_ID="$comment_id"
               python3 <<'PY' > /tmp/codeintent-comment.md
           """One compact GitHub comment over native results and separate acceptance policy."""
+          import os
           from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
           MARKER = '<!-- codeintent-checks -->'
           ICONS = {'passed':'✅','failed':'❌','error':'⚠️','stopped':'➖','blocked':'➖','pending':'⏳','running':'⏳'}
+          DEFAULT_FTGO_REPOSITORIES = ('scottswindell-hub/ftgo-application',
+                                       'Holonic-Technologies/ftgo-application')
+
+
+          def ftgo_repository(repository):
+              configured = os.environ.get('FTGO_DEMO_REPOSITORIES')
+              allowed = DEFAULT_FTGO_REPOSITORIES if configured is None else tuple(
+                  value.strip() for value in configured.split(',') if value.strip())
+              return repository in allowed
 
 
           def inline(value):
@@ -360,7 +371,7 @@ jobs:
                   query=[(key,value) for key,value in parse_qsl(url.query,keep_blank_values=True) if key!='comment']
                   report_url=urlunsplit((url.scheme,url.netloc,url.path,urlencode([*query,('comment',comment_id)]),url.fragment))
               checks=document.get('checks') or document.get('stages') or []
-              hidden=[c for c in checks if document.get('repo')=='scottswindell-hub/ftgo-application' and demo_evidence_gap(c)]
+              hidden=[c for c in checks if ftgo_repository(document.get('repo')) and demo_evidence_gap(c)]
               checks=[c for c in checks if c not in hidden]
               verdict=document.get('verdict')
               acceptance=document.get('acceptance') or {}

@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   update:
-    if: github.repository == 'scottswindell-hub/ftgo-application' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    if: contains(fromJSON('["scottswindell-hub/ftgo-application","Holonic-Technologies/ftgo-application"]'), github.repository) && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -62,7 +62,8 @@ jobs:
           if not current():
               raise SystemExit('PR changed before refresh; refusing a stale message update')
           if bot:
-              spinner = '<img src="https://scottswindell-hub.github.io/ftgo-application/assets/checks-running.gif" width="20" height="20" alt="Updating review">'
+              owner, name = repo.split('/', 1)
+              spinner = f'<img src="https://{owner.lower()}.github.io/{name}/assets/checks-running.gif" width="20" height="20" alt="Updating review">'
               heading = '### CodeIntent checks -- ' + spinner + ' Updating review…'
               pending = re.sub(r'^### CodeIntent checks[^\n]*', lambda _: heading, bot['body'], count=1, flags=re.MULTILINE)
               if pending == bot['body']:
