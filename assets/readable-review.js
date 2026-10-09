@@ -44,6 +44,45 @@ function patchComparison(packet,file){
   qualification:'Exact changed hunk from the digest-verified PR source patch.'};
 }
 
+function scopedPatchComparison(packet,file,method,flows){
+ const comparison=patchComparison(packet,file);
+ if(!comparison)return null;
+ const facts=(flows||[]).flatMap(flow=>(flow?.fact_changes||[]).flatMap(change=>[...(change.before||[]),...(change.after||[])]));
+ const methodNames=[...new Set([method,...facts.map(f=>f.method_owner)].filter(Boolean).map(value=>String(value).split('#').pop().split('/')[0].split('.').pop()))];
+ const escape=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+ const declarations=methodNames.map(name=>new RegExp('\\b'+escape(name)+'\\s*\\('));
+ const compact=value=>String(value||'').replace(/[\s"']/g,'');
+ const anchors=[];
+ for(const fact of facts){
+  if(fact.expression)anchors.push(compact(fact.expression));
+  if(fact.operation&&fact.receiver&&Array.isArray(fact.arguments))
+   anchors.push(compact(`${fact.receiver}.${fact.operation}(${fact.arguments.join(',')})`));
+  if(fact.slot&&fact.value&&/^\w+$/.test(fact.slot)){
+   anchors.push(compact(`${fact.slot}(${fact.value})`));
+   anchors.push(compact(`${fact.slot}=${fact.value}`));
+  }
+ }
+ const hunks=[];let hunk;
+ for(const row of comparison.diffLines){
+  if(row[1].startsWith('@@')){hunk=[];hunks.push(hunk);}
+  if(hunk)hunk.push(row);
+ }
+ let selected=hunks.filter(rows=>declarations.some(pattern=>pattern.test(rows[0][1])||
+  rows.some(([,line])=>/^\s*(?:public|protected|private)\b/.test(line)&&pattern.test(line))));
+ let scope='method';
+ if(!selected.length){
+  selected=hunks.filter(rows=>rows.some(([mark,line])=>['+','-'].includes(mark)&&anchors.some(anchor=>anchor.length>=8&&compact(line).includes(anchor))));
+  scope='recorded_fact';
+ }
+ if(!selected.length){
+  if(!facts.length)return {...comparison,scope:'file',qualification:'File-level patch context; no method-specific excerpt was recorded.'};
+  return {file,method,complete:false,scope:'unmatched',reason:`No changed source hunk matches the recorded facts for ${shortMethod(method)||'this observation'}. The full file patch is available in Recorded evidence.`};
+ }
+ const diffLines=selected.flat(),side=mark=>diffLines.filter(([kind,line])=>!line.startsWith('@@')&&(kind===' '||kind===mark)).map(row=>row[1]).join('\n');
+ return {...comparison,method,scope,diffLines,before:{text:side('-')},after:{text:side('+')},
+  qualification:scope==='method'?'Changed hunks in the recorded method.':'Changed hunks matching the recorded operations; these may belong to a shared helper.'};
+}
+
 function flowFacts(flow,side){
  const values=[];
  for(const change of flow?.fact_changes||[]){
@@ -82,12 +121,13 @@ function sourceComparison(packet,summary,row,flow,index){
  const byId=comparisons(summary);
  if(byId.has(row.change_id))return byId.get(row.change_id);
  for(const id of row.member_change_ids||[])if(byId.has(id))return byId.get(id);
- const file=flow?.source?.file;
- const method=shortMethod(flow?.method);
+ const file=row.changed_source?.file||flow?.source?.file;
+ const method=shortMethod(row.changed_source?.method||flow?.method);
  for(const value of byId.values()){
-  if(file&&value.file===file&&(!method||shortMethod(value.method)===method))return value;
+  if(file&&value.file===file&&method&&shortMethod(value.method)===method)return value;
  }
- return patchComparison(packet,row.changed_source?.file||file);
+ return scopedPatchComparison(packet,row.changed_source?.file||file,row.changed_source?.method||flow?.method,
+  (packet?.flows||[]).filter(value=>(row.member_change_ids||[row.change_id]).includes(value.id)));
 }
 
 function evidenceGap(flow){
@@ -292,7 +332,7 @@ function ownerReviewItems(packet,summary,items,checks){
    summary:finding.title,detailSummary:finding.observation||'',before:describe(flow,'before'),after:describe(flow,'after'),
    concept:'Source behavior requiring intent review',method:shortMethod(finding.unit||flow?.method),file,
    objective:'',owner:'',reviewType:'Behavior',connections:[],
-   intentBefore:flowFacts(flow,'before'),intentAfter:flowFacts(flow,'after'),comparison:patchComparison(packet,file),
+   intentBefore:flowFacts(flow,'before'),intentAfter:flowFacts(flow,'after'),comparison:scopedPatchComparison(packet,file,finding.unit||flow?.method,[flow]),
    groundingLabel:'RECORDED SOURCE CHANGE',qualification:'Intent review only; no accepted obligation or violation is inferred.'});
  }
  return result;
