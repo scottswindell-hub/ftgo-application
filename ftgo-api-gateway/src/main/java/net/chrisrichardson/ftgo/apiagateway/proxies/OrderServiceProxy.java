@@ -22,7 +22,7 @@ public class OrderServiceProxy {
   public Mono<OrderInfo> findOrderById(String orderId) {
     Mono<ClientResponse> response = client
             .get()
-            .uri(orderDestinations.getOrderServiceUrl() + "/orders/{orderId}", orderId)
+            .uri("http://order-service.internal:8080/orders/{orderId}", orderId)
             .exchange();
     return response.flatMap(resp -> {
       switch (resp.statusCode()) {
