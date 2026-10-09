@@ -317,7 +317,7 @@ jobs:
                   query=[(k,v) for k,v in parse_qsl(url.query,keep_blank_values=True) if k not in {'view','check','issue','item'}]
                   query.extend([('view','desc'),('check',check['id']),('issue',issue or '')])
                   target=urlunsplit((url.scheme,url.netloc,url.path,urlencode(query),''))
-                  suffix=' — intended, recorded' if decision=='accepted' else ' — unresolved' if decision=='unresolved' else ' — needs review'
+                  suffix=' — resolved (accepted as intended)' if decision=='accepted' else ' — unresolved' if decision=='unresolved' else ' — needs review'
                   lines.append(f'  - {icon}[{label}](<{target}>){suffix}')
                   if decision in {'accepted','unresolved'}:
                       lines.append(f"    <!-- codeintent-review:{review['scope']}:{decision}:{review['record']} -->")
@@ -378,8 +378,9 @@ jobs:
                   state=check.get('state','pending')
                   name=inline(check.get('label') or check['id'])
                   has_reviews=any(f.get('review') for f in check.get('findings') or [])
-                  if reviewed(check) and state=='failed':
-                      accepted.append(f'- {name} — findings accepted as intended; analysis still reports a violation')
+                  if reviewed(check):
+                      detail='; analysis still reports a violation' if state=='failed' else ''
+                      accepted.append(f'- {name} — findings resolved{detail}')
                       accepted+=review_lines(check,report_url)
                   elif state=='passed' and not review_pending(check):
                       suffix=' — response requested' if check.get('id')=='coding_standards' and check.get('findings') and not reviewed(check) else ''
@@ -398,19 +399,15 @@ jobs:
                       target=urlunsplit((url.scheme,url.netloc,url.path,urlencode(query),''))
                       failed.append(f'- **[{name}](<{target}>)**: {detail}')
                       if has_reviews:
-                          failed+=review_lines(check,report_url,accepted=False)
-                          accepted_rows=review_lines(check,report_url,accepted=True)
-                          if accepted_rows:
-                              accepted.append(f'- {name} — accepted findings')
-                              accepted+=accepted_rows
+                          failed+=review_lines(check,report_url)
                       elif check.get('id')!='intent_diff' and document.get('governance_run_id'):
                           failed+=finding_lines(check)
-              passed_count=sum(check.get('state')=='passed' and check.get('id')!='governance_decision' and not review_pending(check) for check in checks)
+              passed_count=sum(check.get('state')=='passed' and check.get('id')!='governance_decision' and not review_pending(check) and not reviewed(check) for check in checks)
               if passed:
                   rows+=['<details>', f'<summary>✅ Passing checks ({passed_count})</summary>', '',
                          *passed, '', '</details>']
               if accepted:
-                  rows+=['<details>', '<summary>✅ Reviewed findings</summary>', '', *accepted, '', '</details>']
+                  rows+=['<details open>', '<summary>✅ Resolved findings</summary>', '', *accepted, '', '</details>']
               if failed:
                   rows+=['<details open>', f'<summary>❌ Needs Review ({failed_count})</summary>', '',
                          *failed, '', '</details>', '']
