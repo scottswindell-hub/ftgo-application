@@ -40,16 +40,18 @@ function confirmed(item){
  return codeIntentFindingReviews.recorded(target,state.commentBody)&&(!draft||draft===(target.finding.review.decision==='accepted'?'yes':'no'));
 }
 async function refreshReviewComment(){
- if(!returnCommentId||Date.now()-state.commentChecked<30000)return;
+ if(!returnCommentId||Date.now()-state.commentChecked<30000)return false;
  const pending=checks().some(check=>(check.findings||[]).some(finding=>finding.review?.record&&!codeIntentFindingReviews.recorded({finding},state.commentBody)));
- if(!pending)return;
+ if(!pending)return false;
  state.commentChecked=Date.now();
  try{
   const response=await fetch(`https://api.github.com/repos/${repo.split('/').map(encodeURIComponent).join('/')}/issues/comments/${returnCommentId}`,{cache:'no-store'});
-  if(!response.ok)return;
+  if(!response.ok)return false;
   const comment=await response.json();
-  state.commentBody=comment.user?.login==='github-actions[bot]'?comment.body||'':'';
- }catch(error){/* Keep the recorded decision; do not claim the comment was refreshed. */}
+  const body=comment.user?.login==='github-actions[bot]'?comment.body||'':'';
+  if(body===state.commentBody)return false;
+  state.commentBody=body;return true;
+ }catch(error){return false;/* Keep the recorded decision; do not claim the comment was refreshed. */}
 }
 function pullRequestUrl(){
  const parts=repo.split('/');
@@ -110,7 +112,7 @@ async function loadText(reference,maxBytes,digest){
  return new TextDecoder().decode(bytes);
 }
 async function loadArtifacts(){
- if(state.loadingArtifact||state.packet||!dataPath)return;
+ if(state.loadingArtifact||state.packet||!dataPath)return false;
  state.loadingArtifact=true;
  try{
   const reference=state.status?.review_artifact;
@@ -166,23 +168,29 @@ async function loadArtifacts(){
   }
   const model=reviewExplorer.enrich(codeIntentReviewModel(packet,loadedSummary||{},[],checks()),packet,loadedSummary,checks());
   state.packet=packet;state.packetDigest=digest||null;state.summary=loadedSummary;state.model=model;
- }catch(error){state.error='Review evidence unavailable: '+error.message;}
- finally{state.loadingArtifact=false;render();}
+  return true;
+ }catch(error){state.error='Review evidence unavailable: '+error.message;return true;}
+ finally{state.loadingArtifact=false;}
 }
 async function poll(){
+ let changed=false;
  try{
   if(!api||!repo||!sha)throw Error('This link is missing api, repo, or sha.');
   const response=await fetch(statusUrl(),{cache:'no-store'});if(!response.ok)throw Error('Status returned HTTP '+response.status+'.');
-  state.status=await response.json();state.error='';
+  const nextStatus=await response.json();
+  changed=JSON.stringify(nextStatus)!==JSON.stringify(state.status)||!!state.error;
+  state.status=nextStatus;state.error='';
   const reference=state.status?.review_artifact;
   if(!dataPath&&reference?.schema==='review-artifact-reference-v1'&&reference.name==='intent-flow.json'){
    const artifact=new URL(statusUrl());artifact.searchParams.set('detail','review-artifact');artifact.searchParams.set('name',reference.name);dataPath=artifact.href;
   }
   if(state.packet&&reference?.sha256&&reference.sha256!==state.packetDigest){state.packet=null;state.summary=null;state.model=null;}
-  if(state.packet){state.packet.explorer.results={checks:checks()};state.model=reviewExplorer.enrich(codeIntentReviewModel(state.packet,state.summary||{},[],checks()),state.packet,state.summary,checks());}
-  else await loadArtifacts();
- }catch(error){state.error='Live pipeline unavailable: '+error.message;}
- await refreshReviewComment();render();
+  if(state.packet){
+   if(changed){state.packet.explorer.results={checks:checks()};state.model=reviewExplorer.enrich(codeIntentReviewModel(state.packet,state.summary||{},[],checks()),state.packet,state.summary,checks());}
+  }else changed=await loadArtifacts()||changed;
+ }catch(error){const message='Live pipeline unavailable: '+error.message;changed=message!==state.error;state.error=message;}
+ const commentChanged=await refreshReviewComment();
+ if(changed||commentChanged)render({preserveScroll:true});
  pollTimer=setTimeout(poll,state.status?.state==='completed'?15000:1500);
 }
 
@@ -313,7 +321,17 @@ function acceptanceNotice(){
  if(a?.mode!=='enforce'||a.status==='ready')return '';
  return `<div class="notice"><b>Governance acceptance: ${esc(a.status||'unavailable')}</b><p>${esc(a.reason||'Acceptance is not ready.')}</p><p>This is separate from the source-analysis result.</p></div>`;
 }
-function render(){
+function reviewScroll(){
+ return {x:scrollX,y:scrollY,panes:[...screen.querySelectorAll('.pane pre')].map(node=>({top:node.scrollTop,left:node.scrollLeft}))};
+}
+function restoreReviewScroll(saved){
+ requestAnimationFrame(()=>{
+  scrollTo(saved.x,saved.y);
+  [...screen.querySelectorAll('.pane pre')].forEach((node,index)=>{const value=saved.panes[index];if(value){node.scrollTop=value.top;node.scrollLeft=value.left;}});
+ });
+}
+function render(options={}){
+ const saved=options.preserveScroll?reviewScroll():null;
  runContext.textContent=repo+(pr?' · Pull request #'+pr:'');
  const prUrl=pullRequestUrl();prBack.href=prUrl;prBack.hidden=prUrl==='#';
  document.title=`CodeIntent · ${repo||'review'}${pr?' #'+pr:''}`;
@@ -335,6 +353,7 @@ function render(){
   assessmentResize=new ResizeObserver(reserve);assessmentResize.observe(assessment);reserve();
  }
  legacyMethodExplorer.hydrate();
+ if(saved)restoreReviewScroll(saved);
 }
 
 document.addEventListener('click',async event=>{
