@@ -13,7 +13,7 @@ const api=(qs.get('api')||'').replace(/\/+$/,'');
 let dataPath=qs.get('data')||'';
 const {ANALYSIS,REVIEW}=walkthroughPipeline;
 const initialView=qs.get('view')==='checks'?'checks':'review';
-const state={desc:qs.get('view')==='desc',status:null,packet:null,packetDigest:null,summary:null,model:null,view:initialView,selected:initialView==='review'?(qs.get('item')||null):null,tab:'obj',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),submitted:new Map(),error:'',loadingArtifact:false};
+const state={desc:qs.get('view')==='desc',status:null,packet:null,packetDigest:null,summary:null,model:null,view:initialView,selected:initialView==='review'?(qs.get('item')||null):null,tab:'obj',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),reviewScope:null,commentBody:'',commentChecked:0,error:'',loadingArtifact:false};
 let pollTimer=null;
 let assessmentResize=null;
 let returnCommentId=/^[0-9]+$/.test(qs.get('comment')||'')?qs.get('comment'):null;
@@ -23,7 +23,32 @@ const short=value=>String(value||'').split('/').pop();
 const label=value=>String(value||'').replace(/^FTGO-/,'').replaceAll('_',' ').replaceAll('-',' ').toLowerCase().replace(/^./,c=>c.toUpperCase());
 const checks=()=>state.status?.checks||state.status?.stages||[];
 const items=()=>state.model?[...state.model.changes,...state.model.constraints]:[];
-const decision=id=>state.drafts.get(id)||state.submitted.get(id)||'';
+function reviewTargets(item){return item?codeIntentFindingReviews.targets(item,items(),state.packet,state.summary,checks()):[];}
+function reviewTarget(item){
+ const targets=reviewTargets(item),issue=new URLSearchParams(location.search).get('issue');
+ return targets.find(t=>t.finding.review.scope===state.reviewScope)||targets.find(t=>t.finding.id===issue||t.finding.ref===issue)||(targets.length===1?targets[0]:null);
+}
+function decision(id){
+ const target=reviewTarget(items().find(item=>item.id===id));
+ const r=target?.finding.review;
+ return (r&&state.drafts.get(r.scope))||(r?.decision==='accepted'?'yes':r?.decision==='unresolved'?'no':'');
+}
+function confirmed(item){
+ const target=reviewTarget(item),draft=state.drafts.get(target?.finding.review.scope);
+ return codeIntentFindingReviews.recorded(target,state.commentBody)&&(!draft||draft===(target.finding.review.decision==='accepted'?'yes':'no'));
+}
+async function refreshReviewComment(){
+ if(!returnCommentId||Date.now()-state.commentChecked<30000)return;
+ const pending=checks().some(check=>(check.findings||[]).some(finding=>finding.review?.record&&!codeIntentFindingReviews.recorded({finding},state.commentBody)));
+ if(!pending)return;
+ state.commentChecked=Date.now();
+ try{
+  const response=await fetch(`https://api.github.com/repos/${repo.split('/').map(encodeURIComponent).join('/')}/issues/comments/${returnCommentId}`,{cache:'no-store'});
+  if(!response.ok)return;
+  const comment=await response.json();
+  state.commentBody=comment.user?.login==='github-actions[bot]'?comment.body||'':'';
+ }catch(error){/* Keep the recorded decision; do not claim the comment was refreshed. */}
+}
 function pullRequestUrl(){
  const parts=repo.split('/');
  return parts.length===2&&parts.every(Boolean)&&/^\d+$/.test(pr)
@@ -43,7 +68,7 @@ async function resolveReturnComment(){
    if(comments.length<100)break;
   }
  }catch(error){/* Keep return disabled rather than navigate to an unrelated destination. */}
- render();
+ await refreshReviewComment();render();
 }
 
 function routeUrl(view,selected=null){
@@ -155,8 +180,8 @@ async function poll(){
   if(state.packet){state.packet.explorer.results={checks:checks()};state.model=reviewExplorer.enrich(codeIntentReviewModel(state.packet,state.summary||{},[],checks()),state.packet,state.summary,checks());}
   else await loadArtifacts();
  }catch(error){state.error='Live pipeline unavailable: '+error.message;}
- render();
- if(!state.status||state.status.state!=='completed')pollTimer=setTimeout(poll,1500);
+ await refreshReviewComment();render();
+ pollTimer=setTimeout(poll,state.status?.state==='completed'?15000:1500);
 }
 
 function iconFor(value){return value.state==='passed'?'<span class="dot ok">✓</span>':value.state==='error'?'<span class="dot bad">!</span>':value.state==='warn'?'<span class="dot warn">!</span>':'<span class="dot run"></span>';}
@@ -167,6 +192,14 @@ function githubHead(){
  const branch=sha.slice(0,12)||'candidate';
  return `<div class="gh-head"><h1>Review FTGO changes <span>#${esc(pr||'—')}</span></h1>
   <div class="gh-meta"><span class="pill">Open</span><span><b>${esc(repo.split('/')[0]||'repository owner')}</b> wants to merge into <code>main</code> from <code>${esc(branch)}</code></span></div></div>`;
+}
+function checkExplanation(){
+ const id=new URLSearchParams(location.search).get('check');
+ if(!id)return '';
+ const check=checks().find(value=>value.id===id);
+ if(!check)return `<section class="notice"><h2>Check explanation</h2><p>${state.status?'This check is not present in the recorded run.':'Loading the recorded check…'}</p></section>`;
+ const findings=(check.findings||[]).filter(value=>value&&typeof value==='object');
+ return `<section class="notice" id="check-explanation"><h2>${esc(check.label||check.id)}</h2><p><b>${esc(check.state||'pending')}</b>: ${esc(check.detail||check.summary||'No additional explanation was recorded.')}</p>${findings.length?`<ul>${findings.map(f=>`<li><b>${esc(f.title||f.rule_id||f.name||'Finding')}</b>${f.detail||f.reason||f.observation?`: ${esc(f.detail||f.reason||f.observation)}`:''}</li>`).join('')}</ul>`:''}<p><button type="button" class="btn blue" data-act="open">Review supporting evidence →</button></p></section>`;
 }
 function checksScreen(){
  const analysis=walkthroughPipeline.phase(checks(),ANALYSIS,'Waiting for source analysis');
@@ -184,7 +217,7 @@ function checksScreen(){
   after=`<div class="violation-box"><h3>${count?`${count} review item${count===1?'':'s'}`:'Review evidence is incomplete'}</h3><p style="margin:0">${esc(count?'Open CodeIntent to review each behavior, rule finding, and test finding.':state.status?.reason||'Open CodeIntent to review the recorded evidence.')}</p><p style="margin:0"><button type="button" class="btn blue" data-act="open">Review in CodeIntent →</button></p></div>`;
  }
  if(completed&&verdict()==='PASS'&&state.status?.acceptance?.mode==='enforce'&&state.status.acceptance.status!=='ready')top=top.replace('All checks have passed','Analysis passed').replace('2 successful CodeIntent checks','Governance acceptance is reported separately below.');
- return githubHead()+`<div class="merge">${top}${phaseRow('analysis',analysis)}${phaseRow('intent review',intent)}</div>${after}${acceptanceNotice()}`;
+ return githubHead()+checkExplanation()+`<div class="merge">${top}${phaseRow('analysis',analysis)}${phaseRow('intent review',intent)}</div>${after}${acceptanceNotice()}`;
 }
 
 function intentLines(value){
@@ -215,12 +248,11 @@ function typeIcon(value){
  return `<span class="type-icon type-${type.toLowerCase()}" title="${type}" aria-label="${type}"><svg viewBox="0 0 24 24" aria-hidden="true">${paths[type]}</svg></span>`;
 }
 function row(item,kind){
- const answer=decision(item.id),submitted=state.submitted.has(item.id);
- const status=item.status==='unknown'?'Cannot be established':answer==='yes'?(submitted?'Expected · handed off':'Yes, I meant this'):answer==='no'?(submitted?'Investigating · handed off':'No, investigate'):'';
+ const answer=decision(item.id),submitted=confirmed(item);
+ const status=item.status==='unknown'?'Cannot be established':answer==='yes'?(submitted?'Intended · recorded':'Yes, I meant this'):answer==='no'?(submitted?'Unresolved · recorded':'No, investigate'):'';
  const type=String(item.reviewType||'Behavior');
  return `<button type="button" class="row ${answer||''} ${submitted?'submitted':''}" data-row="${esc(item.id)}"><span class="t"><b>${esc(item.title||item.summary)}</b>${item.summary?`<span class="row-summary">${esc(item.summary)}</span>`:''}<small class="meta">${esc(item.concept||item.file||item.groundingLabel||'Recorded review evidence')}${item.objective?' · accepted constraint':''}</small></span><span class="row-side">${typeIcon(type)}${status?`<span class="st">${esc(status)}</span>`:''}</span></button>`;
 }
-function saveBar(){return `<div class="actions rx-save"><span>${state.drafts.size} staged assessment${state.drafts.size===1?'':'s'} · governance changes are handed to protected GitHub Actions.</span><button type="button" class="btn" data-act="undo" ${state.drafts.size?'':'disabled'}>Discard staged</button><button type="button" class="btn blue" data-act="submit" ${state.drafts.size?'':'disabled'}>Continue to governance actions</button></div>`;}
 function summaryNotice(){
  const summary=state.summary?.intent_semantics;
  return summary?.status==='unavailable'?`<div class="notice"><b>English descriptions unavailable</b><p>${esc(summary.reason||'The optional explanation step could not complete. Recorded findings remain available below.')}</p></div>`:'';
@@ -253,6 +285,9 @@ function detailScreen(item){
  const interpretation=`<div class="summary"><small>${esc(item.groundingLabel||'RECORDED PIPELINE EVIDENCE')}</small><p>${esc(item.detailSummary||item.summary)}</p></div>`;
  const question='Was this an intended change?';
  const yes='Yes',no='No';
+ const target=reviewTarget(item),targets=reviewTargets(item),saved=confirmed(item);
+ const selector=targets.length>1?`<label>Finding <select data-review-scope><option value="">Choose a finding</option>${targets.map(t=>`<option value="${esc(t.finding.review.scope)}" ${target===t||target?.finding.review.scope===t.finding.review.scope?'selected':''}>${esc(t.finding.title||t.finding.name||t.finding.id||t.finding.ref)}</option>`).join('')}</select></label>`:'';
+ const note=saved?'Answer recorded and PR comment updated.':target?.finding.review.decision?'Answer recorded. Waiting for the PR comment to update.':target?'Confirm your answer by posting the command on GitHub.':'A uniquely recorded finding is required before answering.';
  return `<div class="ci desc-page"><article class="tile">
   <div class="tile-head"><h3>${esc(item.title)}</h3>${typeIcon(item.reviewType||'Behavior')}</div>
   <div class="tile-sub"><code>${esc(item.method||short(item.file))}</code></div>
@@ -263,9 +298,9 @@ function detailScreen(item){
    <section class="pane"><header><b>Intent</b><span>${esc(label(item.concept))}</span></header>${intent.length?`<pre>${lines(intent)}</pre>`:'<p class="evidence-empty">No intent comparison recorded for this item.</p>'}</section>
    <section class="pane"><header><b>Code</b><span>${esc(short(item.file))}</span></header>${item.comparison?.before?.text!=null&&item.comparison?.after?.text!=null?`<pre>${lines(sourceLines(item))}</pre>${item.comparison.complete?'':'<p class="evidence-empty">Recorded source excerpt; open more evidence for context.</p>'}`:'<p class="evidence-empty">No source comparison recorded for this item. Check the source evidence view for available patches.</p>'}</section>
   </div>
-  ${item.status==='unknown'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>Cannot be established. Review the analysis gap; assessments are unavailable.</b></div>':item.status==='watch'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>No response required while this rule is under evaluation.</b></div>':`<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>${esc(question)}</b><button type="button" class="choice yes" data-act="yes" aria-pressed="${answer==='yes'}">${esc(yes)}</button><button type="button" class="choice no" data-act="no" aria-pressed="${answer==='no'}">${esc(no)}</button><button type="button" class="choice return-github" data-act="return-github" ${answer&&returnToCommentUrl()?'':'disabled'}>Return to Github</button></div>`}
+  ${item.status==='unknown'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>Cannot be established. Review the analysis gap; assessments are unavailable.</b></div>':item.status==='watch'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>No response required while this rule is under evaluation.</b></div>':`<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>${esc(question)}</b>${selector}<button type="button" class="choice yes" data-act="yes" ${target?'':'disabled'} aria-pressed="${answer==='yes'}">${esc(yes)}</button><button type="button" class="choice no" data-act="no" ${target?'':'disabled'} aria-pressed="${answer==='no'}">${esc(no)}</button><button type="button" class="choice return-github" data-act="return-github" ${saved&&returnToCommentUrl()?'':'disabled'}>Return to Github</button><small role="status">${esc(note)}</small></div>`}
   <section class="compact-evidence" aria-labelledby="recorded-evidence-heading"><h4 id="recorded-evidence-heading">Recorded evidence</h4><div id="recorded-evidence">${resolution}${connections}${reviewExplorer.pane(item,state.packet,state.summary,checks(),{tab:state.tab,node:state.node,full:state.full,file:state.evidenceFile,methods:state.methods})}</div></section>
- ${saveBar()}</article></div>`;
+ </article></div>`;
 }
 function acceptanceNotice(){
  const a=state.status?.acceptance;
@@ -281,7 +316,7 @@ function render(){
   const route=new URLSearchParams(location.search);
   const item=walkthroughPipeline.descriptionItem(items(),state.packet,state.summary,checks(),route.get('check'),route.get('issue'));
   if(item){state.selected=item.id;screen.innerHTML=detailScreen(item);}
-  else screen.innerHTML=`<div class="notice"><h2>${state.model?'Description unavailable':'Loading issue description…'}</h2><p>${state.model?'No matching description was recorded for this issue.':'Loading the pinned review evidence.'}</p></div>`;
+  else screen.innerHTML=`<div class="notice"><h2>${state.model?'Description unavailable':'Loading issue description…'}</h2><p>${state.model?'No matching description was recorded for this issue.':'Loading the pinned review evidence.'}</p>${state.model?checkExplanation():''}</div>`;
  }else if(state.view==='checks')screen.innerHTML=checksScreen();
  else if(state.selected){const item=items().find(value=>value.id===state.selected);screen.innerHTML=item?detailScreen(item):listScreen();}
  else screen.innerHTML=listScreen();
@@ -307,16 +342,18 @@ document.addEventListener('click',event=>{
  if(action==='open'){navigate('review');}
  else if(action==='checks'){event.preventDefault();navigate('checks');}
  else if(target.dataset.row){state.evidenceFile='';state.node=null;state.full=false;navigate('review',target.dataset.row);scrollTo(0,0);}
- else if(action==='yes'||action==='no'){const item=items().find(i=>i.id===state.selected);if(item&&item.status!=='unknown'&&item.status!=='watch')state.drafts.set(state.selected,action);render();document.querySelector(`.desc-assessment [data-act="${action}"]`)?.classList.add('choice-selected');}
- else if(action==='return-github'){if(decision(state.selected)&&returnToCommentUrl())location.assign(returnToCommentUrl());}
- else if(action==='undo'){state.drafts.clear();render();}
- else if(action==='submit'){
-  const responses=[];
-  for(const [id,value] of state.drafts){state.submitted.set(id,value);const item=items().find(candidate=>candidate.id===id)||{};responses.push({id,decision:value,summary:item.summary||item.title||'',type:item.reviewType||'Behavior'});}
-  state.drafts.clear();render();window.codeIntentGovernanceActions.open({repo,pr,sha,responses});
+ else if(action==='yes'||action==='no'){
+  const item=items().find(i=>i.id===state.selected),target=reviewTarget(item);
+  if(!target||item.status==='unknown'||item.status==='watch')return;
+  const scope=target.finding.review.scope;state.drafts.set(scope,action);render();
+  document.querySelector(`.desc-assessment [data-act="${action}"]`)?.classList.add('choice-selected');
+  codeIntentFindingReviews.open(codeIntentFindingReviews.command(action,sha,scope),pullRequestUrl()+'#issuecomment-new');
  }
+ else if(action==='return-github'){if(confirmed(items().find(i=>i.id===state.selected))&&returnToCommentUrl())location.assign(returnToCommentUrl());}
+
 });
 document.addEventListener('change',event=>{
+ if(event.target.matches('[data-review-scope]')){state.reviewScope=event.target.value;render();return;}
 
  if(event.target.matches('[data-evidence-file]')){state.evidenceFile=event.target.value;state.node=null;render();document.querySelector('[data-evidence-file]')?.focus();}
 });

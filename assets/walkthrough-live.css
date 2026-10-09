@@ -256,3 +256,11 @@ details.quiet summary{cursor:pointer;color:var(--muted)}details.quiet summary b{
 
 .desc-assessment .choice.yes:not([aria-pressed="true"]){color:var(--ok);border-color:var(--ok)}
 .desc-assessment .choice.no:not([aria-pressed="true"]){color:var(--bad);border-color:var(--bad)}
+
+/* GitHub-confirmed finding decisions share the existing footer palette. */
+.desc-assessment small[role="status"]{flex-basis:100%;text-align:right;color:inherit;font-size:12px}
+.desc-assessment select{max-width:260px;color:#111;background:#fff}
+#finding-confirmation{max-width:640px;width:calc(100% - 40px);border:1px solid #64748b;border-radius:12px;padding:24px}
+#finding-confirmation::backdrop{background:#0f172a99}
+#finding-confirmation textarea{width:100%;box-sizing:border-box;margin:12px 0}
+#finding-confirmation button,#finding-confirmation a{display:inline-block;padding:10px;margin:4px}

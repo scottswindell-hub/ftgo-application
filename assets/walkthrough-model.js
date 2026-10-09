@@ -37,7 +37,11 @@ function descriptionItem(items,packet,summary,checks,checkId,issue){
  const ids=new Set([key,finding?.id].filter(Boolean));
  for(const flow of packet?.flows||[])if(ids.has(flow.id)||ids.has(flow.behavior_judgment?.question_id))ids.add(flow.id);
  for(const row of summary?.intent_semantics?.explanations||[])if((row.member_change_ids||[row.change_id]).some(id=>ids.has(id)))ids.add(row.change_id);
- return items.find(item=>ids.has(item.id)||(item.findings||[]).some(f=>f.ref===key||f.id===key||finding?.ref&&f.ref===finding.ref))||null;
+ const exact=items.filter(item=>ids.has(item.id)||(item.findings||[]).some(f=>f.id&&ids.has(f.id)));
+ if(exact.length===1)return exact[0];
+ if(exact.length>1)return null;
+ const referenced=items.filter(item=>(item.findings||[]).some(f=>f.ref===key||finding?.ref&&f.ref===finding.ref));
+ return referenced.length===1?referenced[0]:null;
 }
 root.walkthroughPipeline={ANALYSIS,REVIEW,phase,intentionalSkip,descriptionItem};
 if(typeof module!=='undefined')module.exports=root.walkthroughPipeline;
