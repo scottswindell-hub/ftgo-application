@@ -57,6 +57,79 @@ public class Ticket {
     this.lineItems = details.getLineItems();
   }
 
+  public List<TicketDomainEvent> cancel() {
+    switch (state) {
+      case AWAITING_ACCEPTANCE:
+      case ACCEPTED:
+      case PREPARING:
+        this.previousState = state;
+        this.state = TicketState.CANCEL_PENDING;
+        return emptyList();
+      default:
+        throw new UnsupportedStateTransitionException(state);
+    }
+  }
+
+  public List<TicketDomainEvent> confirmCancel() {
+    switch (state) {
+      case CANCEL_PENDING:
+        this.state = TicketState.CANCELLED;
+        return singletonList(new TicketCancelled());
+      default:
+        throw new UnsupportedStateTransitionException(state);
+
+    }
+  }
+
+
+  public List<TicketDomainEvent> undoCancel() {
+    switch (state) {
+      case CANCEL_PENDING:
+        this.state = this.previousState;
+        return emptyList();
+      default:
+        throw new UnsupportedStateTransitionException(state);
+
+    }
+  }
+
+  // TODO reject()
+
+  // TODO cancel()
+
+  public List<TicketDomainEvent> beginReviseOrder(List<RevisedOrderLineItem> revisedOrderLineItems) {
+    switch (state) {
+      case AWAITING_ACCEPTANCE:
+      case ACCEPTED:
+        this.previousState = state;
+        this.state = TicketState.REVISION_PENDING;
+        return emptyList();
+      default:
+        throw new UnsupportedStateTransitionException(state);
+    }
+  }
+
+  public List<TicketDomainEvent> confirmReviseTicket(List<RevisedOrderLineItem> revisedOrderLineItems) {
+    switch (state) {
+      case REVISION_PENDING:
+        this.state = this.previousState;
+        return singletonList(new TicketRevised());
+      default:
+        throw new UnsupportedStateTransitionException(state);
+
+    }
+  }
+
+  public List<TicketDomainEvent> undoBeginReviseOrder() {
+    switch (state) {
+      case REVISION_PENDING:
+        this.state = this.previousState;
+        return emptyList();
+      default:
+        throw new UnsupportedStateTransitionException(state);
+    }
+  }
+
   public List<TicketDomainEvent> confirmCreate() {
     switch (state) {
       case CREATE_PENDING:
@@ -70,7 +143,6 @@ public class Ticket {
   public List<TicketDomainEvent> cancelCreate() {
     throw new NotYetImplementedException();
   }
-
 
   public List<TicketDomainEvent> accept(LocalDateTime readyBy) {
     switch (state) {
@@ -86,10 +158,6 @@ public class Ticket {
     }
   }
 
-  // TODO reject()
-
-  // TODO cancel()
-
   public List<TicketDomainEvent> preparing() {
     switch (state) {
       case ACCEPTED:
@@ -100,7 +168,6 @@ public class Ticket {
         throw new UnsupportedStateTransitionException(state);
     }
   }
-
   public List<TicketDomainEvent> readyForPickup() {
     switch (state) {
       case PREPARING:
@@ -137,73 +204,7 @@ public class Ticket {
 
   }
 
-  public List<TicketDomainEvent> cancel() {
-    switch (state) {
-      case AWAITING_ACCEPTANCE:
-      case ACCEPTED:
-        this.previousState = state;
-        this.state = TicketState.CANCEL_PENDING;
-        return emptyList();
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
-  }
-
   public Long getId() {
     return id;
-  }
-
-  public List<TicketDomainEvent> confirmCancel() {
-    switch (state) {
-      case CANCEL_PENDING:
-        this.state = TicketState.CANCELLED;
-        return singletonList(new TicketCancelled());
-      default:
-        throw new UnsupportedStateTransitionException(state);
-
-    }
-  }
-  public List<TicketDomainEvent> undoCancel() {
-    switch (state) {
-      case CANCEL_PENDING:
-        this.state = this.previousState;
-        return emptyList();
-      default:
-        throw new UnsupportedStateTransitionException(state);
-
-    }
-  }
-
-  public List<TicketDomainEvent> beginReviseOrder(List<RevisedOrderLineItem> revisedOrderLineItems) {
-    switch (state) {
-      case AWAITING_ACCEPTANCE:
-      case ACCEPTED:
-        this.previousState = state;
-        this.state = TicketState.REVISION_PENDING;
-        return emptyList();
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
-  }
-
-  public List<TicketDomainEvent> undoBeginReviseOrder() {
-    switch (state) {
-      case REVISION_PENDING:
-        this.state = this.previousState;
-        return emptyList();
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
-  }
-
-  public List<TicketDomainEvent> confirmReviseTicket(List<RevisedOrderLineItem> revisedOrderLineItems) {
-    switch (state) {
-      case REVISION_PENDING:
-        this.state = this.previousState;
-        return singletonList(new TicketRevised());
-      default:
-        throw new UnsupportedStateTransitionException(state);
-
-    }
   }
 }
