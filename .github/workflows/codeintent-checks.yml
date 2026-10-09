@@ -318,9 +318,9 @@ jobs:
                   query.extend([('view','desc'),('check',check['id']),('issue',issue or '')])
                   target=urlunsplit((url.scheme,url.netloc,url.path,urlencode(query),''))
                   suffix=' — resolved (accepted as intended)' if decision=='accepted' else ' — unresolved' if decision=='unresolved' else ' — needs review'
-                  lines.append(f'  - {icon}[{label}](<{target}>){suffix}')
+                  lines.append(f'- {icon}[{label}](<{target}>){suffix}')
                   if decision in {'accepted','unresolved'}:
-                      lines.append(f"    <!-- codeintent-review:{review['scope']}:{decision}:{review['record']} -->")
+                      lines.append(f"  <!-- codeintent-review:{review['scope']}:{decision}:{review['record']} -->")
               return lines
 
 
@@ -379,15 +379,13 @@ jobs:
                   name=inline(check.get('label') or check['id'])
                   has_reviews=any(f.get('review') for f in check.get('findings') or [])
                   if reviewed(check):
-                      detail='; analysis still reports a violation' if state=='failed' else ''
-                      accepted.append(f'- {name} — findings resolved{detail}')
                       accepted+=review_lines(check,report_url)
                   elif state=='passed' and not review_pending(check):
                       suffix=' — response requested' if check.get('id')=='coding_standards' and check.get('findings') and not reviewed(check) else ''
                       passed.append(f'- {name}{suffix}')
                       passed+=review_lines(check,report_url) if has_reviews else finding_lines(check) if document.get('governance_run_id') else []
                   elif state in {'failed','error'} or review_pending(check):
-                      failed_count+=1
+                      failed_count+=sum((f.get('review') or {}).get('decision')!='accepted' for f in check.get('findings') or []) if has_reviews else 1
                       detail=boundary_summary(check) if check.get('id')=='intent_diff' and state=='failed' else 'response requested' if state=='passed' else inline(state)
                       url=urlsplit(report_url)
                       query=[(key,value) for key,value in parse_qsl(url.query,keep_blank_values=True) if key not in {'view','check','item','issue'}]
@@ -397,7 +395,8 @@ jobs:
                           issue=issues[0].get('id') or issues[0].get('ref')
                           if issue: query.append(('issue',issue))
                       target=urlunsplit((url.scheme,url.netloc,url.path,urlencode(query),''))
-                      failed.append(f'- **[{name}](<{target}>)**: {detail}')
+                      if not has_reviews:
+                          failed.append(f'- **[{name}](<{target}>)**: {detail}')
                       if has_reviews:
                           failed+=review_lines(check,report_url)
                       elif check.get('id')!='intent_diff' and document.get('governance_run_id'):
@@ -406,8 +405,11 @@ jobs:
               if passed:
                   rows+=['<details>', f'<summary>✅ Passing checks ({passed_count})</summary>', '',
                          *passed, '', '</details>']
+              if accepted and failed:
+                  failed=accepted+failed
+                  accepted=[]
               if accepted:
-                  rows+=['<details open>', '<summary>✅ Resolved findings</summary>', '', *accepted, '', '</details>']
+                  rows+=['<details open>', '<summary>✅ Resolved findings</summary>', '', *accepted, '', 'These findings were accepted as intended; original analysis results are unchanged.', '', '</details>']
               if failed:
                   rows+=['<details open>', f'<summary>❌ Needs Review ({failed_count})</summary>', '',
                          *failed, '', '</details>', '']
