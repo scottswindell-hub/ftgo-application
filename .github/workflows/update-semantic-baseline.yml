@@ -85,14 +85,11 @@ jobs:
               if subprocess.run(args + ['-f', 'body=' + body], stdout=subprocess.DEVNULL).returncode:
                   print('::warning::Could not post the semantic baseline comment.')
           def not_eligible(reason):
-              text = ('### Semantic baseline: no candidate for this commit\n\n' + reason + '\n\n'
-                      'This PR keeps its normal checks. If it is merged, a new baseline is needed: changes that '
-                      'add, remove or rename Java units, or touch non-Java build files, require full regeneration. '
-                      f'[Details]({os.environ["RUN_URL"]})')
+              # Automatic ineligibility is informational, not a PR review item.
+              # Keep diagnostics in the workflow; only ready candidates get a comment.
               with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
                   summary.write('<h2>Semantic baseline: not eligible</h2>\n<p>' + html.escape(reason) + '</p>\n')
               print('Not eligible for the semantic baseline lane: ' + reason)
-              pr_comment(text)
               raise SystemExit(0)
           try:
               queued = call('POST', payload)
