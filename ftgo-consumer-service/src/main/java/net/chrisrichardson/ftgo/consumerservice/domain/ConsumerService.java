@@ -26,7 +26,7 @@ public class ConsumerService {
   public ResultWithEvents<Consumer> create(PersonName name) {
     ResultWithEvents<Consumer> rwe = Consumer.create(name);
     consumerRepository.save(rwe.result);
-    domainEventPublisher.publish(Consumer.class, rwe.result.getId(), rwe.events);
+    domainEventPublisher.publish(Consumer.class, rwe.result.getPublicId().value(), rwe.events);
     return rwe;
   }
 
