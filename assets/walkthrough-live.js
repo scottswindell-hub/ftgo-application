@@ -13,7 +13,7 @@ const api=(qs.get('api')||'').replace(/\/+$/,'');
 let dataPath=qs.get('data')||'';
 const {ANALYSIS,REVIEW}=walkthroughPipeline;
 const initialView=qs.get('view')==='checks'?'checks':'review';
-const state={desc:qs.get('view')==='desc',status:null,packet:null,packetDigest:null,summary:null,model:null,view:initialView,selected:initialView==='review'?(qs.get('item')||null):null,tab:'obj',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),reviewScope:null,commentBody:'',commentChecked:0,error:'',loadingArtifact:false};
+const state={desc:qs.get('view')==='desc',status:null,packet:null,packetDigest:null,summary:null,model:null,view:initialView,selected:initialView==='review'?(qs.get('item')||null):null,tab:'obj',node:null,full:false,evidenceFile:'',methods:{},drafts:new Map(),saves:new Map(),reviewScope:null,commentBody:'',commentChecked:0,error:'',loadingArtifact:false};
 let pollTimer=null;
 let assessmentResize=null;
 let returnCommentId=/^[0-9]+$/.test(qs.get('comment')||'')?qs.get('comment'):null;
@@ -286,8 +286,9 @@ function detailScreen(item){
  const question='Was this an intended change?';
  const yes='Yes',no='No';
  const target=reviewTarget(item),targets=reviewTargets(item),saved=confirmed(item);
+ const save=state.saves.get(target?.finding.review.scope);
  const selector=targets.length>1?`<label>Finding <select data-review-scope><option value="">Choose a finding</option>${targets.map(t=>`<option value="${esc(t.finding.review.scope)}" ${target===t||target?.finding.review.scope===t.finding.review.scope?'selected':''}>${esc(t.finding.title||t.finding.name||t.finding.id||t.finding.ref)}</option>`).join('')}</select></label>`:'';
- const note=saved?'Answer recorded and PR comment updated.':target?.finding.review.decision?'Answer recorded. Waiting for the PR comment to update.':target?'Confirm your answer by posting the command on GitHub.':'A uniquely recorded finding is required before answering.';
+ const note=saved?'Answer recorded and PR comment updated.':save?.message||(target?.finding.review.decision?'Answer recorded. Waiting for the PR comment to update.':target?'Your answer will be saved and the PR message updated.':'A uniquely recorded finding is required before answering.');
  return `<div class="ci desc-page"><article class="tile">
   <div class="tile-head"><h3>${esc(item.title)}</h3>${typeIcon(item.reviewType||'Behavior')}</div>
   <div class="tile-sub"><code>${esc(item.method||short(item.file))}</code></div>
@@ -298,7 +299,7 @@ function detailScreen(item){
    <section class="pane"><header><b>Intent</b><span>${esc(label(item.concept))}</span></header>${intent.length?`<pre>${lines(intent)}</pre>`:'<p class="evidence-empty">No intent comparison recorded for this item.</p>'}</section>
    <section class="pane"><header><b>Code</b><span>${esc(short(item.file))}</span></header>${item.comparison?.before?.text!=null&&item.comparison?.after?.text!=null?`<pre>${lines(sourceLines(item))}</pre>${item.comparison.complete?'':'<p class="evidence-empty">Recorded source excerpt; open more evidence for context.</p>'}`:'<p class="evidence-empty">No source comparison recorded for this item. Check the source evidence view for available patches.</p>'}</section>
   </div>
-  ${item.status==='unknown'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>Cannot be established. Review the analysis gap; assessments are unavailable.</b></div>':item.status==='watch'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>No response required while this rule is under evaluation.</b></div>':`<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>${esc(question)}</b>${selector}<button type="button" class="choice yes" data-act="yes" ${target?'':'disabled'} aria-pressed="${answer==='yes'}">${esc(yes)}</button><button type="button" class="choice no" data-act="no" ${target?'':'disabled'} aria-pressed="${answer==='no'}">${esc(no)}</button><button type="button" class="choice return-github" data-act="return-github" ${saved&&returnToCommentUrl()?'':'disabled'}>Return to Github</button><small role="status">${esc(note)}</small></div>`}
+  ${item.status==='unknown'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>Cannot be established. Review the analysis gap; assessments are unavailable.</b></div>':item.status==='watch'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>No response required while this rule is under evaluation.</b></div>':`<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>${esc(question)}</b>${selector}<button type="button" class="choice yes" data-act="yes" ${target&&!save?.busy?'':'disabled'} aria-pressed="${answer==='yes'}">${esc(yes)}</button><button type="button" class="choice no" data-act="no" ${target&&!save?.busy?'':'disabled'} aria-pressed="${answer==='no'}">${esc(no)}</button><button type="button" class="choice return-github" data-act="return-github" ${saved&&returnToCommentUrl()?'':'disabled'}>Return to Github</button><small role="status">${esc(note)}${!saved&&save?.retry?'<button type="button" class="btn" data-act="retry-review">Retry GitHub update</button>':''}</small></div>`}
   <section class="compact-evidence" aria-labelledby="recorded-evidence-heading"><h4 id="recorded-evidence-heading">Recorded evidence</h4><div id="recorded-evidence">${resolution}${connections}${reviewExplorer.pane(item,state.packet,state.summary,checks(),{tab:state.tab,node:state.node,full:state.full,file:state.evidenceFile,methods:state.methods})}</div></section>
  </article></div>`;
 }
@@ -331,7 +332,7 @@ function render(){
  legacyMethodExplorer.hydrate();
 }
 
-document.addEventListener('click',event=>{
+document.addEventListener('click',async event=>{
  const target=event.target.closest('button,a,[data-row],[data-node],[data-method-id],[data-method-service],input');if(!target)return;
  if(target.closest('.legacy-method-explorer'))return;
  const action=target.dataset.act;
@@ -342,12 +343,23 @@ document.addEventListener('click',event=>{
  if(action==='open'){navigate('review');}
  else if(action==='checks'){event.preventDefault();navigate('checks');}
  else if(target.dataset.row){state.evidenceFile='';state.node=null;state.full=false;navigate('review',target.dataset.row);scrollTo(0,0);}
- else if(action==='yes'||action==='no'){
+ else if(action==='yes'||action==='no'||action==='retry-review'){
   const item=items().find(i=>i.id===state.selected),target=reviewTarget(item);
   if(!target||item.status==='unknown'||item.status==='watch')return;
-  const scope=target.finding.review.scope;state.drafts.set(scope,action);render();
-  document.querySelector(`.desc-assessment [data-act="${action}"]`)?.classList.add('choice-selected');
-  codeIntentFindingReviews.open(codeIntentFindingReviews.command(action,sha,scope),pullRequestUrl()+'#issuecomment-new');
+  const scope=target.finding.review.scope,prior=state.saves.get(scope);
+  if(prior?.busy)return;
+  const answer=action==='retry-review'?prior?.request.answer:action;
+  if(!answer)return;
+  const request=prior?.request&&prior.request.answer===answer?prior.request:{repository:repo,pull_request:Number(pr),head_sha:sha,scope,answer,expected_review:target.finding.review.record||null,request_id:crypto.randomUUID()};
+  state.drafts.set(scope,answer);state.saves.set(scope,{request,busy:true,message:'Saving your answer…'});render();
+  document.querySelector(`.desc-assessment [data-act="${answer}"]`)?.classList.add('choice-selected');
+  try{
+   const result=await codeIntentFindingReviews.submit(request);
+   state.saves.set(scope,{request,busy:false,retry:true,message:result.state==='github_pending'?result.message:'Answer saved. Updating the GitHub message…'});
+   state.commentChecked=0;clearTimeout(pollTimer);await poll();
+  }catch(error){
+   state.saves.set(scope,{request: error.status===409?null:request,busy:false,retry:false,message:error.message});render();
+  }
  }
  else if(action==='return-github'){if(confirmed(items().find(i=>i.id===state.selected))&&returnToCommentUrl())location.assign(returnToCommentUrl());}
 

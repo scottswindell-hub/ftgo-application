@@ -252,7 +252,7 @@ function reviewFindingItems(packet,summary,items,checks){
   const interpretation=interpretations.get(finding.findingKey)||{};
   const plain=interpretation.summary||target?.summary||finding.title;
   const fallback=finding.kind==='test'?[finding.summary,finding.basis].filter(Boolean).join(' '):plain;
-  projected.push({id:finding.id,kind:'change',status:finding.watchOnly?'watch':'finding',title:finding.title,
+  projected.push({id:finding.id,kind:finding.kind==='standard'&&!finding.watchOnly?'constraint':'change',status:finding.watchOnly?'watch':'finding',title:finding.title,
    concept:finding.kind==='test'?'Behavioral evidence':'Repository standard',method:finding.method,
    file:finding.file,owner:'',objective:'',
    before:target?.before||(finding.kind==='test'?'The baseline retained test evidence for the affected behavior.':'The baseline did not contain this reported rule conflict.'),
