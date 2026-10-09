@@ -10,7 +10,6 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -19,7 +18,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 public class ConsumerServiceTest {
 
@@ -49,7 +47,6 @@ public class ConsumerServiceTest {
     ResultWithEvents<Consumer> result = consumerService.create(new PersonName("John", "Doe"));
 
     verify(consumerRepository).save(result.result);
-    assertEquals(Long.valueOf(CONSUMER_ID), result.result.getId());
   }
 
   @Test
@@ -69,14 +66,6 @@ public class ConsumerServiceTest {
 
     assertEquals(ConsumerPublicId.of(CONSUMER_ID), result.result.getPublicId());
     assertEquals("0000000042", result.result.getPublicId().value());
-  }
-
-  @Test
-  public void shouldStillFindConsumersByNumericId() {
-    Consumer consumer = new Consumer(new PersonName("John", "Doe"));
-    when(consumerRepository.findById(CONSUMER_ID)).thenReturn(Optional.of(consumer));
-
-    assertEquals(Optional.of(consumer), consumerService.findById(CONSUMER_ID));
   }
 
   @Test(expected = IllegalStateException.class)

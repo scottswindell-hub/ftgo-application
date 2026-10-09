@@ -5,6 +5,7 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 
 public class ConsumerPublicIdTest {
@@ -67,9 +68,19 @@ public class ConsumerPublicIdTest {
 
   @Test
   public void shouldCompareByValue() {
-    assertEquals(ConsumerPublicId.of(7), ConsumerPublicId.of(7));
-    assertEquals(ConsumerPublicId.of(7).hashCode(), ConsumerPublicId.of(7).hashCode());
-    assertNotEquals(ConsumerPublicId.of(7), ConsumerPublicId.of(8));
+    ConsumerPublicId fromNumber = ConsumerPublicId.of(7);
+    ConsumerPublicId fromText = ConsumerPublicId.parse("0000000007");
+
+    assertNotSame(fromNumber, fromText);
+    assertEquals(fromNumber, fromText);
+    assertEquals(fromText, fromNumber);
+    assertNotEquals(fromNumber, ConsumerPublicId.parse("0000000008"));
+    assertNotEquals(fromNumber, null);
+  }
+
+  @Test
+  public void shouldHashEqualValuesAlike() {
+    assertEquals(ConsumerPublicId.of(7).hashCode(), ConsumerPublicId.parse("0000000007").hashCode());
   }
 
   @Test
