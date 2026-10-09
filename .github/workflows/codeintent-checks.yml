@@ -50,7 +50,7 @@ jobs:
           body="$marker
           ### CodeIntent checks
 
-          ## [<img src=\"${STATUS_PAGE_URL%/}/assets/checks-running.gif\" width=\"28\" height=\"28\" alt=\"Checks running\"> Watch the checks run live ↗]($dashboard_url)
+          ## <img src=\"${STATUS_PAGE_URL%/}/assets/checks-running.gif\" width=\"28\" height=\"28\" alt=\"Checks running\"> [Watch the checks run live ↗]($dashboard_url)
 
           Open the live review to follow progress and inspect findings as they arrive."
           comment_id=$(gh api "repos/$PR_FULL_REPO/issues/$PR_NUMBER/comments" --paginate --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$marker\"))) | .id" | head -1 || true)
