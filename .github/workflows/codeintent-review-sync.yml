@@ -1,0 +1,96 @@
+name: Update CodeIntent review message
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: FTGO pull request number
+        required: true
+        type: number
+      head_sha:
+        description: Reviewed source commit
+        required: true
+        type: string
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+concurrency:
+  group: codeintent-review-sync-${{ inputs.pull_request }}
+  cancel-in-progress: false
+jobs:
+  update:
+    if: github.repository == 'scottswindell-hub/ftgo-application' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Refresh the bot message from recorded review decisions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pull_request }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re, urllib.request
+          from urllib.parse import urlencode
+          repo, number, sha = os.environ['REPOSITORY'], os.environ['PR_NUMBER'], os.environ['HEAD_SHA']
+          if not number.isdigit() or int(number) < 1 or not re.fullmatch(r'[0-9a-f]{40}', sha):
+              raise SystemExit('Invalid PR or commit identity')
+          def github(path, method='GET', body=None):
+              request = urllib.request.Request('https://api.github.com' + path, method=method,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json',
+                           'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28'},
+                  data=json.dumps(body).encode() if body is not None else None)
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  return json.load(response)
+          def current():
+              pr = github(f'/repos/{repo}/pulls/{number}')
+              return pr['state'] == 'open' and pr['head']['sha'] == sha
+          if not current():
+              raise SystemExit('PR changed or closed; refusing a stale message update')
+          bot = None
+          for page in range(1, 11):
+              comments = github(f'/repos/{repo}/issues/{number}/comments?per_page=100&page={page}')
+              bot = next((c for c in comments if c.get('user', {}).get('login') == 'github-actions[bot]'
+                          and '<!-- codeintent-checks -->' in c.get('body', '')), None)
+              if bot or len(comments) < 100:
+                  break
+          # Keep findings visible while Lambda renders the updated review projection.
+          pending = None
+          if not current():
+              raise SystemExit('PR changed before refresh; refusing a stale message update')
+          if bot:
+              spinner = '<img src="https://scottswindell-hub.github.io/ftgo-application/assets/checks-running.gif" width="20" height="20" alt="Updating review">'
+              heading = '### CodeIntent checks -- ' + spinner + ' Updating review…'
+              pending = re.sub(r'^### CodeIntent checks[^\n]*', lambda _: heading, bot['body'], count=1, flags=re.MULTILINE)
+              if pending == bot['body']:
+                  pending = bot['body'] + '\n\n' + heading
+              github(f'/repos/{repo}/issues/comments/{bot["id"]}', 'PATCH', {'body': pending})
+          try:
+              query = {'repo': repo, 'sha': sha, 'detail': 'review-comment'}
+              if bot:
+                  query['comment'] = str(bot['id'])
+              url = 'https://qgd63ljozc.execute-api.us-east-1.amazonaws.com/demo/status?' + urlencode(query)
+              with urllib.request.urlopen(url, timeout=30) as response:
+                  document = json.load(response)
+              if document.get('head_sha') != sha or document.get('pull_request') != int(number) or not current():
+                  raise SystemExit('Review identity changed; reload the current PR')
+              body = document['body']
+              if '<!-- codeintent-checks -->' not in body:
+                  raise SystemExit('Missing authenticated review projection')
+              if bot:
+                  github(f'/repos/{repo}/issues/comments/{bot["id"]}', 'PATCH', {'body': body})
+              else:
+                  github(f'/repos/{repo}/issues/{number}/comments', 'POST', {'body': body})
+          except (Exception, SystemExit):
+              # Do not leave a spinner forever, or overwrite a newer pipeline comment.
+              if bot and pending:
+                  latest = github(f'/repos/{repo}/issues/comments/{bot["id"]}')
+                  if latest.get('body') == pending:
+                      failed = pending.replace(heading, '### CodeIntent checks -- ⚠️ Review update incomplete; retry from the review page', 1)
+                      github(f'/repos/{repo}/issues/comments/{bot["id"]}', 'PATCH', {'body': failed})
+              raise
+          print('CodeIntent bot message updated from recorded review decisions.')
+          PY

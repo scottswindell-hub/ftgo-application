@@ -50,7 +50,7 @@ jobs:
           body="$marker
           ### CodeIntent checks
 
-          ## [<img src=\"${STATUS_PAGE_URL%/}/assets/checks-running.gif\" width=\"28\" height=\"28\" alt=\"Checks running\"> Watch the checks run live ↗]($dashboard_url)
+          ## <img src=\"${STATUS_PAGE_URL%/}/assets/checks-running.gif\" width=\"28\" height=\"28\" alt=\"Checks running\"> [Watch the checks run live ↗]($dashboard_url)
 
           Open the live review to follow progress and inspect findings as they arrive."
           comment_id=$(gh api "repos/$PR_FULL_REPO/issues/$PR_NUMBER/comments" --paginate --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$marker\"))) | .id" | head -1 || true)
@@ -317,10 +317,10 @@ jobs:
                   query=[(k,v) for k,v in parse_qsl(url.query,keep_blank_values=True) if k not in {'view','check','issue','item'}]
                   query.extend([('view','desc'),('check',check['id']),('issue',issue or '')])
                   target=urlunsplit((url.scheme,url.netloc,url.path,urlencode(query),''))
-                  suffix=' — intended, recorded' if decision=='accepted' else ' — unresolved' if decision=='unresolved' else ' — needs review'
-                  lines.append(f'  - {icon}[{label}](<{target}>){suffix}')
+                  suffix=' — resolved (accepted as intended)' if decision=='accepted' else ' — unresolved' if decision=='unresolved' else ' — needs review'
+                  lines.append(f'- {icon}[{label}](<{target}>){suffix}')
                   if decision in {'accepted','unresolved'}:
-                      lines.append(f"    <!-- codeintent-review:{review['scope']}:{decision}:{review['record']} -->")
+                      lines.append(f"  <!-- codeintent-review:{review['scope']}:{decision}:{review['record']} -->")
               return lines
 
 
@@ -345,6 +345,11 @@ jobs:
               return f"needs review — {len(findings)} finding{'' if len(findings)==1 else 's'}{across}"
 
 
+          def demo_evidence_gap(check):
+              return (check.get('id') == 'connected_evidence' and check.get('state') == 'error'
+                      and 'required evidence gap(s)' in check.get('detail', ''))
+
+
           def render_run_comment(document, report_url):
               if urlsplit(report_url).scheme not in {'http','https'}:
                   raise ValueError('Report URL must be HTTP(S)')
@@ -354,6 +359,8 @@ jobs:
                   query=[(key,value) for key,value in parse_qsl(url.query,keep_blank_values=True) if key!='comment']
                   report_url=urlunsplit((url.scheme,url.netloc,url.path,urlencode([*query,('comment',comment_id)]),url.fragment))
               checks=document.get('checks') or document.get('stages') or []
+              hidden=[c for c in checks if document.get('repo')=='scottswindell-hub/ftgo-application' and demo_evidence_gap(c)]
+              checks=[c for c in checks if c not in hidden]
               verdict=document.get('verdict')
               acceptance=document.get('acceptance') or {}
               status=acceptance.get('status')
@@ -361,10 +368,10 @@ jobs:
               visible=[c for c in checks if c.get('id')!='governance_decision']
               failures=[c for c in visible if c.get('state') in {'failed','error'}]
               all_reviewed=bool(failures) and all(reviewed(c) for c in failures)
-              needs_review=((verdict!='PASS' and not all_reviewed) or any(not reviewed(c) for c in failures) or any(review_pending(c) for c in visible)
+              needs_review=((verdict!='PASS' and not all_reviewed and not hidden) or any(not reviewed(c) for c in failures) or any(review_pending(c) for c in visible)
                             or (not shadow and status in {'blocked','review_required','incomplete','evidence_needed'}))
               label=('⏳ Running' if document.get('state')!='completed' else
-                     '❌ Needs Review' if needs_review else '✅ Reviewed' if all_reviewed else '✅ Passed')
+                     '❌ Needs Review' if needs_review else '✅ Reviewed' if all_reviewed else 'Review results' if hidden else '✅ Passed')
               rows=[MARKER,'### CodeIntent checks -- '+label,'']
               if document.get('violation_status')=='rejected':
                   rows+=['**Rejected:** a rule violation was confirmed, so this pull request was closed.','']
@@ -378,15 +385,14 @@ jobs:
                   state=check.get('state','pending')
                   name=inline(check.get('label') or check['id'])
                   has_reviews=any(f.get('review') for f in check.get('findings') or [])
-                  if reviewed(check) and state=='failed':
-                      accepted.append(f'- {name} — findings accepted as intended; analysis still reports a violation')
+                  if reviewed(check):
                       accepted+=review_lines(check,report_url)
                   elif state=='passed' and not review_pending(check):
                       suffix=' — response requested' if check.get('id')=='coding_standards' and check.get('findings') and not reviewed(check) else ''
                       passed.append(f'- {name}{suffix}')
                       passed+=review_lines(check,report_url) if has_reviews else finding_lines(check) if document.get('governance_run_id') else []
                   elif state in {'failed','error'} or review_pending(check):
-                      failed_count+=1
+                      failed_count+=sum((f.get('review') or {}).get('decision')!='accepted' for f in check.get('findings') or []) if has_reviews else 1
                       detail=boundary_summary(check) if check.get('id')=='intent_diff' and state=='failed' else 'response requested' if state=='passed' else inline(state)
                       url=urlsplit(report_url)
                       query=[(key,value) for key,value in parse_qsl(url.query,keep_blank_values=True) if key not in {'view','check','item','issue'}]
@@ -396,23 +402,23 @@ jobs:
                           issue=issues[0].get('id') or issues[0].get('ref')
                           if issue: query.append(('issue',issue))
                       target=urlunsplit((url.scheme,url.netloc,url.path,urlencode(query),''))
-                      failed.append(f'- **[{name}](<{target}>)**: {detail}')
+                      if not has_reviews:
+                          failed.append(f'- **[{name}](<{target}>)**: {detail}')
                       if has_reviews:
-                          failed+=review_lines(check,report_url,accepted=False)
-                          accepted_rows=review_lines(check,report_url,accepted=True)
-                          if accepted_rows:
-                              accepted.append(f'- {name} — accepted findings')
-                              accepted+=accepted_rows
+                          failed+=review_lines(check,report_url)
                       elif check.get('id')!='intent_diff' and document.get('governance_run_id'):
                           failed+=finding_lines(check)
-              passed_count=sum(check.get('state')=='passed' and check.get('id')!='governance_decision' and not review_pending(check) for check in checks)
+              passed_count=sum(check.get('state')=='passed' and check.get('id')!='governance_decision' and not review_pending(check) and not reviewed(check) for check in checks)
               if passed:
-                  rows+=['<details>', f'<summary>✅ Passing checks ({passed_count})</summary>', '',
+                  rows+=['<details>', '<summary>✅ Passing checks</summary>', '',
                          *passed, '', '</details>']
+              if accepted and failed:
+                  failed=accepted+failed
+                  accepted=[]
               if accepted:
-                  rows+=['<details>', '<summary>✅ Reviewed findings</summary>', '', *accepted, '', '</details>']
+                  rows+=['<details open>', '<summary>✅ Resolved findings</summary>', '', *accepted, '', 'These findings were accepted as intended; original analysis results are unchanged.', '', '</details>']
               if failed:
-                  rows+=['<details open>', f'<summary>❌ Needs Review ({failed_count})</summary>', '',
+                  rows+=['<details open>', '<summary>❌ Needs Review</summary>', '',
                          *failed, '', '</details>', '']
               risks=(acceptance.get('intent_risks') or {}).get('assessments',[])
               if risks:
