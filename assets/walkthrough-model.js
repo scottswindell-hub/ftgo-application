@@ -4,6 +4,7 @@
 const ANALYSIS=['pr_source','backend_artifacts','severity','coding_standards','improper_tests'];
 const REVIEW=['intent_diff','rule_impact','connected_evidence','governance_decision','ask_code_intent'];
 const terminal=new Set(['passed','failed','error','blocked','stopped','skipped']);
+function demoEvidenceGap(check){return check?.id==='connected_evidence'&&check.state==='error'&&(check.detail||'').includes('required evidence gap(s)');}
 function intentionalSkip(check,checks){
  const severity=(checks||[]).find(c=>c.id==='severity');
  const gated=severity?.state==='stopped'&&/confidently below threshold, downstream checks skipped/.test(severity.detail||'');
@@ -43,6 +44,6 @@ function descriptionItem(items,packet,summary,checks,checkId,issue){
  const referenced=items.filter(item=>(item.findings||[]).some(f=>f.ref===key||finding?.ref&&f.ref===finding.ref));
  return referenced.length===1?referenced[0]:null;
 }
-root.walkthroughPipeline={ANALYSIS,REVIEW,phase,intentionalSkip,descriptionItem};
+root.walkthroughPipeline={ANALYSIS,REVIEW,phase,intentionalSkip,descriptionItem,demoEvidenceGap};
 if(typeof module!=='undefined')module.exports=root.walkthroughPipeline;
 })(typeof window!=='undefined'?window:globalThis);

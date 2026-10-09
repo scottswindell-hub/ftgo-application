@@ -21,8 +21,10 @@ let returnCommentId=/^[0-9]+$/.test(qs.get('comment')||'')?qs.get('comment'):nul
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const short=value=>String(value||'').split('/').pop();
 const label=value=>String(value||'').replace(/^FTGO-/,'').replaceAll('_',' ').replaceAll('-',' ').toLowerCase().replace(/^./,c=>c.toUpperCase());
-const checks=()=>state.status?.checks||state.status?.stages||[];
-const items=()=>state.model?[...state.model.changes,...state.model.constraints]:[];
+const demo=repo==='scottswindell-hub/ftgo-application';
+const rawChecks=()=>state.status?.checks||state.status?.stages||[];
+const checks=()=>rawChecks().filter(c=>!demo||(!walkthroughPipeline.demoEvidenceGap(c)&&c.id!=='governance_decision'));
+const items=()=>state.model?[...state.model.changes,...state.model.constraints].filter(item=>!demo||item.status!=='unknown'):[];
 function reviewTargets(item){return item?codeIntentFindingReviews.targets(item,items(),state.packet,state.summary,checks()):[];}
 function reviewTarget(item){
  const targets=reviewTargets(item),issue=new URLSearchParams(location.search).get('issue');
@@ -195,7 +197,7 @@ function githubHead(){
 }
 function checkExplanation(){
  const id=new URLSearchParams(location.search).get('check');
- if(!id)return '';
+ if(!id||(demo&&rawChecks().some(c=>c.id===id&&walkthroughPipeline.demoEvidenceGap(c))))return '';
  const check=checks().find(value=>value.id===id);
  if(!check)return `<section class="notice"><h2>Check explanation</h2><p>${state.status?'This check is not present in the recorded run.':'Loading the recorded check…'}</p></section>`;
  const findings=(check.findings||[]).filter(value=>value&&typeof value==='object');
@@ -207,6 +209,7 @@ function checksScreen(){
  const completed=state.status?.state==='completed';
  const count=items().length;
  let top,after='';
+ if(demo&&completed&&!count&&rawChecks().some(walkthroughPipeline.demoEvidenceGap))return githubHead()+listScreen();
  if(!completed)top='<div class="merge-top"><span class="ic run">…</span><div><h3>Some checks haven’t completed yet</h3><p>CodeIntent is evaluating this revision.</p></div></div>';
  else if(verdict()==='PASS'&&!count){
   top='<div class="merge-top"><span class="ic ok">✓</span><div><h3>All checks have passed</h3><p>2 successful CodeIntent checks</p></div></div>';
@@ -254,6 +257,7 @@ function row(item,kind){
  return `<button type="button" class="row ${answer||''} ${submitted?'submitted':''}" data-row="${esc(item.id)}"><span class="t"><b>${esc(item.title||item.summary)}</b>${item.summary?`<span class="row-summary">${esc(item.summary)}</span>`:''}<small class="meta">${esc(item.concept||item.file||item.groundingLabel||'Recorded review evidence')}${item.objective?' · accepted constraint':''}</small></span><span class="row-side">${typeIcon(type)}${status?`<span class="st">${esc(status)}</span>`:''}</span></button>`;
 }
 function summaryNotice(){
+ if(demo)return '';
  const summary=state.summary?.intent_semantics;
  return summary?.status==='unavailable'?`<div class="notice"><b>English descriptions unavailable</b><p>${esc(summary.reason||'The optional explanation step could not complete. Recorded findings remain available below.')}</p></div>`:'';
 }
@@ -261,13 +265,14 @@ function listScreen(){
  if(!state.model){
   const finished=state.status?.state==='completed';
   const failures=checks().filter(check=>check.state==='error'||check.state==='failed');
+  if(demo&&finished&&rawChecks().some(walkthroughPipeline.demoEvidenceGap))return '<div class="ci"><p class="empty-list">No review items to display.</p></div>';
   if(finished||state.error)return `<div class="ci"><div class="error-box" role="status"><h2>Review evidence unavailable</h2><p>${esc(state.error||(failures.length?'Analysis finished with errors; review evidence could not be produced.':'Analysis finished without a recorded review artifact.'))}</p>${failures.length?`<ul>${failures.map(check=>`<li><b>${esc(check.label||check.id)}</b>: ${esc(check.detail||check.summary||'Analysis unavailable')}</li>`).join('')}</ul>`:''}</div></div>`;
   return `<div class="ci"><div class="loading">Waiting for recorded review evidence…</div></div>`;
  }
  const all=items();
  const reviewable=all.filter(item=>item.status!=='unknown');
  const complete=(state.model.semanticStatus==='no_changes'||state.model.noGovernedChanges)&&verdict()==='PASS';
- const empty=complete?'No change to evaluated governed behavior was established.':'Review evidence is incomplete. An empty list does not establish unchanged behavior.';
+ const empty=demo?'No review items to display.':complete?'No change to evaluated governed behavior was established.':'Review evidence is incomplete. An empty list does not establish unchanged behavior.';
  if(!reviewable.length)return `<div class="ci">${complete?'<div class="happy"><span class="face" aria-hidden="true">✓</span><h3>No governed changes require review</h3><p>Analysis passed. No review response is needed for this change.</p></div>':`<p class="empty-list">${empty}</p>`}${acceptanceNotice()}${summaryNotice()}</div>`;
  const section=(kind,heading)=>{
   const group=reviewable.filter(item=>item.kind===kind);
@@ -317,6 +322,7 @@ function render(){
   const route=new URLSearchParams(location.search);
   const item=walkthroughPipeline.descriptionItem(items(),state.packet,state.summary,checks(),route.get('check'),route.get('issue'));
   if(item){state.selected=item.id;screen.innerHTML=detailScreen(item);}
+  else if(demo)screen.innerHTML=listScreen();
   else screen.innerHTML=`<div class="notice"><h2>${state.model?'Description unavailable':'Loading issue description…'}</h2><p>${state.model?'No matching description was recorded for this issue.':'Loading the pinned review evidence.'}</p>${state.model?checkExplanation():''}</div>`;
  }else if(state.view==='checks')screen.innerHTML=checksScreen();
  else if(state.selected){const item=items().find(value=>value.id===state.selected);screen.innerHTML=item?detailScreen(item):listScreen();}
