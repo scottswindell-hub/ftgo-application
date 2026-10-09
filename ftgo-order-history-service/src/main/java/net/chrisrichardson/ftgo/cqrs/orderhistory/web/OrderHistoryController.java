@@ -19,6 +19,8 @@ import static java.util.stream.Collectors.toList;
 @RequestMapping(path = "/orders")
 public class OrderHistoryController {
 
+  private static final org.slf4j.Logger auditLog = org.slf4j.LoggerFactory.getLogger("audit");
+
   private OrderHistoryDao orderHistoryDao;
 
   public OrderHistoryController(OrderHistoryDao orderHistoryDao) {
@@ -39,6 +41,7 @@ public class OrderHistoryController {
 
   @RequestMapping(path = "/{orderId}", method = RequestMethod.GET)
   public ResponseEntity<GetOrderResponse> getOrder(@PathVariable String orderId) {
+    auditLog.info("getOrder called");
     return orderHistoryDao.findOrder(orderId)
             .map(order -> new ResponseEntity<>(makeGetOrderResponse(order), HttpStatus.OK))
             .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));

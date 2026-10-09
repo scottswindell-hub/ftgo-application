@@ -16,10 +16,13 @@ import static io.eventuate.tram.sagas.participant.SagaReplyMessageBuilder.withLo
 
 public class KitchenServiceCommandHandler {
 
+  private static final org.slf4j.Logger auditLog = org.slf4j.LoggerFactory.getLogger("audit");
+
   @Autowired
   private KitchenService kitchenService;
 
   public CommandHandlers commandHandlers() {
+    auditLog.info("commandHandlers called");
     return SagaCommandHandlersBuilder
             .fromChannel(KitchenServiceChannels.COMMAND_CHANNEL)
             .onMessage(CreateTicket.class, this::createTicket)
@@ -83,16 +86,19 @@ public class KitchenServiceCommandHandler {
   }
 
   public Message beginReviseTicket(CommandMessage<BeginReviseTicketCommand> cm) {
+    auditLog.info("beginReviseTicket called");
     kitchenService.beginReviseOrder(cm.getCommand().getRestaurantId(), cm.getCommand().getOrderId(), cm.getCommand().getRevisedOrderLineItems());
     return withSuccess();
   }
 
   public Message undoBeginReviseTicket(CommandMessage<UndoBeginReviseTicketCommand> cm) {
+    auditLog.info("undoBeginReviseTicket called");
     kitchenService.undoBeginReviseOrder(cm.getCommand().getRestaurantId(), cm.getCommand().getOrderId());
     return withSuccess();
   }
 
   public Message confirmReviseTicket(CommandMessage<ConfirmReviseTicketCommand> cm) {
+    auditLog.info("confirmReviseTicket called");
     kitchenService.confirmReviseTicket(cm.getCommand().getRestaurantId(), cm.getCommand().getOrderId(), cm.getCommand().getRevisedOrderLineItems());
     return withSuccess();
   }

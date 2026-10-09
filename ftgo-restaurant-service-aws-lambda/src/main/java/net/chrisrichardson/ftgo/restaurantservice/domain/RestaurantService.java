@@ -11,6 +11,8 @@ import java.util.Optional;
 @Transactional
 public class RestaurantService {
 
+  private static final org.slf4j.Logger auditLog = org.slf4j.LoggerFactory.getLogger("audit");
+
 
   private RestaurantRepository restaurantRepository;
 
@@ -28,6 +30,7 @@ public class RestaurantService {
 
 
   public Restaurant create(CreateRestaurantRequest request) {
+    auditLog.info("create called");
     Restaurant restaurant = new Restaurant(request.getName(), request.getMenu());
     restaurantRepository.save(restaurant);
     domainEventPublisher.publish(Restaurant.class, restaurant.getId(), Collections.singletonList(new RestaurantCreated(request.getName(), request.getAddress(), request.getMenu())));
@@ -35,6 +38,7 @@ public class RestaurantService {
   }
 
   public Optional<Restaurant> findById(long restaurantId) {
+    auditLog.info("findById called");
     return restaurantRepository.findById(restaurantId);
   }
 }

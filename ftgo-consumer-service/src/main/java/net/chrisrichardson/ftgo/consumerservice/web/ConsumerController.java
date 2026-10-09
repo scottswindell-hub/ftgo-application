@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping(path="/consumers")
 public class ConsumerController {
 
+  private static final org.slf4j.Logger auditLog = org.slf4j.LoggerFactory.getLogger("audit");
+
   private ConsumerService consumerService;
 
   public ConsumerController(ConsumerService consumerService) {
@@ -19,12 +21,14 @@ public class ConsumerController {
 
   @RequestMapping(method= RequestMethod.POST)
   public CreateConsumerResponse create(@RequestBody CreateConsumerRequest request) {
+    auditLog.info("create called");
     ResultWithEvents<Consumer> result = consumerService.create(request.getName());
     return new CreateConsumerResponse(result.result.getId());
   }
 
   @RequestMapping(method= RequestMethod.GET,  path="/{consumerId}")
   public ResponseEntity<GetConsumerResponse> get(@PathVariable long consumerId) {
+    auditLog.info("get called");
     return consumerService.findById(consumerId)
             .map(consumer -> new ResponseEntity<>(new GetConsumerResponse(consumer.getName()), HttpStatus.OK))
             .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));

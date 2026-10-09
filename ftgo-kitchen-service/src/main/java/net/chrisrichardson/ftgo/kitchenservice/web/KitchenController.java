@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 public class KitchenController {
 
+  private static final org.slf4j.Logger auditLog = org.slf4j.LoggerFactory.getLogger("audit");
+
   private KitchenService kitchenService;
 
   public KitchenController(KitchenService kitchenService) {
@@ -17,6 +19,7 @@ public class KitchenController {
 
   @RequestMapping(path="/tickets/{ticketId}/accept", method= RequestMethod.POST)
   public void acceptTicket(@PathVariable long ticketId, @RequestBody TicketAcceptance ticketAcceptance) {
+    auditLog.info("acceptTicket called");
     kitchenService.accept(ticketId, ticketAcceptance.getReadyBy());
   }
 }

@@ -21,10 +21,13 @@ import static io.eventuate.tram.commands.consumer.CommandHandlerReplyBuilder.wit
 
 public class OrderCommandHandlers {
 
+  private static final org.slf4j.Logger auditLog = org.slf4j.LoggerFactory.getLogger("audit");
+
   @Autowired
   private OrderService orderService;
 
   public CommandHandlers commandHandlers() {
+    auditLog.info("commandHandlers called");
     return SagaCommandHandlersBuilder
           .fromChannel("orderService")
           .onMessage(ApproveOrderCommand.class, this::approveOrder)
@@ -42,6 +45,7 @@ public class OrderCommandHandlers {
   }
 
   public Message approveOrder(CommandMessage<ApproveOrderCommand> cm) {
+    auditLog.info("approveOrder called");
     long orderId = cm.getCommand().getOrderId();
     orderService.approveOrder(orderId);
     return withSuccess();
@@ -49,6 +53,7 @@ public class OrderCommandHandlers {
 
 
   public Message rejectOrder(CommandMessage<RejectOrderCommand> cm) {
+    auditLog.info("rejectOrder called");
     long orderId = cm.getCommand().getOrderId();
     orderService.rejectOrder(orderId);
     return withSuccess();
@@ -56,6 +61,7 @@ public class OrderCommandHandlers {
 
 
   public Message beginCancel(CommandMessage<BeginCancelCommand> cm) {
+    auditLog.info("beginCancel called");
     long orderId = cm.getCommand().getOrderId();
     try {
       orderService.beginCancel(orderId);
@@ -67,12 +73,14 @@ public class OrderCommandHandlers {
 
 
   public Message undoCancel(CommandMessage<UndoBeginCancelCommand> cm) {
+    auditLog.info("undoCancel called");
     long orderId = cm.getCommand().getOrderId();
     orderService.undoCancel(orderId);
     return withSuccess();
   }
 
   public Message confirmCancel(CommandMessage<ConfirmCancelOrderCommand> cm) {
+    auditLog.info("confirmCancel called");
     long orderId = cm.getCommand().getOrderId();
     orderService.confirmCancelled(orderId);
     return withSuccess();
@@ -80,6 +88,7 @@ public class OrderCommandHandlers {
 
 
   public Message beginReviseOrder(CommandMessage<BeginReviseOrderCommand> cm) {
+    auditLog.info("beginReviseOrder called");
     long orderId = cm.getCommand().getOrderId();
     OrderRevision revision = cm.getCommand().getRevision();
     try {
@@ -90,12 +99,14 @@ public class OrderCommandHandlers {
   }
 
   public Message undoPendingRevision(CommandMessage <UndoBeginReviseOrderCommand> cm) {
+    auditLog.info("undoPendingRevision called");
     long orderId = cm.getCommand().getOrderId();
     orderService.undoPendingRevision(orderId);
     return withSuccess();
   }
 
   public Message confirmRevision(CommandMessage<ConfirmReviseOrderCommand> cm) {
+    auditLog.info("confirmRevision called");
     long orderId = cm.getCommand().getOrderId();
     OrderRevision revision = cm.getCommand().getRevision();
     orderService.confirmRevision(orderId, revision);

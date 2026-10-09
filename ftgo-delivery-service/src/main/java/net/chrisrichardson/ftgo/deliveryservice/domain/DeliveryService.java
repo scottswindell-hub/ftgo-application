@@ -16,6 +16,8 @@ import java.util.stream.Collectors;
 
 public class DeliveryService {
 
+  private static final org.slf4j.Logger auditLog = org.slf4j.LoggerFactory.getLogger("audit");
+
   private RestaurantRepository restaurantRepository;
   private DeliveryRepository deliveryRepository;
   private CourierRepository courierRepository;
@@ -28,15 +30,18 @@ public class DeliveryService {
   }
 
   public void createRestaurant(long restaurantId, String restaurantName, Address address) {
+    auditLog.info("createRestaurant called");
     restaurantRepository.save(Restaurant.create(restaurantId, restaurantName, address));
   }
 
   public void createDelivery(long orderId, long restaurantId, Address deliveryAddress) {
+    auditLog.info("createDelivery called");
     Restaurant restaurant = restaurantRepository.findById(restaurantId).get();
     deliveryRepository.save(Delivery.create(orderId, restaurantId, restaurant.getAddress(), deliveryAddress));
   }
 
   public void scheduleDelivery(long orderId, LocalDateTime readyBy) {
+    auditLog.info("scheduleDelivery called");
     Delivery delivery = deliveryRepository.findById(orderId).get();
 
     // Stupid implementation
@@ -51,6 +56,7 @@ public class DeliveryService {
   }
 
   public void cancelDelivery(long orderId) {
+    auditLog.info("cancelDelivery called");
     Delivery delivery = deliveryRepository.findById(orderId).get();
     Long assignedCourierId = delivery.getAssignedCourier();
     delivery.cancel();
@@ -86,6 +92,7 @@ public class DeliveryService {
 
   @Transactional
   public void updateAvailability(long courierId, boolean available) {
+    auditLog.info("updateAvailability called");
     if (available)
       noteAvailable(courierId);
     else
@@ -97,6 +104,7 @@ public class DeliveryService {
 
   @Transactional
   public Optional<DeliveryStatus> getDeliveryInfo(long deliveryId) {
+    auditLog.info("getDeliveryInfo called");
     return deliveryRepository.findById(deliveryId).map(delivery -> {
       Long assignedCourier = delivery.getAssignedCourier();
       List<Action> courierActions = Collections.EMPTY_LIST;

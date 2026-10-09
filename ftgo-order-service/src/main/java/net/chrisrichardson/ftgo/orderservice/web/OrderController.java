@@ -20,6 +20,8 @@ import static java.util.stream.Collectors.toList;
 @RequestMapping(path = "/orders")
 public class OrderController {
 
+  private static final org.slf4j.Logger auditLog = org.slf4j.LoggerFactory.getLogger("audit");
+
   private OrderService orderService;
 
   private OrderRepository orderRepository;
@@ -32,6 +34,7 @@ public class OrderController {
 
   @RequestMapping(method = RequestMethod.POST)
   public CreateOrderResponse create(@RequestBody CreateOrderRequest request) {
+    auditLog.info("create called");
     Order order = orderService.createOrder(request.getConsumerId(),
             request.getRestaurantId(),
             new DeliveryInformation(request.getDeliveryTime(), request.getDeliveryAddress()),
@@ -43,6 +46,7 @@ public class OrderController {
 
   @RequestMapping(path = "/{orderId}", method = RequestMethod.GET)
   public ResponseEntity<GetOrderResponse> getOrder(@PathVariable long orderId) {
+    auditLog.info("getOrder called");
     Optional<Order> order = orderRepository.findById(orderId);
     return order.map(o -> new ResponseEntity<>(makeGetOrderResponse(o), HttpStatus.OK)).orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
   }
@@ -53,6 +57,7 @@ public class OrderController {
 
   @RequestMapping(path = "/{orderId}/cancel", method = RequestMethod.POST)
   public ResponseEntity<GetOrderResponse> cancel(@PathVariable long orderId) {
+    auditLog.info("cancel called");
     try {
       Order order = orderService.cancel(orderId);
       return new ResponseEntity<>(makeGetOrderResponse(order), HttpStatus.OK);
@@ -63,6 +68,7 @@ public class OrderController {
 
   @RequestMapping(path = "/{orderId}/revise", method = RequestMethod.POST)
   public ResponseEntity<GetOrderResponse> revise(@PathVariable long orderId, @RequestBody ReviseOrderRequest request) {
+    auditLog.info("revise called");
     try {
       Order order = orderService.reviseOrder(orderId, new OrderRevision(Optional.empty(), request.getRevisedOrderLineItems()));
       return new ResponseEntity<>(makeGetOrderResponse(order), HttpStatus.OK);

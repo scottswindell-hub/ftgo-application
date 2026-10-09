@@ -18,12 +18,15 @@ import static io.eventuate.tram.sagas.eventsourcingsupport.UpdatingOptionsBuilde
 
 public class AccountingServiceCommandHandler {
 
+  private static final org.slf4j.Logger auditLog = org.slf4j.LoggerFactory.getLogger("audit");
+
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   @Autowired
   private AggregateRepository<Account, AccountCommand> accountRepository;
 
   public CommandHandlers commandHandlers() {
+    auditLog.info("commandHandlers called");
     return SagaCommandHandlersBuilder
             .fromChannel("accountingService")
             .onMessage(AuthorizeCommand.class, this::authorize)
@@ -33,6 +36,7 @@ public class AccountingServiceCommandHandler {
   }
 
   public void authorize(CommandMessage<AuthorizeCommand> cm) {
+    auditLog.info("authorize called");
 
     AuthorizeCommand command = cm.getCommand();
 
@@ -45,6 +49,7 @@ public class AccountingServiceCommandHandler {
   }
 
   public void reverseAuthorization(CommandMessage<ReverseAuthorizationCommand> cm) {
+    auditLog.info("reverseAuthorization called");
 
     ReverseAuthorizationCommand command = cm.getCommand();
 
@@ -56,6 +61,7 @@ public class AccountingServiceCommandHandler {
 
   }
   public void reviseAuthorization(CommandMessage<ReviseAuthorization> cm) {
+    auditLog.info("reviseAuthorization called");
 
     ReviseAuthorization command = cm.getCommand();
 

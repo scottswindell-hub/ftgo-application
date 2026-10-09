@@ -27,6 +27,8 @@ import static java.util.stream.Collectors.toList;
 
 public class OrderService {
 
+  private static final org.slf4j.Logger auditLog = org.slf4j.LoggerFactory.getLogger("audit");
+
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   private SagaInstanceFactory sagaInstanceFactory;
@@ -68,6 +70,7 @@ public class OrderService {
   @Transactional
   public Order createOrder(long consumerId, long restaurantId, DeliveryInformation deliveryInformation,
                            List<MenuItemIdAndQuantity> lineItems) {
+    auditLog.info("createOrder called");
     Restaurant restaurant = restaurantRepository.findById(restaurantId)
             .orElseThrow(() -> new RestaurantNotFoundException(restaurantId));
 
@@ -101,6 +104,7 @@ public class OrderService {
 
 
   public Optional<Order> confirmChangeLineItemQuantity(Long orderId, OrderRevision orderRevision) {
+    auditLog.info("confirmChangeLineItemQuantity called");
     return orderRepository.findById(orderId).map(order -> {
       List<OrderDomainEvent> events = order.confirmRevision(orderRevision);
       orderAggregateEventPublisher.publish(order, events);
@@ -109,11 +113,13 @@ public class OrderService {
   }
 
   public void noteReversingAuthorization(Long orderId) {
+    auditLog.info("noteReversingAuthorization called");
     throw new UnsupportedOperationException();
   }
 
   @Transactional
   public Order cancel(Long orderId) {
+    auditLog.info("cancel called");
     Order order = orderRepository.findById(orderId)
             .orElseThrow(() -> new OrderNotFoundException(orderId));
     CancelOrderSagaData sagaData = new CancelOrderSagaData(order.getConsumerId(), orderId, order.getOrderTotal());
@@ -129,29 +135,35 @@ public class OrderService {
   }
 
   public void approveOrder(long orderId) {
+    auditLog.info("approveOrder called");
     updateOrder(orderId, Order::noteApproved);
     meterRegistry.ifPresent(mr -> mr.counter("approved_orders").increment());
   }
 
   public void rejectOrder(long orderId) {
+    auditLog.info("rejectOrder called");
     updateOrder(orderId, Order::noteRejected);
     meterRegistry.ifPresent(mr -> mr.counter("rejected_orders").increment());
   }
 
   public void beginCancel(long orderId) {
+    auditLog.info("beginCancel called");
     updateOrder(orderId, Order::cancel);
   }
 
   public void undoCancel(long orderId) {
+    auditLog.info("undoCancel called");
     updateOrder(orderId, Order::undoPendingCancel);
   }
 
   public void confirmCancelled(long orderId) {
+    auditLog.info("confirmCancelled called");
     updateOrder(orderId, Order::noteCancelled);
   }
 
   @Transactional
   public Order reviseOrder(long orderId, OrderRevision orderRevision) {
+    auditLog.info("reviseOrder called");
     Order order = orderRepository.findById(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
     ReviseOrderSagaData sagaData = new ReviseOrderSagaData(order.getConsumerId(), orderId, null, orderRevision);
     sagaInstanceFactory.create(reviseOrderSaga, sagaData);
@@ -159,6 +171,7 @@ public class OrderService {
   }
 
   public Optional<RevisedOrder> beginReviseOrder(long orderId, OrderRevision revision) {
+    auditLog.info("beginReviseOrder called");
     return orderRepository.findById(orderId).map(order -> {
       ResultWithDomainEvents<LineItemQuantityChange, OrderDomainEvent> result = order.revise(revision);
       orderAggregateEventPublisher.publish(order, result.events);
@@ -167,19 +180,23 @@ public class OrderService {
   }
 
   public void undoPendingRevision(long orderId) {
+    auditLog.info("undoPendingRevision called");
     updateOrder(orderId, Order::rejectRevision);
   }
 
   public void confirmRevision(long orderId, OrderRevision revision) {
+    auditLog.info("confirmRevision called");
     updateOrder(orderId, order -> order.confirmRevision(revision));
   }
 
   public void createMenu(long id, String name, List<MenuItem> menuItems) {
+    auditLog.info("createMenu called");
     Restaurant restaurant = new Restaurant(id, name, menuItems);
     restaurantRepository.save(restaurant);
   }
 
   public void reviseMenu(long id, List<MenuItem> menuItems) {
+    auditLog.info("reviseMenu called");
     restaurantRepository.findById(id).map(restaurant -> {
       List<OrderDomainEvent> events = restaurant.reviseMenu(menuItems);
       return restaurant;
