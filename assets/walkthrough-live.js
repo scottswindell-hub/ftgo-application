@@ -364,6 +364,7 @@ document.addEventListener('click',async event=>{
   state.saves.set(scope,{request,busy:true});render();
   try{
    codeIntentFindingReviews.queue(request);
+   await new Promise(resolve=>setTimeout(resolve,5000));
    location.assign(destination);
   }catch(error){
    state.saves.set(scope,{request:error.status===409?null:request,busy:false});render();
