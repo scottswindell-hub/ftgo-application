@@ -209,13 +209,13 @@ function modelFromGovernedFlows(packet,checks){
  });
 }
 
-function reviewFindings(checks){
+function reviewFindings(checks,includeAdvisory=false){
  const rows=[];
  const standards=(checks||[]).find(check=>check.id==='coding_standards');
  const active=standards?.output?.public_findings||standards?.findings||[];
  const watch=standards?.output?.public_watch_only||standards?.watch_only_findings||[];
  for(const [index,finding] of [...active.map(row=>({...row,watchOnly:false})),...watch.map(row=>({...row,watchOnly:true}))].entries()){
-  if(finding.kind==='check_verdict'||!finding.rule_id||(finding.band&&finding.band!=='finding'))continue;
+  if(finding.kind==='check_verdict'||!finding.rule_id||(finding.band&&finding.band!=='finding'&&!(includeAdvisory&&finding.band==='fyi')))continue;
   rows.push({id:`standard-${finding.rule_id||index}-${finding.file||index}-${finding.unit||index}`,kind:'standard',
    findingKey:[finding.rule_id,finding.file,finding.unit].map(value=>String(value||'')).join('|'),
    title:finding.name||'Repository standard needs attention',
@@ -223,7 +223,7 @@ function reviewFindings(checks){
    file:finding.file||'',method:finding.unit||'',line:finding.line||'',
    basis:[finding.category_parent,finding.category,finding.rule_id].filter(Boolean).join(' · '),
    category:finding.category||'',category_parent:finding.category_parent||'',rule_id:finding.rule_id||'',
-   watchOnly:finding.watchOnly,ref:finding.ref||'',decision:finding.decision||''});
+   watchOnly:finding.watchOnly||finding.band==='fyi',informational:finding.band==='fyi',ref:finding.ref||'',decision:finding.decision||''});
  }
  const tests=(checks||[]).find(check=>check.id==='improper_tests');
  const descriptions={weak:'The changed test may still pass when the behavior it claims to cover is broken.',
@@ -240,11 +240,11 @@ function reviewFindings(checks){
  return rows;
 }
 
-function reviewFindingItems(packet,summary,items,checks){
+function reviewFindingItems(packet,summary,items,checks,includeAdvisory=false){
  const interpretations=new Map((summary?.intent_semantics?.finding_explanations||[])
   .map(row=>[row.finding_id,{summary:row.summary||row.explanation,review:row.review||row.explanation}]));
  const projected=[];
- for(const finding of reviewFindings(checks)){
+ for(const finding of reviewFindings(checks,includeAdvisory)){
   const candidates=items.filter(item=>finding.file&&item.file===finding.file);
   const method=shortMethod(finding.method);
   const target=finding.kind==='standard'?(candidates.find(item=>method&&shortMethod(item.method)===method)
@@ -436,9 +436,21 @@ function renderCodeIntentReview(target,model,options){
  root.__readableReviewScope=options.scope;target.innerHTML=codeIntentReviewMarkup(model,options.scope);bindReadableReview(options.render);
 }
 
+function advisoryDescription(packet,summary,check,finding){
+ if(check?.id!=='coding_standards'||finding?.band!=='fyi')return null;
+ const item=reviewFindingItems(packet,summary,[],[check],true).find(item=>item.findings.some(row=>
+  row.ref&&row.ref===finding.ref&&row.rule_id===finding.rule_id&&row.file===finding.file&&row.method===finding.unit));
+ if(!item)return null;
+ return {...item,title:`Informational check: ${shortMethod(finding.unit)||String(finding.file||'').split('/').pop()}`,
+  before:'This observation does not establish a change from the baseline.',
+  after:`The current run classified this observation in ${finding.unit||finding.file} as informational.`,
+  summary:`The checker raised an informational concern about ${finding.category||'this code'}.`,
+  detailSummary:`Review guidance: ${finding.guidance||'Inspect the recorded source below.'}`};
+}
+root.codeIntentAdvisoryDescription=advisoryDescription;
 root.codeIntentSourceDiffLines=sourceDiffLines;
 root.codeIntentReviewModel=codeIntentReviewModel;
 root.codeIntentReviewMarkup=codeIntentReviewMarkup;
 root.renderCodeIntentReview=renderCodeIntentReview;
-if(typeof module!=='undefined')module.exports={codeIntentReviewModel,codeIntentReviewMarkup,sourceDiffLines};
+if(typeof module!=='undefined')module.exports={codeIntentReviewModel,codeIntentReviewMarkup,sourceDiffLines,advisoryDescription};
 })(typeof window!=='undefined'?window:globalThis);

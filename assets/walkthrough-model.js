@@ -42,7 +42,8 @@ function descriptionItem(items,packet,summary,checks,checkId,issue){
  if(exact.length===1)return exact[0];
  if(exact.length>1)return null;
  const referenced=items.filter(item=>(item.findings||[]).some(f=>f.ref===key||finding?.ref&&f.ref===finding.ref));
- return referenced.length===1?referenced[0]:null;
+ return referenced.length===1?referenced[0]:referenced.length===0&&finding?.band==='fyi'?
+  root.codeIntentAdvisoryDescription?.(packet,summary,check,finding)||null:null;
 }
 root.walkthroughPipeline={ANALYSIS,REVIEW,phase,intentionalSkip,descriptionItem,demoEvidenceGap};
 if(typeof module!=='undefined')module.exports=root.walkthroughPipeline;
