@@ -269,6 +269,35 @@ function reviewFindingItems(packet,summary,items,checks){
  return projected;
 }
 
+function ownerReviewItems(packet,summary,items,checks){
+ const represented=new Set(items.map(item=>item.id));
+ for(const row of summary?.intent_semantics?.explanations||[])if(represented.has(row.change_id))
+  for(const id of row.member_change_ids||[row.change_id])represented.add(id);
+ const flows=new Map((packet?.flows||[]).map(flow=>[flow.id,flow]));
+ const result=[];
+ function describe(flow,side){
+  const descriptions=[];
+  for(const change of flow?.fact_changes||[])for(const fact of change[side]||[]){
+   if(fact.operation)descriptions.push(`${fact.receiver?fact.receiver+'.':''}${fact.operation}(${(fact.arguments||[]).join(', ')})`);
+   else if(fact.slot&&fact.value!==undefined)descriptions.push(`${fact.slot}: ${typeof fact.value==='string'?fact.value:JSON.stringify(fact.value)}`);
+   else if(fact.expression)descriptions.push(String(fact.expression));
+  }
+  return descriptions.length?'Recorded source: '+[...new Set(descriptions)].join('; ').slice(0,1200):
+   side==='before'?'No corresponding before-fact was recorded for this observation.':'See the exact changed source below; no concise after-fact was recorded.';
+ }
+ for(const check of checks||[])for(const finding of check.findings||[]){
+  if(finding.review_kind!=='intent'||represented.has(finding.id))continue;
+  const flow=flows.get(finding.id),file=finding.file||flow?.source?.file||'';
+  result.push({id:finding.id,kind:'change',status:'review',title:finding.title,
+   summary:finding.title,detailSummary:finding.observation||'',before:describe(flow,'before'),after:describe(flow,'after'),
+   concept:'Source behavior requiring intent review',method:shortMethod(finding.unit||flow?.method),file,
+   objective:'',owner:'',reviewType:'Behavior',connections:[],
+   intentBefore:flowFacts(flow,'before'),intentAfter:flowFacts(flow,'after'),comparison:patchComparison(packet,file),
+   groundingLabel:'RECORDED SOURCE CHANGE',qualification:'Intent review only; no accepted obligation or violation is inferred.'});
+ }
+ return result;
+}
+
 function codeIntentReviewModel(packet,summary,entries=[],checks=[]){
  const items=modelFromSemantics(packet,summary);
  const narrativeItems=modelFromNarrative(summary,packet);
@@ -282,6 +311,7 @@ function codeIntentReviewModel(packet,summary,entries=[],checks=[]){
  const unique=[];const seen=new Set();
  for(const item of [...modelFromEvidenceGaps(packet),...effective]){if(seen.has(item.id))continue;seen.add(item.id);unique.push(item);}
  for(const item of reviewFindingItems(packet,summary,unique,checks)){if(!seen.has(item.id)){seen.add(item.id);unique.push(item);}}
+ for(const item of ownerReviewItems(packet,summary,unique,checks)){if(!seen.has(item.id)){seen.add(item.id);unique.push(item);}}
  const changes=unique.filter(item=>item.kind==='change'&&item.status!=='preserved');
  const constraints=unique.filter(item=>item.kind==='constraint'&&item.status!=='preserved');
  const preserved=unique.filter(item=>item.status==='preserved').length;
