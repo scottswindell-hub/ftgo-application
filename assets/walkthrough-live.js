@@ -357,9 +357,7 @@ document.addEventListener('click',async event=>{
   const request=prior?.request&&prior.request.answer===answer?prior.request:{repository:repo,pull_request:Number(pr),head_sha:sha,scope,answer,expected_review:review.finding.review.record||null,request_id:crypto.randomUUID()};
   state.saves.set(scope,{request,busy:true});render();
   try{
-   const result=await codeIntentFindingReviews.submit(request);
-   if(!result.recorded||result.state!=='github_dispatched')throw Error(result.message||'The GitHub update could not start. Press Return to Github to retry.');
-   await codeIntentFindingReviews.waitForComment(repo,returnCommentId,result);
+   codeIntentFindingReviews.queue(request);
    location.assign(destination);
   }catch(error){
    state.saves.set(scope,{request:error.status===409?null:request,busy:false});render();

@@ -30,22 +30,12 @@ function createClient(endpoint=ENDPOINT,transport=(...args)=>fetch(...args)){
 }
 const client=createClient();
 async function submit(request){return client.save(request);}
-// Return only when GitHub can display progress or the exact completed receipt.
-async function waitForComment(repo,commentId,result,transport=(...args)=>fetch(...args),pause=ms=>new Promise(resolve=>setTimeout(resolve,ms))){
- const url=`https://api.github.com/repos/${repo.split('/').map(encodeURIComponent).join('/')}/issues/comments/${commentId}`;
- const marker=`<!-- codeintent-review:${result.scope}:${result.decision}:${result.record} -->`;
- for(let attempt=0;attempt<20;attempt++){
-  try{
-   const response=await transport(url,{cache:'no-store'});
-   if(response.ok){
-    const comment=await response.json(),body=comment.body||'';
-    if(comment.user?.login==='github-actions[bot]'&&(body.includes(marker)||(body.includes('checks-running.gif')&&body.includes('Updating review'))))return;
-   }
-  }catch(error){/* Retry transient GitHub reads while retaining the saved request. */}
-  await pause(2000);
- }
- throw Error('Your answer was saved, but GitHub has not updated yet. Press Return to Github to retry.');
+// Beacon queues a small POST that survives navigation. Plain text avoids a CORS
+// preflight during unload; the endpoint parses and validates the JSON body.
+function queue(request,beacon=(...args)=>navigator.sendBeacon(...args)){
+ const body=new Blob([JSON.stringify(request)],{type:'text/plain;charset=UTF-8'});
+ if(!beacon(ENDPOINT,body))throw Error('The browser could not send your answer. Press Return to Github to retry.');
 }
-root.codeIntentFindingReviews={command,targets,recorded,createClient,submit,waitForComment};
+root.codeIntentFindingReviews={command,targets,recorded,createClient,submit,queue};
 if(typeof module!=='undefined')module.exports=root.codeIntentFindingReviews;
 })(typeof window==='undefined'?globalThis:window);
