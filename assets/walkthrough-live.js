@@ -322,7 +322,6 @@ function render(){
   const route=new URLSearchParams(location.search);
   const item=walkthroughPipeline.descriptionItem(items(),state.packet,state.summary,checks(),route.get('check'),route.get('issue'));
   if(item){state.selected=item.id;screen.innerHTML=detailScreen(item);}
-  else if(demo)screen.innerHTML=listScreen();
   else screen.innerHTML=`<div class="notice"><h2>${state.model?'Description unavailable':'Loading issue description…'}</h2><p>${state.model?'No matching description was recorded for this issue.':'Loading the pinned review evidence.'}</p>${state.model?checkExplanation():''}</div>`;
  }else if(state.view==='checks')screen.innerHTML=checksScreen();
  else if(state.selected){const item=items().find(value=>value.id===state.selected);screen.innerHTML=item?detailScreen(item):listScreen();}

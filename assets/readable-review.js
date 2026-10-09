@@ -299,6 +299,15 @@ function ownerReviewItems(packet,summary,items,checks){
 }
 
 function codeIntentReviewModel(packet,summary,entries=[],checks=[]){
+ // Older artifacts projected the same unbound observation twice, once as an
+ // unmapped governed region. Keep the explicit owner-review projection only.
+ const ownerIds=new Set((packet?.flows||[]).filter(flow=>flow.change_kind==='unbound_business_behavior'&&
+  flow.acceptance_decision==='owner_review_required'&&flow.acceptance_decision_authority==='human_owner'&&
+  flow.advisory===true&&flow.objective_violation===false&&!flow.behavior_judgment).map(flow=>flow.id));
+ if(ownerIds.size)packet={...packet,flows:(packet.flows||[]).filter(flow=>!(ownerIds.has(flow.id)&&
+  flow.change_kind==='boundary_evidence_gap'&&!flow.behavior_judgment&&flow.findings?.length&&
+  flow.findings.every(f=>f.domain==='evidence_coverage'&&f.reason==='governance_constrained_region_unmapped')))};
+
  const items=modelFromSemantics(packet,summary);
  const narrativeItems=modelFromNarrative(summary,packet);
  const semanticStatus=summary?.intent_semantics?.status||'unavailable';
