@@ -13,11 +13,23 @@ import net.chrisrichardson.ftgo.kitchenservice.api.events.TicketDomainEvent;
 import javax.persistence.*;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
 
+/**
+ * A restaurant's ticket for one order: the kitchen-side aggregate of the order lifecycle.
+ *
+ * <p>Each public operation is a state transition guarded by the current {@link TicketState};
+ * an operation invoked in any other state fails with {@link UnsupportedStateTransitionException}.
+ * Operations return the domain events the transition produced, for the caller to publish.
+ *
+ * <pre>
+ * CREATE_PENDING -> AWAITING_ACCEPTANCE -> (accept) -> PREPARING -> READY_FOR_PICKUP -> PICKED_UP
+ *                    AWAITING_ACCEPTANCE | ACCEPTED -> CANCEL_PENDING   -> CANCELLED | (previous state)
+ *                    AWAITING_ACCEPTANCE | ACCEPTED -> REVISION_PENDING -> (previous state)
+ * </pre>
+ */
 @Entity
 @Table(name = "tickets")
 @Access(AccessType.FIELD)
@@ -43,10 +55,14 @@ public class Ticket {
   private LocalDateTime pickedUpTime;
   private LocalDateTime readyForPickupTime;
 
+  /**
+   * Creates a ticket for an order in the CREATE_PENDING state. Creation itself publishes no events.
+   */
   public static ResultWithDomainEvents<Ticket, TicketDomainEvent> create(long restaurantId, Long id, TicketDetails details) {
     return new ResultWithDomainEvents<>(new Ticket(restaurantId, id, details));
   }
 
+  /** Required by JPA. */
   private Ticket() {
   }
 
@@ -57,6 +73,9 @@ public class Ticket {
     this.lineItems = details.getLineItems();
   }
 
+  /**
+   * Confirms a pending ticket once the order is authorized: CREATE_PENDING to AWAITING_ACCEPTANCE.
+   */
   public List<TicketDomainEvent> confirmCreate() {
     switch (state) {
       case CREATE_PENDING:
@@ -67,16 +86,23 @@ public class Ticket {
     }
   }
 
+  /**
+   * Compensates creation. Not yet implemented.
+   */
   public List<TicketDomainEvent> cancelCreate() {
     throw new NotYetImplementedException();
   }
 
 
+  /**
+   * Accepts the ticket for preparation by {@code readyBy}, which must be after the acceptance time.
+   * Allowed only while AWAITING_ACCEPTANCE.
+   */
   public List<TicketDomainEvent> accept(LocalDateTime readyBy) {
     switch (state) {
       case AWAITING_ACCEPTANCE:
         // Verify that readyBy is in the futurestate = TicketState.ACCEPTED;
-        this.acceptTime = LocalDateTime.now();
+        this.acceptTime = now();
         if (!acceptTime.isBefore(readyBy))
           throw new IllegalArgumentException(String.format("readyBy %s is not after now %s", readyBy, acceptTime));
         this.readyBy = readyBy;
@@ -90,39 +116,51 @@ public class Ticket {
 
   // TODO cancel()
 
+  /**
+   * Starts preparation: ACCEPTED to PREPARING.
+   */
   public List<TicketDomainEvent> preparing() {
     switch (state) {
       case ACCEPTED:
         this.state = TicketState.PREPARING;
-        this.preparingTime = LocalDateTime.now();
+        this.preparingTime = now();
         return singletonList(new TicketPreparationStartedEvent());
       default:
         throw new UnsupportedStateTransitionException(state);
     }
   }
 
+  /**
+   * Marks the order ready: PREPARING to READY_FOR_PICKUP.
+   */
   public List<TicketDomainEvent> readyForPickup() {
     switch (state) {
       case PREPARING:
         this.state = TicketState.READY_FOR_PICKUP;
-        this.readyForPickupTime = LocalDateTime.now();
+        this.readyForPickupTime = now();
         return singletonList(new TicketPreparationCompletedEvent());
       default:
         throw new UnsupportedStateTransitionException(state);
     }
   }
 
+  /**
+   * Hands the order to the courier: READY_FOR_PICKUP to PICKED_UP.
+   */
   public List<TicketDomainEvent> pickedUp() {
     switch (state) {
       case READY_FOR_PICKUP:
         this.state = TicketState.PICKED_UP;
-        this.pickedUpTime = LocalDateTime.now();
+        this.pickedUpTime = now();
         return singletonList(new TicketPickedUpEvent());
       default:
         throw new UnsupportedStateTransitionException(state);
     }
   }
 
+  /**
+   * Changes line-item quantities. Accepted while AWAITING_ACCEPTANCE or PREPARING, but not yet implemented.
+   */
   public void changeLineItemQuantity() {
     switch (state) {
       case AWAITING_ACCEPTANCE:
@@ -137,6 +175,9 @@ public class Ticket {
 
   }
 
+  /**
+   * Begins cancellation from AWAITING_ACCEPTANCE or ACCEPTED, remembering the state to restore on undo.
+   */
   public List<TicketDomainEvent> cancel() {
     switch (state) {
       case AWAITING_ACCEPTANCE:
@@ -149,10 +190,9 @@ public class Ticket {
     }
   }
 
-  public Long getId() {
-    return id;
-  }
-
+  /**
+   * Completes cancellation: CANCEL_PENDING to CANCELLED.
+   */
   public List<TicketDomainEvent> confirmCancel() {
     switch (state) {
       case CANCEL_PENDING:
@@ -163,6 +203,9 @@ public class Ticket {
 
     }
   }
+  /**
+   * Undoes a pending cancellation, restoring the state the ticket was in before it.
+   */
   public List<TicketDomainEvent> undoCancel() {
     switch (state) {
       case CANCEL_PENDING:
@@ -174,6 +217,9 @@ public class Ticket {
     }
   }
 
+  /**
+   * Begins a revision from AWAITING_ACCEPTANCE or ACCEPTED, remembering the state to restore afterwards.
+   */
   public List<TicketDomainEvent> beginReviseOrder(List<RevisedOrderLineItem> revisedOrderLineItems) {
     switch (state) {
       case AWAITING_ACCEPTANCE:
@@ -186,6 +232,9 @@ public class Ticket {
     }
   }
 
+  /**
+   * Undoes a pending revision, restoring the previous state.
+   */
   public List<TicketDomainEvent> undoBeginReviseOrder() {
     switch (state) {
       case REVISION_PENDING:
@@ -196,6 +245,9 @@ public class Ticket {
     }
   }
 
+  /**
+   * Completes a revision, restoring the previous state.
+   */
   public List<TicketDomainEvent> confirmReviseTicket(List<RevisedOrderLineItem> revisedOrderLineItems) {
     switch (state) {
       case REVISION_PENDING:
@@ -205,5 +257,18 @@ public class Ticket {
         throw new UnsupportedStateTransitionException(state);
 
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Accessors and helpers
+  // ---------------------------------------------------------------------------
+
+  public Long getId() {
+    return id;
+  }
+
+  /** The time a transition is recorded at. */
+  private static LocalDateTime now() {
+    return LocalDateTime.now();
   }
 }
