@@ -317,7 +317,7 @@ jobs:
                   query=[(k,v) for k,v in parse_qsl(url.query,keep_blank_values=True) if k not in {'view','check','issue','item'}]
                   query.extend([('view','desc'),('check',check['id']),('issue',issue or '')])
                   target=urlunsplit((url.scheme,url.netloc,url.path,urlencode(query),''))
-                  suffix=' — resolved (accepted as intended)' if decision=='accepted' else ' — unresolved' if decision=='unresolved' else ' — needs review'
+                  suffix=(' — intended; governance violation remains' if finding.get('category')=='governed_boundary_violation' else ' — intended, recorded') if decision=='accepted' else ' — unresolved' if decision=='unresolved' else ' — needs review'
                   lines.append(f'- {icon}[{label}](<{target}>){suffix}')
                   if decision in {'accepted','unresolved'}:
                       lines.append(f"  <!-- codeintent-review:{review['scope']}:{decision}:{review['record']} -->")
@@ -331,7 +331,8 @@ jobs:
 
           def reviewed(check):
               findings=check.get('findings') or []
-              return bool(findings) and check.get('state') in {'passed','failed'} and all(
+              return bool(findings) and check.get('state') in {'passed','failed'} and not any(
+                  f.get('category')=='governed_boundary_violation' for f in findings) and all(
                   (f.get('review') or {}).get('decision')=='accepted' for f in findings)
 
 
@@ -416,7 +417,7 @@ jobs:
                   failed=accepted+failed
                   accepted=[]
               if accepted:
-                  rows+=['<details open>', '<summary>✅ Resolved findings</summary>', '', *accepted, '', 'These findings were accepted as intended; original analysis results are unchanged.', '', '</details>']
+                  rows+=['<details open>', '<summary>✅ Resolved findings</summary>', '', *accepted, '', 'Intent answers recorded; analysis results and accepted governance are unchanged.', '', '</details>']
               if failed:
                   rows+=['<details open>', '<summary>❌ Needs Review</summary>', '',
                          *failed, '', '</details>', '']
