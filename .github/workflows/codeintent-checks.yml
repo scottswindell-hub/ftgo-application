@@ -303,9 +303,41 @@ jobs:
               return lines
 
 
+          def review_lines(check, report_url, accepted=None):
+              lines=[]
+              for finding in check.get('findings') or []:
+                  review=finding.get('review') or {}
+                  decision=review.get('decision')
+                  if accepted is not None and (decision=='accepted') != accepted:
+                      continue
+                  icon='✅ ' if decision=='accepted' else '❌ ' if decision=='unresolved' else ''
+                  label=inline(finding.get('title') or finding.get('name') or finding.get('rule_id') or 'Finding')
+                  issue=finding.get('id') or finding.get('ref')
+                  url=urlsplit(report_url)
+                  query=[(k,v) for k,v in parse_qsl(url.query,keep_blank_values=True) if k not in {'view','check','issue','item'}]
+                  query.extend([('view','desc'),('check',check['id']),('issue',issue or '')])
+                  target=urlunsplit((url.scheme,url.netloc,url.path,urlencode(query),''))
+                  suffix=' — intended, recorded' if decision=='accepted' else ' — unresolved' if decision=='unresolved' else ' — needs review'
+                  lines.append(f'  - {icon}[{label}](<{target}>){suffix}')
+                  if decision in {'accepted','unresolved'}:
+                      lines.append(f"    <!-- codeintent-review:{review['scope']}:{decision}:{review['record']} -->")
+              return lines
+
+
+          def review_pending(check):
+              findings=check.get('findings') or []
+              return any(f.get('review') for f in findings) and not reviewed(check)
+
+
+          def reviewed(check):
+              findings=check.get('findings') or []
+              return bool(findings) and check.get('state') in {'passed','failed'} and all(
+                  (f.get('review') or {}).get('decision')=='accepted' for f in findings)
+
+
           def boundary_summary(check):
               """Failed boundary questions need review, not a list: the count here, the findings in the review."""
-              findings=[f for f in check.get('findings') or [] if isinstance(f,dict)]
+              findings=[f for f in check.get('findings') or [] if isinstance(f,dict) and (f.get('review') or {}).get('decision')!='accepted']
               if not findings:
                   return 'needs review'
               boundaries=len({f['title'] for f in findings if f.get('title')})
@@ -326,13 +358,17 @@ jobs:
               acceptance=document.get('acceptance') or {}
               status=acceptance.get('status')
               shadow=acceptance.get('mode')=='shadow'
-              needs_review=(verdict!='PASS' or any(check.get('state') in {'failed','error'} for check in checks)
+              visible=[c for c in checks if c.get('id')!='governance_decision']
+              failures=[c for c in visible if c.get('state') in {'failed','error'}]
+              all_reviewed=bool(failures) and all(reviewed(c) for c in failures)
+              needs_review=((verdict!='PASS' and not all_reviewed) or any(not reviewed(c) for c in failures) or any(review_pending(c) for c in visible)
                             or (not shadow and status in {'blocked','review_required','incomplete','evidence_needed'}))
               label=('⏳ Running' if document.get('state')!='completed' else
-                     '❌ Needs Review' if needs_review else '✅ Passed')
+                     '❌ Needs Review' if needs_review else '✅ Reviewed' if all_reviewed else '✅ Passed')
               rows=[MARKER,'### CodeIntent checks -- '+label,'']
               if document.get('violation_status')=='rejected':
                   rows+=['**Rejected:** a rule violation was confirmed, so this pull request was closed.','']
+              accepted=[]
               passed=[]
               failed=[]
               failed_count=0
@@ -341,28 +377,40 @@ jobs:
                       continue
                   state=check.get('state','pending')
                   name=inline(check.get('label') or check['id'])
-                  if state=='passed':
-                      suffix=' — response requested' if check.get('id')=='coding_standards' and check.get('findings') else ''
+                  has_reviews=any(f.get('review') for f in check.get('findings') or [])
+                  if reviewed(check) and state=='failed':
+                      accepted.append(f'- {name} — findings accepted as intended; analysis still reports a violation')
+                      accepted+=review_lines(check,report_url)
+                  elif state=='passed' and not review_pending(check):
+                      suffix=' — response requested' if check.get('id')=='coding_standards' and check.get('findings') and not reviewed(check) else ''
                       passed.append(f'- {name}{suffix}')
-                      passed+=finding_lines(check) if document.get('governance_run_id') else []
-                  elif state in {'failed','error'}:
+                      passed+=review_lines(check,report_url) if has_reviews else finding_lines(check) if document.get('governance_run_id') else []
+                  elif state in {'failed','error'} or review_pending(check):
                       failed_count+=1
-                      detail=boundary_summary(check) if check.get('id')=='intent_diff' and state=='failed' else inline(state)
+                      detail=boundary_summary(check) if check.get('id')=='intent_diff' and state=='failed' else 'response requested' if state=='passed' else inline(state)
                       url=urlsplit(report_url)
                       query=[(key,value) for key,value in parse_qsl(url.query,keep_blank_values=True) if key not in {'view','check','item','issue'}]
                       query.extend([('view','desc'),('check',check['id'])])
-                      issues=[f for f in check.get('findings') or [] if isinstance(f,dict)]
+                      issues=[f for f in check.get('findings') or [] if isinstance(f,dict) and (f.get('review') or {}).get('decision')!='accepted']
                       if issues:
                           issue=issues[0].get('id') or issues[0].get('ref')
                           if issue: query.append(('issue',issue))
                       target=urlunsplit((url.scheme,url.netloc,url.path,urlencode(query),''))
                       failed.append(f'- **[{name}](<{target}>)**: {detail}')
-                      if check.get('id')!='intent_diff' and document.get('governance_run_id'):
+                      if has_reviews:
+                          failed+=review_lines(check,report_url,accepted=False)
+                          accepted_rows=review_lines(check,report_url,accepted=True)
+                          if accepted_rows:
+                              accepted.append(f'- {name} — accepted findings')
+                              accepted+=accepted_rows
+                      elif check.get('id')!='intent_diff' and document.get('governance_run_id'):
                           failed+=finding_lines(check)
-              passed_count=sum(check.get('state')=='passed' and check.get('id')!='governance_decision' for check in checks)
+              passed_count=sum(check.get('state')=='passed' and check.get('id')!='governance_decision' and not review_pending(check) for check in checks)
               if passed:
                   rows+=['<details>', f'<summary>✅ Passing checks ({passed_count})</summary>', '',
                          *passed, '', '</details>']
+              if accepted:
+                  rows+=['<details>', '<summary>✅ Reviewed findings</summary>', '', *accepted, '', '</details>']
               if failed:
                   rows+=['<details open>', f'<summary>❌ Needs Review ({failed_count})</summary>', '',
                          *failed, '', '</details>', '']
@@ -370,7 +418,6 @@ jobs:
               if risks:
                   rows+=['',f"🟡 Intent outside governed objectives: {len(risks)} change(s); {len(acceptance.get('required_reviews',[]))} awaiting risk review."]
               return '\n'.join(rows)+'\n'
-
           import json, os
           with open('/tmp/codeintent-status.json') as stream:
               doc=json.load(stream)

@@ -28,7 +28,7 @@ jobs:
     if: >-
       github.event.comment.user.type != 'Bot'
       && (github.event_name == 'pull_request_review_comment' || github.event.issue.pull_request)
-      && (contains(github.event.comment.body, '/reject') || contains(github.event.comment.body, '/false-positive'))
+      && (contains(github.event.comment.body, '/reject') || contains(github.event.comment.body, '/false-positive') || contains(github.event.comment.body, '/codeintent-review'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -53,11 +53,16 @@ jobs:
           env = os.environ
           repo, number, actor = env['REPOSITORY'], env['PR_NUMBER'], env['ACTOR']
 
-          def gh(*args):
-              run = subprocess.run(['gh', 'api', *args], capture_output=True, text=True)
+          def gh(*args, payload=None):
+              run = subprocess.run(['gh', 'api', *args] + (['--input', '-'] if payload is not None else []),
+                                   input=json.dumps(payload) if payload is not None else None,
+                                   capture_output=True, text=True)
               return run.stdout if run.returncode == 0 else None
 
-          head = env.get('REVIEW_HEAD_SHA') or json.loads(gh(f'repos/{repo}/pulls/{number}'))['head']['sha']
+          current_pr = json.loads(gh(f'repos/{repo}/pulls/{number}') or '{}')
+          if current_pr.get('state') != 'open':
+              raise SystemExit('::warning::Review commands require an open PR.')
+          head = current_pr['head']['sha']
           # Only someone with write access decides a violation.
           permission = (gh(f'repos/{repo}/collaborators/{actor}/permission', '--jq', '.permission') or 'none').strip()
           if permission not in {'admin', 'maintain', 'write', 'triage', 'read', 'none'}:
@@ -75,7 +80,17 @@ jobs:
           except urllib.error.HTTPError as exc:
               raise SystemExit(f'::error::CodeIntent decisions API returned HTTP {exc.code}: '
                                + exc.read().decode(errors='replace')[:500])
-          print(json.dumps({k: v for k, v in result.items() if k != 'reply'}))
+          print(json.dumps({'recorded': result.get('recorded', 0)}))
+          if result.get('comment_body'):
+              latest = json.loads(gh(f'repos/{repo}/pulls/{number}') or '{}')
+              if latest.get('head', {}).get('sha') != result.get('head_sha'):
+                  raise SystemExit('::warning::PR changed after recording; reload the latest review.')
+              pages = json.loads(gh('--paginate', '--slurp', f'repos/{repo}/issues/{number}/comments?per_page=100') or '[]')
+              bot = next((c for page in pages for c in page if c.get('user', {}).get('login') == 'github-actions[bot]'
+                          and '<!-- codeintent-checks -->' in c.get('body', '')), None)
+              if not bot or gh('--method', 'PATCH', f'repos/{repo}/issues/comments/{bot["id"]}',
+                               payload={'body': result['comment_body']}) is None:
+                  raise SystemExit('::error::Decision recorded, but the bot comment was not updated. Retry this Actions run.')
           if not result.get('reply'):
               raise SystemExit(0)   # an ordinary comment that only mentions a command
 
