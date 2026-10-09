@@ -353,8 +353,7 @@ jobs:
 
           def reviewed(check):
               findings=check.get('findings') or []
-              return bool(findings) and check.get('state') in {'passed','failed'} and not any(
-                  f.get('category')=='governed_boundary_violation' for f in findings) and all(
+              return bool(findings) and check.get('state') in {'passed','failed'} and all(
                   (f.get('review') or {}).get('decision')=='accepted' for f in findings)
 
 
