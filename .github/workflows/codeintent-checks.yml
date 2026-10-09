@@ -372,6 +372,7 @@ jobs:
               needs_review=((verdict!='PASS' and not all_reviewed and not hidden) or any(not reviewed(c) for c in failures) or any(review_pending(c) for c in visible)
                             or (not shadow and status in {'blocked','review_required','incomplete','evidence_needed'}))
               label=('⏳ Running' if document.get('state')!='completed' else
+                     '⚠️ LACKS_DETERMINISTIC_EVIDENCE' if needs_review and verdict=='UNKNOWN' else
                      '❌ Needs Review' if needs_review else '✅ Reviewed' if all_reviewed else 'Review results' if hidden else '✅ Passed')
               rows=[MARKER,'### CodeIntent checks -- '+label,'']
               if document.get('violation_status')=='rejected':
