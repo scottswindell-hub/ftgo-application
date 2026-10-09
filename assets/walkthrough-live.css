@@ -265,8 +265,9 @@ details.quiet summary{cursor:pointer;color:var(--muted)}details.quiet summary b{
 #finding-confirmation textarea{width:100%;box-sizing:border-box;margin:12px 0}
 #finding-confirmation button,#finding-confirmation a{display:inline-block;padding:10px;margin:4px}
 
-/* Reserve the spinner slot in both states so the button never grows on submit. */
+/* Balance the permanent spinner slot so the label stays centered in both states. */
 .desc-assessment .return-github{display:inline-flex;align-items:center;justify-content:center}
+.desc-assessment .return-github::after{content:"";flex:0 0 1.5em;width:1.5em}
 .desc-assessment .return-spinner{display:inline-flex;align-items:center;justify-content:flex-start;flex:0 0 1.5em;width:1.5em}
 .desc-assessment .return-spinner img{display:block;width:1.125em;height:1.125em;visibility:hidden;transform:translateY(.06em)}
 .desc-assessment .return-github[aria-busy="true"] .return-spinner img{visibility:visible}
