@@ -288,7 +288,7 @@ function detailScreen(item){
  const target=reviewTarget(item),targets=reviewTargets(item),saved=confirmed(item);
  const save=state.saves.get(target?.finding.review.scope);
  const selector=targets.length>1?`<label>Finding <select data-review-scope><option value="">Choose a finding</option>${targets.map(t=>`<option value="${esc(t.finding.review.scope)}" ${target===t||target?.finding.review.scope===t.finding.review.scope?'selected':''}>${esc(t.finding.title||t.finding.name||t.finding.id||t.finding.ref)}</option>`).join('')}</select></label>`:'';
- const note=saved?'Answer recorded and PR comment updated.':save?.message||(target?.finding.review.decision?'Answer recorded. Waiting for the PR comment to update.':target?'Your answer will be saved and the PR message updated.':'A uniquely recorded finding is required before answering.');
+ const note=saved?'':save?.message||(target?.finding.review.decision?'Answer recorded. Waiting for the PR comment to update.':target?'Your answer will be saved and the PR message updated.':'A uniquely recorded finding is required before answering.');
  return `<div class="ci desc-page"><article class="tile">
   <div class="tile-head"><h3>${esc(item.title)}</h3>${typeIcon(item.reviewType||'Behavior')}</div>
   <div class="tile-sub"><code>${esc(item.method||short(item.file))}</code></div>
