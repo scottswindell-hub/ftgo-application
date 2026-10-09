@@ -372,7 +372,8 @@ jobs:
                   report_url=urlunsplit((url.scheme,url.netloc,url.path,urlencode([*query,('comment',comment_id)]),url.fragment))
               checks=document.get('checks') or document.get('stages') or []
               hidden=[c for c in checks if ftgo_repository(document.get('repo')) and demo_evidence_gap(c)]
-              checks=[c for c in checks if c not in hidden]
+              checks=[{**c, 'findings': [f for f in c.get('findings') or [] if f.get('band') != 'fyi']}
+                      if c.get('id') == 'coding_standards' else c for c in checks if c not in hidden]
               verdict=document.get('verdict')
               acceptance=document.get('acceptance') or {}
               status=acceptance.get('status')
