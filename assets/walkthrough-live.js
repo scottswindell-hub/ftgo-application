@@ -297,7 +297,7 @@ function detailScreen(item){
  return `<div class="ci desc-page"><article class="tile">
   <div class="tile-head"><h3>${esc(item.title)}</h3>${typeIcon(item.reviewType||'Behavior')}</div>
   <div class="tile-sub"><code>${esc(item.method||short(item.file))}</code></div>
-  ${item.objective?`<div class="rule"><small>ACCEPTED CONSTRAINT</small><p>${esc(item.objective)}</p></div>`:item.concept?`<div class="rule boundary-context"><small>RECORDED REVIEW CONTEXT</small><p>${esc(item.concept)}</p></div>`:''}
+  ${item.objective?`<div class="rule"><small>ACCEPTED CONSTRAINT</small><p>${esc(item.objective)}</p></div>`:''}
   <div class="ba"><div><small>BEFORE</small>${esc(item.before)}</div><div class="after"><small>WITH THIS PR</small>${esc(item.after)}</div></div>
   ${interpretation}
   <div class="diffs">
