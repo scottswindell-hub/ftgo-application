@@ -32,6 +32,10 @@ public class Action {
     return this.deliveryId == deliveryId;
   }
 
+  public boolean occursBetween(LocalDateTime start, LocalDateTime end) {
+    return time != null && !time.isBefore(start) && !time.isAfter(end);
+  }
+
   public static Action makePickup(long deliveryId, Address pickupAddress, LocalDateTime pickupTime) {
     return new Action(DeliveryActionType.PICKUP, deliveryId, pickupAddress, pickupTime);
   }
@@ -47,5 +51,9 @@ public class Action {
 
   public Address getAddress() {
     return address;
+  }
+
+  public LocalDateTime getTime() {
+    return time;
   }
 }

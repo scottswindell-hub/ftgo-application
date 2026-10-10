@@ -1,6 +1,7 @@
 package net.chrisrichardson.ftgo.deliveryservice.domain;
 
 import javax.persistence.ElementCollection;
+import java.time.LocalDateTime;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -20,6 +21,14 @@ public class Plan {
 
   public List<Action> getActions() {
     return actions;
+  }
+
+  public int size() {
+    return actions.size();
+  }
+
+  public boolean isFreeBetween(LocalDateTime start, LocalDateTime end) {
+    return actions.stream().noneMatch(action -> action.occursBetween(start, end));
   }
 
   public List<Action> actionsForDelivery(long deliveryId) {

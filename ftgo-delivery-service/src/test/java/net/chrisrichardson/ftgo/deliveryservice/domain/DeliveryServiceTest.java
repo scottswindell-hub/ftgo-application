@@ -7,6 +7,7 @@ import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -92,6 +93,79 @@ public class DeliveryServiceTest {
     assertEquals(DeliveryServiceTestData.PICKUP_ADDRESS, actions.get(0).getAddress());
     assertEquals(DeliveryActionType.DROPOFF, actions.get(1).getType());
     assertEquals(DeliveryServiceTestData.DELIVERY_ADDRESS, actions.get(1).getAddress());
+  }
+
+  @Test
+  public void shouldScheduleThePickupAtReadyByAndTheDropoffAfterTheEstimatedTravelTime() {
+    Delivery delivery = Delivery.create(ORDER_ID, RESTAURANT_ID, DeliveryServiceTestData.PICKUP_ADDRESS, DeliveryServiceTestData.DELIVERY_ADDRESS);
+
+    when(deliveryRepository.findById(ORDER_ID)).thenReturn(Optional.of(delivery));
+    when(courierRepository.findAllAvailable()).thenReturn(Collections.singletonList(courier));
+
+    deliveryService.scheduleDelivery(ORDER_ID, READY_BY);
+
+    List<Action> actions = courier.getPlan().getActions();
+    assertEquals(READY_BY, actions.get(0).getTime());
+    assertEquals(READY_BY.plusMinutes(15), actions.get(1).getTime());
+  }
+
+  @Test
+  public void shouldAssignTheCourierWithTheLeastWork() {
+    Delivery delivery = Delivery.create(ORDER_ID, RESTAURANT_ID, DeliveryServiceTestData.PICKUP_ADDRESS, DeliveryServiceTestData.DELIVERY_ADDRESS);
+    Courier busy = Courier.create(1L);
+    busy.addAction(Action.makePickup(1, DeliveryServiceTestData.PICKUP_ADDRESS, READY_BY.plusHours(3)));
+    busy.addAction(Action.makeDropoff(1, DeliveryServiceTestData.DELIVERY_ADDRESS, READY_BY.plusHours(4)));
+    Courier idle = Courier.create(2L);
+
+    when(deliveryRepository.findById(ORDER_ID)).thenReturn(Optional.of(delivery));
+    when(courierRepository.findAllAvailable()).thenReturn(Arrays.asList(busy, idle));
+
+    deliveryService.scheduleDelivery(ORDER_ID, READY_BY);
+
+    assertEquals(Long.valueOf(2L), delivery.getAssignedCourier());
+    assertEquals(2, busy.getPlan().getActions().size());
+    assertEquals(2, idle.getPlan().getActions().size());
+  }
+
+  @Test
+  public void shouldNotAssignACourierWhoIsBusyAtTheTime() {
+    Delivery delivery = Delivery.create(ORDER_ID, RESTAURANT_ID, DeliveryServiceTestData.PICKUP_ADDRESS, DeliveryServiceTestData.DELIVERY_ADDRESS);
+    Courier occupied = Courier.create(1L);
+    occupied.addAction(Action.makePickup(9, DeliveryServiceTestData.PICKUP_ADDRESS, READY_BY.plusMinutes(5)));
+
+    when(deliveryRepository.findById(ORDER_ID)).thenReturn(Optional.of(delivery));
+    when(courierRepository.findAllAvailable()).thenReturn(Arrays.asList(occupied, courier));
+
+    deliveryService.scheduleDelivery(ORDER_ID, READY_BY);
+
+    assertEquals(Long.valueOf(COURIER_ID), delivery.getAssignedCourier());
+    assertEquals(1, occupied.getPlan().getActions().size());
+  }
+
+  @Test(expected = NoCourierAvailableException.class)
+  public void shouldFailWhenNoCourierIsAvailable() {
+    Delivery delivery = Delivery.create(ORDER_ID, RESTAURANT_ID, DeliveryServiceTestData.PICKUP_ADDRESS, DeliveryServiceTestData.DELIVERY_ADDRESS);
+
+    when(deliveryRepository.findById(ORDER_ID)).thenReturn(Optional.of(delivery));
+    when(courierRepository.findAllAvailable()).thenReturn(Collections.emptyList());
+
+    deliveryService.scheduleDelivery(ORDER_ID, READY_BY);
+  }
+
+  @Test
+  public void shouldLeaveTheDeliveryPendingWhenNoCourierIsAvailable() {
+    Delivery delivery = Delivery.create(ORDER_ID, RESTAURANT_ID, DeliveryServiceTestData.PICKUP_ADDRESS, DeliveryServiceTestData.DELIVERY_ADDRESS);
+
+    when(deliveryRepository.findById(ORDER_ID)).thenReturn(Optional.of(delivery));
+    when(courierRepository.findAllAvailable()).thenReturn(Collections.emptyList());
+
+    try {
+      deliveryService.scheduleDelivery(ORDER_ID, READY_BY);
+      fail("expected NoCourierAvailableException");
+    } catch (NoCourierAvailableException e) {
+      assertEquals(ORDER_ID, e.getDeliveryId());
+    }
+    assertEquals(DeliveryState.PENDING, delivery.getState());
   }
 
 }

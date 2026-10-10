@@ -11,7 +11,6 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.Random;
 import java.util.stream.Collectors;
 
 public class DeliveryService {
@@ -19,12 +18,20 @@ public class DeliveryService {
   private RestaurantRepository restaurantRepository;
   private DeliveryRepository deliveryRepository;
   private CourierRepository courierRepository;
-  private Random random = new Random();
+  private CourierSelector courierSelector;
+  private TravelTimeEstimator travelTimeEstimator;
 
   public DeliveryService(RestaurantRepository restaurantRepository, DeliveryRepository deliveryRepository, CourierRepository courierRepository) {
+    this(restaurantRepository, deliveryRepository, courierRepository, new CourierSelector(), new TravelTimeEstimator());
+  }
+
+  public DeliveryService(RestaurantRepository restaurantRepository, DeliveryRepository deliveryRepository, CourierRepository courierRepository,
+                         CourierSelector courierSelector, TravelTimeEstimator travelTimeEstimator) {
     this.restaurantRepository = restaurantRepository;
     this.deliveryRepository = deliveryRepository;
     this.courierRepository = courierRepository;
+    this.courierSelector = courierSelector;
+    this.travelTimeEstimator = travelTimeEstimator;
   }
 
   public void createRestaurant(long restaurantId, String restaurantName, Address address) {
@@ -39,12 +46,14 @@ public class DeliveryService {
   public void scheduleDelivery(long orderId, LocalDateTime readyBy) {
     Delivery delivery = deliveryRepository.findById(orderId).get();
 
-    // Stupid implementation
+    long travelMinutes = travelTimeEstimator.estimateMinutes(delivery.getPickupAddress(), delivery.getDeliveryAddress());
+    LocalDateTime dropoffTime = readyBy.plusMinutes(travelMinutes);
 
     List<Courier> couriers = courierRepository.findAllAvailable();
-    Courier courier = couriers.get(random.nextInt(couriers.size()));
+    Courier courier = courierSelector.select(couriers, readyBy, dropoffTime)
+            .orElseThrow(() -> new NoCourierAvailableException(orderId, readyBy, dropoffTime));
     courier.addAction(Action.makePickup(delivery.getId(), delivery.getPickupAddress(), readyBy));
-    courier.addAction(Action.makeDropoff(delivery.getId(), delivery.getDeliveryAddress(), readyBy.plusMinutes(30)));
+    courier.addAction(Action.makeDropoff(delivery.getId(), delivery.getDeliveryAddress(), dropoffTime));
 
     delivery.schedule(readyBy, courier.getId());
 

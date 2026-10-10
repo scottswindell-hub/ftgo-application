@@ -1,6 +1,7 @@
 package net.chrisrichardson.ftgo.deliveryservice.domain;
 
 import javax.persistence.*;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
@@ -58,5 +59,13 @@ public class Courier {
 
   public List<Action> actionsForDelivery(long deliveryId) {
     return plan.actionsForDelivery(deliveryId);
+  }
+
+  public int workload() {
+    return plan.size();
+  }
+
+  public boolean isFreeBetween(LocalDateTime start, LocalDateTime end) {
+    return plan.isFreeBetween(start, end);
   }
 }
