@@ -1,0 +1,11 @@
+# Rule exceptions for CodeIntent coding standards. Entries are added when someone
+# with write access answers Yes to a finding on the CodeIntent review page.
+schema: codeintent-rule-exceptions-v1
+exceptions:
+  - rule: "SR-CFG-001"
+    unit: "ftgo-consumer-service/src/main/java/net/chrisrichardson/ftgo/consumerservice/domain/ConsumerService.java#ConsumerService.accountingServiceUrl"
+    expires: 2027-01-10
+    reason: "Confirmed as intended in CodeIntent review"
+    added_by: "@ClintonKral"
+    finding: "F-b0f817d4"
+    pull_request: 124
