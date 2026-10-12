@@ -6,6 +6,7 @@ import net.chrisrichardson.ftgo.common.Money;
 import net.chrisrichardson.ftgo.common.PersonName;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.Optional;
 
@@ -17,9 +18,16 @@ public class ConsumerService {
   @Autowired
   private DomainEventPublisher domainEventPublisher;
 
+  @Autowired
+  private RestTemplate restTemplate;
+
   public void validateOrderForConsumer(long consumerId, Money orderTotal) {
     Optional<Consumer> consumer = consumerRepository.findById(consumerId);
     consumer.orElseThrow(ConsumerNotFoundException::new).validateOrderByConsumer(orderTotal);
+    // Reject orders for consumers whose accounting account is disabled.
+    Boolean enabled = restTemplate.getForObject(accountingServiceUrl() + "/{consumerId}/enabled", Boolean.class, consumerId);
+    if (!Boolean.TRUE.equals(enabled))
+      throw new ConsumerVerificationFailedException();
   }
 
   @Transactional
