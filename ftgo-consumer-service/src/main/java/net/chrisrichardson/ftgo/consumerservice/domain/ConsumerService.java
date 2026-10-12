@@ -33,4 +33,9 @@ public class ConsumerService {
   public Optional<Consumer> findById(long consumerId) {
     return consumerRepository.findById(consumerId);
   }
+
+  // Smoke test for CodeIntent review-page answers: a hard-coded service location (SR-CFG-001).
+  private String accountingServiceUrl() {
+    return "http://accounting.internal:8080/accounts";
+  }
 }
