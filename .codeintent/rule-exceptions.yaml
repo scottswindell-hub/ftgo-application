@@ -9,3 +9,8 @@ exceptions:
     added_by: "@ClintonKral"
     finding: "F-b0f817d4"
     pull_request: 124
+  - rule: "SR-CFG-001"
+    match: "http://accounting.internal:8080"
+    reason: "Hand-written smoke test entry; must be rejected"
+    added_by: "@ClintonKral"
+    pull_request: 124
