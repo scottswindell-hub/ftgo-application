@@ -1,5 +1,6 @@
 package net.chrisrichardson.ftgo.cqrs.orderhistory.web;
 
+import net.chrisrichardson.ftgo.common.Money;
 import net.chrisrichardson.ftgo.orderservice.api.events.OrderState;
 
 public class GetOrderResponse {
@@ -7,6 +8,7 @@ public class GetOrderResponse {
   private OrderState status;
   private long restaurantId;
   private String restaurantName;
+  private Money tip;
 
 
   private GetOrderResponse() {
@@ -26,6 +28,19 @@ public class GetOrderResponse {
 
   public void setRestaurantId(long restaurantId) {
     this.restaurantId = restaurantId;
+  }
+
+  public GetOrderResponse(String orderId, OrderState status, long restaurantId, String restaurantName, Money tip) {
+    this(orderId, status, restaurantId, restaurantName);
+    this.tip = tip;
+  }
+
+  public Money getTip() {
+    return tip;
+  }
+
+  public void setTip(Money tip) {
+    this.tip = tip;
   }
 
   public GetOrderResponse(String orderId, OrderState status, long restaurantId, String restaurantName) {

@@ -21,12 +21,27 @@ import static java.util.Collections.singletonList;
 @Access(AccessType.FIELD)
 public class Order {
 
+  /** The largest tip accepted, as a percentage of the line-item total. */
+  public static final int MAX_TIP_PERCENT = 50;
+
   public static ResultWithDomainEvents<Order, OrderDomainEvent>
   createOrder(long consumerId, Restaurant restaurant, DeliveryInformation deliveryInformation, List<OrderLineItem> orderLineItems) {
-    Order order = new Order(consumerId, restaurant.getId(), deliveryInformation, orderLineItems);
+    return createOrder(consumerId, restaurant, deliveryInformation, orderLineItems, Money.ZERO);
+  }
+
+  /**
+   * Creates an order whose total includes {@code tip}. The tip is charged with the order and
+   * appears in {@link OrderCreatedEvent}; it must not be negative or exceed
+   * {@link #MAX_TIP_PERCENT} of the line-item total.
+   *
+   * @throws InvalidTipException when the tip is negative or too large
+   */
+  public static ResultWithDomainEvents<Order, OrderDomainEvent>
+  createOrder(long consumerId, Restaurant restaurant, DeliveryInformation deliveryInformation, List<OrderLineItem> orderLineItems, Money tip) {
+    Order order = new Order(consumerId, restaurant.getId(), deliveryInformation, orderLineItems, tip);
     List<OrderDomainEvent> events = singletonList(new OrderCreatedEvent(
             new OrderDetails(consumerId, restaurant.getId(), orderLineItems,
-                    order.getOrderTotal()),
+                    order.getOrderTotal(), order.getTip()),
             deliveryInformation.getDeliveryAddress(),
             restaurant.getName()));
     return new ResultWithDomainEvents<>(order, events);
@@ -57,15 +72,37 @@ public class Order {
   @Embedded
   private Money orderMinimum = new Money(Integer.MAX_VALUE);
 
+  @Embedded
+  @AttributeOverride(name = "amount", column = @Column(name = "tip"))
+  private Money tip = Money.ZERO;
+
   private Order() {
   }
 
   public Order(long consumerId, long restaurantId, DeliveryInformation deliveryInformation, List<OrderLineItem> orderLineItems) {
+    this(consumerId, restaurantId, deliveryInformation, orderLineItems, Money.ZERO);
+  }
+
+  public Order(long consumerId, long restaurantId, DeliveryInformation deliveryInformation, List<OrderLineItem> orderLineItems, Money tip) {
     this.consumerId = consumerId;
     this.restaurantId = restaurantId;
     this.deliveryInformation = deliveryInformation;
     this.orderLineItems = new OrderLineItems(orderLineItems);
+    this.tip = validTip(tip, this.orderLineItems.orderTotal());
     this.state = APPROVAL_PENDING;
+  }
+
+  private static Money validTip(Money tip, Money itemsTotal) {
+    if (tip == null) {
+      return Money.ZERO;
+    }
+    if (tip.isNegative()) {
+      throw new InvalidTipException("A tip cannot be negative");
+    }
+    if (tip.multiply(100).isGreaterThanOrEqual(itemsTotal.multiply(MAX_TIP_PERCENT).add(new Money("0.01")))) {
+      throw new InvalidTipException("A tip cannot exceed " + MAX_TIP_PERCENT + "% of the order");
+    }
+    return tip;
   }
 
   public Long getId() {
@@ -80,8 +117,18 @@ public class Order {
     return deliveryInformation;
   }
 
+  /** The amount the consumer is charged: the line items plus the tip. */
   public Money getOrderTotal() {
+    return orderLineItems.orderTotal().add(getTip());
+  }
+
+  /** The total of the line items alone, without the tip. */
+  public Money getItemsTotal() {
     return orderLineItems.orderTotal();
+  }
+
+  public Money getTip() {
+    return tip == null ? Money.ZERO : tip;
   }
 
   public List<OrderDomainEvent> cancel() {

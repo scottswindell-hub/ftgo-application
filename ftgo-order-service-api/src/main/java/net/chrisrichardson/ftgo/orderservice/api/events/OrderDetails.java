@@ -7,10 +7,16 @@ import org.apache.commons.lang.builder.ToStringBuilder;
 
 import java.util.List;
 
+/**
+ * The details of a placed order, as published in {@link OrderCreatedEvent} and used by the
+ * Create Order saga. {@code orderTotal} is the amount the consumer is charged: the line items
+ * plus the tip.
+ */
 public class OrderDetails {
 
   private List<OrderLineItem> lineItems;
   private Money orderTotal;
+  private Money tip = Money.ZERO;
 
   private long restaurantId;
   private long consumerId;
@@ -27,10 +33,27 @@ public class OrderDetails {
   }
 
   public OrderDetails(long consumerId, long restaurantId, List<OrderLineItem> lineItems, Money orderTotal) {
+    this(consumerId, restaurantId, lineItems, orderTotal, Money.ZERO);
+  }
+
+  /**
+   * @param orderTotal the amount charged, including {@code tip}
+   * @param tip        the consumer's tip for the courier; {@link Money#ZERO} when none
+   */
+  public OrderDetails(long consumerId, long restaurantId, List<OrderLineItem> lineItems, Money orderTotal, Money tip) {
     this.consumerId = consumerId;
     this.restaurantId = restaurantId;
     this.lineItems = lineItems;
     this.orderTotal = orderTotal;
+    this.tip = tip;
+  }
+
+  public Money getTip() {
+    return tip;
+  }
+
+  public void setTip(Money tip) {
+    this.tip = tip;
   }
 
   @Override

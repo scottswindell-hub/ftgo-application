@@ -71,13 +71,15 @@ public class OrderHistoryEventHandlers {
   }
 
   private Order makeOrder(String orderId, OrderCreatedEvent event) {
-    return new Order(orderId,
+    Order order = new Order(orderId,
             Long.toString(event.getOrderDetails().getConsumerId()),
             OrderState.APPROVAL_PENDING,
             event.getOrderDetails().getLineItems(),
             event.getOrderDetails().getOrderTotal(),
             event.getOrderDetails().getRestaurantId(),
             event.getRestaurantName());
+    order.setTip(event.getOrderDetails().getTip());
+    return order;
   }
 
   public void handleDeliveryPickedUp(DomainEventEnvelope<DeliveryPickedUp>

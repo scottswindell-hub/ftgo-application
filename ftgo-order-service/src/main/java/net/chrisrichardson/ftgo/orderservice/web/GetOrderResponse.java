@@ -7,6 +7,7 @@ public class GetOrderResponse {
   private long orderId;
   private OrderState state;
   private Money orderTotal;
+  private Money tip;
 
   private GetOrderResponse() {
   }
@@ -15,6 +16,19 @@ public class GetOrderResponse {
     this.orderId = orderId;
     this.state = state;
     this.orderTotal = orderTotal;
+  }
+
+  public GetOrderResponse(long orderId, OrderState state, Money orderTotal, Money tip) {
+    this(orderId, state, orderTotal);
+    this.tip = tip;
+  }
+
+  public Money getTip() {
+    return tip;
+  }
+
+  public void setTip(Money tip) {
+    this.tip = tip;
   }
 
   public Money getOrderTotal() {

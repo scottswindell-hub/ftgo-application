@@ -4,6 +4,7 @@ import io.eventuate.tram.events.aggregates.ResultWithDomainEvents;
 import io.eventuate.tram.events.publisher.DomainEventPublisher;
 import io.eventuate.tram.sagas.orchestration.SagaInstanceFactory;
 import io.micrometer.core.instrument.MeterRegistry;
+import net.chrisrichardson.ftgo.common.Money;
 import net.chrisrichardson.ftgo.orderservice.api.events.OrderDetails;
 import net.chrisrichardson.ftgo.orderservice.api.events.OrderDomainEvent;
 import net.chrisrichardson.ftgo.orderservice.api.events.OrderLineItem;
@@ -68,20 +69,30 @@ public class OrderService {
   @Transactional
   public Order createOrder(long consumerId, long restaurantId, DeliveryInformation deliveryInformation,
                            List<MenuItemIdAndQuantity> lineItems) {
+    return createOrder(consumerId, restaurantId, deliveryInformation, lineItems, Money.ZERO);
+  }
+
+  /**
+   * Places an order whose charged total includes {@code tip}; the Create Order saga
+   * authorizes that total with Accounting.
+   */
+  @Transactional
+  public Order createOrder(long consumerId, long restaurantId, DeliveryInformation deliveryInformation,
+                           List<MenuItemIdAndQuantity> lineItems, Money tip) {
     Restaurant restaurant = restaurantRepository.findById(restaurantId)
             .orElseThrow(() -> new RestaurantNotFoundException(restaurantId));
 
     List<OrderLineItem> orderLineItems = makeOrderLineItems(lineItems, restaurant);
 
     ResultWithDomainEvents<Order, OrderDomainEvent> orderAndEvents =
-            Order.createOrder(consumerId, restaurant, deliveryInformation, orderLineItems);
+            Order.createOrder(consumerId, restaurant, deliveryInformation, orderLineItems, tip);
 
     Order order = orderAndEvents.result;
     orderRepository.save(order);
 
     orderAggregateEventPublisher.publish(order, orderAndEvents.events);
 
-    OrderDetails orderDetails = new OrderDetails(consumerId, restaurantId, orderLineItems, order.getOrderTotal());
+    OrderDetails orderDetails = new OrderDetails(consumerId, restaurantId, orderLineItems, order.getOrderTotal(), order.getTip());
 
     CreateOrderSagaState data = new CreateOrderSagaState(order.getId(), orderDetails);
     sagaInstanceFactory.create(createOrderSaga, data);
