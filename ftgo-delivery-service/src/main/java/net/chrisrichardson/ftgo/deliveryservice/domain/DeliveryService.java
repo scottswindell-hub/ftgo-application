@@ -99,11 +99,9 @@ public class DeliveryService {
   public Optional<DeliveryStatus> getDeliveryInfo(long deliveryId) {
     return deliveryRepository.findById(deliveryId).map(delivery -> {
       Long assignedCourier = delivery.getAssignedCourier();
-      List<Action> courierActions = Collections.EMPTY_LIST;
-      if (assignedCourier != null) {
-        Courier courier = courierRepository.findById(assignedCourier).get();
-        courierActions = courier.actionsForDelivery(deliveryId);
-      }
+      List<Action> courierActions = assignedCourier == null
+              ? Collections.<Action>emptyList()
+              : courierRepository.findById(assignedCourier).get().actionsForDelivery(deliveryId);
       return makeDeliveryStatus(delivery, assignedCourier, courierActions);
     });
   }
