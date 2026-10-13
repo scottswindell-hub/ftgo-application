@@ -36,7 +36,7 @@ public class CreateOrderSagaTest {
   }
 
   @Test
-  public void shouldCreateOrder() {
+  public void shouldApproveOrderBeforeConfirmingTicket() {
     given()
         .saga(makeCreateOrderSaga(),
                 new CreateOrderSagaState(ORDER_ID, CHICKEN_VINDALOO_ORDER_DETAILS)).
@@ -56,13 +56,13 @@ public class CreateOrderSagaTest {
     andGiven().
         successReply().
     expect().
-      command(new ConfirmCreateTicket(ORDER_ID)).
-      to(KitchenServiceChannels.COMMAND_CHANNEL).
+      command(new ApproveOrderCommand(ORDER_ID)).
+      to(OrderServiceChannels.COMMAND_CHANNEL).
     andGiven().
         successReply().
     expect().
-      command(new ApproveOrderCommand(ORDER_ID)).
-      to(OrderServiceChannels.COMMAND_CHANNEL)
+      command(new ConfirmCreateTicket(ORDER_ID)).
+      to(KitchenServiceChannels.COMMAND_CHANNEL)
             ;
   }
 
