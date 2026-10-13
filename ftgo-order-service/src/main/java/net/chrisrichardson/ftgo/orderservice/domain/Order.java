@@ -90,8 +90,12 @@ public class Order {
         this.state = OrderState.CANCEL_PENDING;
         return emptyList();
       default:
-        throw new UnsupportedStateTransitionException(state);
+        throw unsupportedTransition();
     }
+  }
+
+  private UnsupportedStateTransitionException unsupportedTransition() {
+    return new UnsupportedStateTransitionException(state);
   }
 
   public List<OrderDomainEvent> undoPendingCancel() {
