@@ -1,5 +1,6 @@
 package net.chrisrichardson.ftgo.orderservice.web;
 
+import net.chrisrichardson.ftgo.common.UnsupportedStateTransitionException;
 import net.chrisrichardson.ftgo.orderservice.api.web.CreateOrderRequest;
 import net.chrisrichardson.ftgo.orderservice.api.web.CreateOrderResponse;
 import net.chrisrichardson.ftgo.orderservice.api.web.ReviseOrderRequest;
@@ -58,6 +59,8 @@ public class OrderController {
       return new ResponseEntity<>(makeGetOrderResponse(order), HttpStatus.OK);
     } catch (OrderNotFoundException e) {
       return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+    } catch (UnsupportedStateTransitionException e) {
+      return new ResponseEntity<>(HttpStatus.CONFLICT);
     }
   }
 
@@ -68,6 +71,8 @@ public class OrderController {
       return new ResponseEntity<>(makeGetOrderResponse(order), HttpStatus.OK);
     } catch (OrderNotFoundException e) {
       return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+    } catch (UnsupportedStateTransitionException e) {
+      return new ResponseEntity<>(HttpStatus.CONFLICT);
     }
   }
 
