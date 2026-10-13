@@ -151,11 +151,16 @@ public class Order {
           throw new OrderMinimumNotMetException();
         }
         this.state = REVISION_PENDING;
-        return new ResultWithDomainEvents<>(change, singletonList(new OrderRevisionProposed(orderRevision, change.currentOrderTotal, change.newOrderTotal)));
+        return revisionProposal(orderRevision, change);
 
       default:
         throw new UnsupportedStateTransitionException(state);
     }
+  }
+
+  private ResultWithDomainEvents<LineItemQuantityChange, OrderDomainEvent> revisionProposal(
+          OrderRevision orderRevision, LineItemQuantityChange change) {
+    return new ResultWithDomainEvents<>(change, singletonList(new OrderRevisionProposed(orderRevision, change.currentOrderTotal, change.newOrderTotal)));
   }
 
   public List<OrderDomainEvent> rejectRevision() {

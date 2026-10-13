@@ -2,6 +2,7 @@ package net.chrisrichardson.ftgo.orderservice.domain;
 
 import io.eventuate.tram.events.aggregates.ResultWithDomainEvents;
 import net.chrisrichardson.ftgo.common.RevisedOrderLineItem;
+import net.chrisrichardson.ftgo.common.UnsupportedStateTransitionException;
 import net.chrisrichardson.ftgo.orderservice.OrderDetailsMother;
 import net.chrisrichardson.ftgo.orderservice.RestaurantMother;
 import net.chrisrichardson.ftgo.orderservice.api.events.OrderAuthorized;
@@ -12,6 +13,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Collections;
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +22,9 @@ import static net.chrisrichardson.ftgo.orderservice.OrderDetailsMother.*;
 import static net.chrisrichardson.ftgo.orderservice.RestaurantMother.AJANTA_RESTAURANT;
 import static net.chrisrichardson.ftgo.orderservice.RestaurantMother.CHICKEN_VINDALOO_PRICE;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class OrderTest {
 
@@ -61,10 +66,47 @@ public class OrderTest {
 
     ResultWithDomainEvents<LineItemQuantityChange, OrderDomainEvent> result = order.revise(orderRevision);
 
+    assertEquals(OrderState.REVISION_PENDING, order.getState());
+    assertEquals(CHICKEN_VINDALOO_PRICE.multiply(CHICKEN_VINDALOO_QUANTITY), result.result.getCurrentOrderTotal());
     assertEquals(CHICKEN_VINDALOO_PRICE.multiply(10), result.result.getNewOrderTotal());
+    assertEquals(result.result.getCurrentOrderTotal(), order.getOrderTotal());
+    assertEquals(1, result.events.size());
+    assertTrue(result.events.get(0) instanceof OrderRevisionProposed);
+    OrderRevisionProposed proposal = (OrderRevisionProposed) result.events.get(0);
+    assertSame(orderRevision, proposal.getOrderRevision());
+    assertEquals(result.result.getCurrentOrderTotal(), proposal.getCurrentOrderTotal());
+    assertEquals(result.result.getNewOrderTotal(), proposal.getNewOrderTotal());
 
     order.confirmRevision(orderRevision);
 
     assertEquals(CHICKEN_VINDALOO_PRICE.multiply(10), order.getOrderTotal());
+  }
+
+  @Test
+  public void shouldRejectRevisionBeforeApproval() {
+    OrderRevision revision = new OrderRevision(Optional.empty(), singletonList(new RevisedOrderLineItem(10, "1")));
+    try {
+      order.revise(revision);
+      fail("Expected revision to require an approved order");
+    } catch (UnsupportedStateTransitionException expected) {
+      assertEquals(OrderState.APPROVAL_PENDING, order.getState());
+      assertEquals(CHICKEN_VINDALOO_PRICE.multiply(CHICKEN_VINDALOO_QUANTITY), order.getOrderTotal());
+    }
+  }
+
+  @Test
+  public void shouldKeepApprovedStateWhenRevisionMeetsMinimumRejectionBoundary() throws Exception {
+    order.noteApproved();
+    Field minimum = Order.class.getDeclaredField("orderMinimum");
+    minimum.setAccessible(true);
+    minimum.set(order, CHICKEN_VINDALOO_PRICE.multiply(10));
+    OrderRevision revision = new OrderRevision(Optional.empty(), singletonList(new RevisedOrderLineItem(10, "1")));
+    try {
+      order.revise(revision);
+      fail("Expected the existing minimum check to reject an equal total");
+    } catch (OrderMinimumNotMetException expected) {
+      assertEquals(OrderState.APPROVED, order.getState());
+      assertEquals(CHICKEN_VINDALOO_PRICE.multiply(CHICKEN_VINDALOO_QUANTITY), order.getOrderTotal());
+    }
   }
 }
