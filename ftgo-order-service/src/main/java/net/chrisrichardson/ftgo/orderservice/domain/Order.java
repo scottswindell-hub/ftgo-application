@@ -55,7 +55,7 @@ public class Order {
   private PaymentInformation paymentInformation;
 
   @Embedded
-  private Money orderMinimum = new Money(Integer.MAX_VALUE);
+  private Money orderMinimum = Money.ZERO;
 
   private Order() {
   }
@@ -147,7 +147,7 @@ public class Order {
 
       case APPROVED:
         LineItemQuantityChange change = orderLineItems.lineItemQuantityChange(orderRevision);
-        if (change.newOrderTotal.isGreaterThanOrEqual(orderMinimum)) {
+        if (!change.newOrderTotal.isGreaterThanOrEqual(orderMinimum)) {
           throw new OrderMinimumNotMetException();
         }
         this.state = REVISION_PENDING;
