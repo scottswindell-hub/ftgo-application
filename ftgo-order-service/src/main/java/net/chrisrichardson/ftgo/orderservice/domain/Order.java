@@ -68,20 +68,27 @@ public class Order {
     this.state = APPROVAL_PENDING;
   }
 
-  public Long getId() {
-    return id;
+  public List<OrderDomainEvent> noteApproved() {
+    switch (state) {
+      case APPROVAL_PENDING:
+        this.state = APPROVED;
+        return singletonList(new OrderAuthorized());
+      default:
+        throw new UnsupportedStateTransitionException(state);
+    }
+
   }
 
-  public void setId(Long id) {
-    this.id = id;
-  }
+  public List<OrderDomainEvent> noteRejected() {
+    switch (state) {
+      case APPROVAL_PENDING:
+        this.state = REJECTED;
+        return singletonList(new OrderRejected());
 
-  public DeliveryInformation getDeliveryInformation() {
-    return deliveryInformation;
-  }
+      default:
+        throw new UnsupportedStateTransitionException(state);
+    }
 
-  public Money getOrderTotal() {
-    return orderLineItems.orderTotal();
   }
 
   public List<OrderDomainEvent> cancel() {
@@ -113,30 +120,6 @@ public class Order {
         throw new UnsupportedStateTransitionException(state);
     }
   }
-
-  public List<OrderDomainEvent> noteApproved() {
-    switch (state) {
-      case APPROVAL_PENDING:
-        this.state = APPROVED;
-        return singletonList(new OrderAuthorized());
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
-
-  }
-
-  public List<OrderDomainEvent> noteRejected() {
-    switch (state) {
-      case APPROVAL_PENDING:
-        this.state = REJECTED;
-        return singletonList(new OrderRejected());
-
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
-
-  }
-
 
   public List<OrderDomainEvent> noteReversingAuthorization() {
     return null;
@@ -184,6 +167,23 @@ public class Order {
       default:
         throw new UnsupportedStateTransitionException(state);
     }
+  }
+
+
+  public Long getId() {
+    return id;
+  }
+
+  public void setId(Long id) {
+    this.id = id;
+  }
+
+  public DeliveryInformation getDeliveryInformation() {
+    return deliveryInformation;
+  }
+
+  public Money getOrderTotal() {
+    return orderLineItems.orderTotal();
   }
 
 

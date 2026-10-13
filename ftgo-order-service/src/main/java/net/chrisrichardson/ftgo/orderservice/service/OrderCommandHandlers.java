@@ -42,23 +42,23 @@ public class OrderCommandHandlers {
   }
 
   public Message approveOrder(CommandMessage<ApproveOrderCommand> cm) {
-    long orderId = cm.getCommand().getOrderId();
-    orderService.approveOrder(orderId);
+    long requestedOrderId = cm.getCommand().getOrderId();
+    orderService.approveOrder(requestedOrderId);
     return withSuccess();
   }
 
 
   public Message rejectOrder(CommandMessage<RejectOrderCommand> cm) {
-    long orderId = cm.getCommand().getOrderId();
-    orderService.rejectOrder(orderId);
+    long requestedOrderId = cm.getCommand().getOrderId();
+    orderService.rejectOrder(requestedOrderId);
     return withSuccess();
   }
 
 
   public Message beginCancel(CommandMessage<BeginCancelCommand> cm) {
-    long orderId = cm.getCommand().getOrderId();
+    long requestedOrderId = cm.getCommand().getOrderId();
     try {
-      orderService.beginCancel(orderId);
+      orderService.beginCancel(requestedOrderId);
       return withSuccess();
     } catch (UnsupportedStateTransitionException e) {
       return withFailure();
@@ -67,14 +67,14 @@ public class OrderCommandHandlers {
 
 
   public Message undoCancel(CommandMessage<UndoBeginCancelCommand> cm) {
-    long orderId = cm.getCommand().getOrderId();
-    orderService.undoCancel(orderId);
+    long requestedOrderId = cm.getCommand().getOrderId();
+    orderService.undoCancel(requestedOrderId);
     return withSuccess();
   }
 
   public Message confirmCancel(CommandMessage<ConfirmCancelOrderCommand> cm) {
-    long orderId = cm.getCommand().getOrderId();
-    orderService.confirmCancelled(orderId);
+    long requestedOrderId = cm.getCommand().getOrderId();
+    orderService.confirmCancelled(requestedOrderId);
     return withSuccess();
   }
 
@@ -90,15 +90,15 @@ public class OrderCommandHandlers {
   }
 
   public Message undoPendingRevision(CommandMessage <UndoBeginReviseOrderCommand> cm) {
-    long orderId = cm.getCommand().getOrderId();
-    orderService.undoPendingRevision(orderId);
+    long requestedOrderId = cm.getCommand().getOrderId();
+    orderService.undoPendingRevision(requestedOrderId);
     return withSuccess();
   }
 
   public Message confirmRevision(CommandMessage<ConfirmReviseOrderCommand> cm) {
-    long orderId = cm.getCommand().getOrderId();
-    OrderRevision revision = cm.getCommand().getRevision();
-    orderService.confirmRevision(orderId, revision);
+    long requestedOrderId = cm.getCommand().getOrderId();
+    OrderRevision requestedRevision = cm.getCommand().getRevision();
+    orderService.confirmRevision(requestedOrderId, requestedRevision);
     return withSuccess();
   }
 

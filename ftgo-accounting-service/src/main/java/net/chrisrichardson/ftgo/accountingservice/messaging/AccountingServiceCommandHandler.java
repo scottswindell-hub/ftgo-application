@@ -44,6 +44,9 @@ public class AccountingServiceCommandHandler {
 
   }
 
+  private AuthorizeCommandInternal makeAuthorizeCommandInternal(AuthorizeCommand command) {
+    return new AuthorizeCommandInternal(Long.toString(command.getConsumerId()), Long.toString(command.getOrderId()), command.getOrderTotal());
+  }
   public void reverseAuthorization(CommandMessage<ReverseAuthorizationCommand> cm) {
 
     ReverseAuthorizationCommand command = cm.getCommand();
@@ -54,6 +57,10 @@ public class AccountingServiceCommandHandler {
                     .catching(AccountDisabledException.class, () -> withFailure(new AccountDisabledReply()))
                     .build());
 
+  }
+
+  private ReverseAuthorizationCommandInternal makeReverseAuthorizeCommandInternal(ReverseAuthorizationCommand command) {
+    return new ReverseAuthorizationCommandInternal(Long.toString(command.getConsumerId()), Long.toString(command.getOrderId()), command.getOrderTotal());
   }
   public void reviseAuthorization(CommandMessage<ReviseAuthorization> cm) {
 
@@ -66,13 +73,6 @@ public class AccountingServiceCommandHandler {
                     .build());
 
 
-  }
-
-  private AuthorizeCommandInternal makeAuthorizeCommandInternal(AuthorizeCommand command) {
-    return new AuthorizeCommandInternal(Long.toString(command.getConsumerId()), Long.toString(command.getOrderId()), command.getOrderTotal());
-  }
-  private ReverseAuthorizationCommandInternal makeReverseAuthorizeCommandInternal(ReverseAuthorizationCommand command) {
-    return new ReverseAuthorizationCommandInternal(Long.toString(command.getConsumerId()), Long.toString(command.getOrderId()), command.getOrderTotal());
   }
   private ReviseAuthorizationCommandInternal makeReviseAuthorizeCommandInternal(ReviseAuthorization command) {
     return new ReviseAuthorizationCommandInternal(Long.toString(command.getConsumerId()), Long.toString(command.getOrderId()), command.getOrderTotal());

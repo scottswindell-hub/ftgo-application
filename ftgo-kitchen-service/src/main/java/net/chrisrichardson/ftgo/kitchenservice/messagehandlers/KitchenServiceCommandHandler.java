@@ -38,14 +38,14 @@ public class KitchenServiceCommandHandler {
 
   private Message createTicket(CommandMessage<CreateTicket>
                                                 cm) {
-    CreateTicket command = cm.getCommand();
-    long restaurantId = command.getRestaurantId();
-    Long ticketId = command.getOrderId();
-    TicketDetails ticketDetails = command.getTicketDetails();
+    CreateTicket createCommand = cm.getCommand();
+    long requestedRestaurantId = createCommand.getRestaurantId();
+    Long requestedTicketId = createCommand.getOrderId();
+    TicketDetails requestedTicketDetails = createCommand.getTicketDetails();
 
 
     try {
-      Ticket ticket = kitchenService.createTicket(restaurantId, ticketId, ticketDetails);
+      Ticket ticket = kitchenService.createTicket(requestedRestaurantId, requestedTicketId, requestedTicketDetails);
       CreateTicketReply reply = new CreateTicketReply(ticket.getId());
       return withLock(Ticket.class, ticket.getId()).withSuccess(reply);
     } catch (RestaurantDetailsVerificationException e) {
@@ -55,15 +55,15 @@ public class KitchenServiceCommandHandler {
 
   private Message confirmCreateTicket
           (CommandMessage<ConfirmCreateTicket> cm) {
-    Long ticketId = cm.getCommand().getTicketId();
-    kitchenService.confirmCreateTicket(ticketId);
+    Long requestedTicketId = cm.getCommand().getTicketId();
+    kitchenService.confirmCreateTicket(requestedTicketId);
     return withSuccess();
   }
 
   private Message cancelCreateTicket
           (CommandMessage<CancelCreateTicket> cm) {
-    Long ticketId = cm.getCommand().getTicketId();
-    kitchenService.cancelCreateTicket(ticketId);
+    Long requestedTicketId = cm.getCommand().getTicketId();
+    kitchenService.cancelCreateTicket(requestedTicketId);
     return withSuccess();
   }
 
