@@ -14,6 +14,7 @@ import net.chrisrichardson.ftgo.restaurantservice.RestaurantServiceChannels;
 import net.chrisrichardson.ftgo.restaurantservice.events.RestaurantCreated;
 
 import java.time.LocalDateTime;
+import java.util.Locale;
 
 public class DeliveryMessageHandlers {
 
@@ -37,7 +38,9 @@ public class DeliveryMessageHandlers {
 
   public void handleRestaurantCreated(DomainEventEnvelope<RestaurantCreated> dee) {
     Address address = RestaurantEventMapper.toAddress(dee.getEvent().getAddress());
-    deliveryService.createRestaurant(Long.parseLong(dee.getAggregateId()), dee.getEvent().getName(), address);
+    String name = dee.getEvent().getName();
+    deliveryService.createRestaurant(Long.parseLong(dee.getAggregateId()),
+            name == null ? null : name.trim().toUpperCase(Locale.ROOT), address);
   }
 
   public void handleOrderCreatedEvent(DomainEventEnvelope<OrderCreatedEvent> dee) {
