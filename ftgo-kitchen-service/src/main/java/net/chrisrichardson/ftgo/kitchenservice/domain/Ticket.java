@@ -166,7 +166,9 @@ public class Ticket {
   public List<TicketDomainEvent> undoCancel() {
     switch (state) {
       case CANCEL_PENDING:
-        this.state = this.previousState;
+        // A ticket that survives a cancellation attempt goes back to the kitchen queue
+        this.state = TicketState.ACCEPTED;
+        this.previousState = null;
         return emptyList();
       default:
         throw new UnsupportedStateTransitionException(state);
