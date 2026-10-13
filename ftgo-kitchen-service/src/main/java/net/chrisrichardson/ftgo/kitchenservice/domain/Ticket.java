@@ -141,9 +141,7 @@ public class Ticket {
     switch (state) {
       case AWAITING_ACCEPTANCE:
       case ACCEPTED:
-        this.previousState = state;
-        this.state = TicketState.CANCEL_PENDING;
-        return emptyList();
+        return enterPendingState(TicketState.CANCEL_PENDING);
       default:
         throw new UnsupportedStateTransitionException(state);
     }
@@ -166,8 +164,7 @@ public class Ticket {
   public List<TicketDomainEvent> undoCancel() {
     switch (state) {
       case CANCEL_PENDING:
-        this.state = this.previousState;
-        return emptyList();
+        return restorePreviousState();
       default:
         throw new UnsupportedStateTransitionException(state);
 
@@ -178,9 +175,7 @@ public class Ticket {
     switch (state) {
       case AWAITING_ACCEPTANCE:
       case ACCEPTED:
-        this.previousState = state;
-        this.state = TicketState.REVISION_PENDING;
-        return emptyList();
+        return enterPendingState(TicketState.REVISION_PENDING);
       default:
         throw new UnsupportedStateTransitionException(state);
     }
@@ -189,8 +184,7 @@ public class Ticket {
   public List<TicketDomainEvent> undoBeginReviseOrder() {
     switch (state) {
       case REVISION_PENDING:
-        this.state = this.previousState;
-        return emptyList();
+        return restorePreviousState();
       default:
         throw new UnsupportedStateTransitionException(state);
     }
@@ -205,5 +199,16 @@ public class Ticket {
         throw new UnsupportedStateTransitionException(state);
 
     }
+  }
+
+  private List<TicketDomainEvent> enterPendingState(TicketState pendingState) {
+    this.previousState = this.state;
+    this.state = pendingState;
+    return emptyList();
+  }
+
+  private List<TicketDomainEvent> restorePreviousState() {
+    this.state = this.previousState;
+    return emptyList();
   }
 }
