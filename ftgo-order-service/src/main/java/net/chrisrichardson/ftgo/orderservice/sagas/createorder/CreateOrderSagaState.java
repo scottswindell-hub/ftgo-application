@@ -102,7 +102,14 @@ public class CreateOrderSagaState {
   }
 
   AuthorizeCommand makeAuthorizeCommand() {
-    return new AuthorizeCommand().withConsumerId(getOrderDetails().getConsumerId()).withOrderId(getOrderId()).withOrderTotal(getOrderDetails().getOrderTotal().asString());
+    return buildAuthorizeCommand(getOrderDetails(), getOrderId());
+  }
+
+  private AuthorizeCommand buildAuthorizeCommand(OrderDetails orderDetails, Long orderId) {
+    return new AuthorizeCommand()
+            .withConsumerId(orderDetails.getConsumerId())
+            .withOrderId(orderId)
+            .withOrderTotal(orderDetails.getOrderTotal().asString());
   }
 
   ApproveOrderCommand makeApproveOrderCommand() {
