@@ -49,17 +49,20 @@ public class OrderLineItems {
   }
 
   void updateLineItems(OrderRevision orderRevision) {
-    getLineItems().stream().forEach(li -> {
+    for (OrderLineItem lineItem : getLineItems()) {
+      int revisedQuantity = revisedQuantityFor(orderRevision, lineItem.getMenuItemId())
+              .orElseThrow(() ->
+                      new IllegalArgumentException(String.format("menu item id not found.", lineItem.getMenuItemId())));
+      lineItem.setQuantity(revisedQuantity);
+    }
+  }
 
-      Optional<Integer> revised = orderRevision.getRevisedOrderLineItems()
-              .stream()
-              .filter(item -> Objects.equals(li.getMenuItemId(), item.getMenuItemId()))
-              .map(RevisedOrderLineItem::getQuantity)
-              .findFirst();
-
-      li.setQuantity(revised.orElseThrow(() ->
-              new IllegalArgumentException(String.format("menu item id not found.", li.getMenuItemId()))));
-    });
+  private Optional<Integer> revisedQuantityFor(OrderRevision orderRevision, String menuItemId) {
+    return orderRevision.getRevisedOrderLineItems()
+            .stream()
+            .filter(item -> Objects.equals(menuItemId, item.getMenuItemId()))
+            .map(RevisedOrderLineItem::getQuantity)
+            .findFirst();
   }
 
   Money orderTotal() {
