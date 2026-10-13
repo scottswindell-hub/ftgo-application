@@ -5,6 +5,7 @@ import com.atlassian.oai.validator.springmvc.OpenApiValidationFilter;
 import com.atlassian.oai.validator.springmvc.OpenApiValidationInterceptor;
 import com.atlassian.oai.validator.springmvc.SpringMVCLevelResolverFactory;
 import io.eventuate.common.json.mapper.JSonMapper;
+import io.eventuate.tram.events.publisher.ResultWithEvents;
 import net.chrisrichardson.ftgo.common.CommonJsonMapperInitializer;
 import net.chrisrichardson.ftgo.common.PersonName;
 import net.chrisrichardson.ftgo.consumerservice.domain.Consumer;
@@ -23,7 +24,11 @@ import java.nio.charset.Charset;
 import java.util.Optional;
 
 import static io.restassured.module.mockmvc.RestAssuredMockMvc.given;
+import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.same;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class ConsumerControllerTest {
 
@@ -36,6 +41,20 @@ public class ConsumerControllerTest {
     consumerService = mock(ConsumerService.class);
     consumerController = new ConsumerController(consumerService);
     consumer = new Consumer(new PersonName("x", "y"));
+  }
+
+  @Test
+  public void shouldCreateConsumerWithSubmittedNameAndReturnCreatedId() {
+    PersonName submittedName = new PersonName("Ada", "Lovelace");
+    Consumer createdConsumer = mock(Consumer.class);
+    when(createdConsumer.getId()).thenReturn(42L);
+    when(consumerService.create(same(submittedName)))
+            .thenReturn(new ResultWithEvents<>(createdConsumer));
+
+    CreateConsumerResponse response = consumerController.create(new CreateConsumerRequest(submittedName));
+
+    verify(consumerService).create(same(submittedName));
+    assertEquals(42L, response.getConsumerId());
   }
 
   @Test
