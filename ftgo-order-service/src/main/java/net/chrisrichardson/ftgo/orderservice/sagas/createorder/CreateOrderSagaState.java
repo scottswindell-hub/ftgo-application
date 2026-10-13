@@ -81,8 +81,8 @@ public class CreateOrderSagaState {
   }
 
   void handleCreateTicketReply(CreateTicketReply reply) {
-    logger.debug("getTicketId {}", reply.getTicketId());
-    setTicketId(reply.getTicketId());
+    logger.debug("getTicketId {}", reply.getId());
+    setTicketId(reply.getId());
   }
 
   CancelCreateTicket makeCancelCreateTicketCommand() {

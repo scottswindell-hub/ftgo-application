@@ -5,14 +5,14 @@ import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.commons.lang.builder.ToStringBuilder;
 
 public class CreateTicketReply {
-  private long ticketId;
+  private long id;
 
   private CreateTicketReply() {
   }
 
-  public CreateTicketReply(long ticketId) {
+  public CreateTicketReply(long id) {
 
-    this.ticketId = ticketId;
+    this.id = id;
   }
 
   @Override
@@ -30,11 +30,11 @@ public class CreateTicketReply {
     return HashCodeBuilder.reflectionHashCode(this);
   }
 
-  public void setTicketId(long ticketId) {
-    this.ticketId = ticketId;
+  public void setId(long id) {
+    this.id = id;
   }
 
-  public long getTicketId() {
-    return ticketId;
+  public long getId() {
+    return id;
   }
 }
