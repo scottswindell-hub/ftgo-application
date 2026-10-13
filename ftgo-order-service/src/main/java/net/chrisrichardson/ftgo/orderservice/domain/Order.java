@@ -146,6 +146,7 @@ public class Order {
     switch (state) {
 
       case APPROVED:
+      case REVISION_PENDING:
         LineItemQuantityChange change = orderLineItems.lineItemQuantityChange(orderRevision);
         if (change.newOrderTotal.isGreaterThanOrEqual(orderMinimum)) {
           throw new OrderMinimumNotMetException();
