@@ -44,15 +44,27 @@ public class CancelOrderSaga implements SimpleSaga<CancelOrderSagaData> {
 
   }
 
-  private CommandWithDestination confirmOrderCancel(CancelOrderSagaData data) {
-    return send(new ConfirmCancelOrderCommand(data.getOrderId()))
+  private CommandWithDestination beginCancel(CancelOrderSagaData data) {
+    return send(new BeginCancelCommand(data.getOrderId()))
             .to(OrderServiceChannels.COMMAND_CHANNEL)
+            .build();
+  }
+
+  private CommandWithDestination undoBeginCancel(CancelOrderSagaData data) {
+    return send(new UndoBeginCancelCommand(data.getOrderId()))
+            .to(OrderServiceChannels.COMMAND_CHANNEL)
+            .build();
+  }
+
+  private CommandWithDestination beginCancelTicket(CancelOrderSagaData data) {
+    return send(new BeginCancelTicketCommand(data.getRestaurantId(), (long) data.getOrderId()))
+            .to(KitchenServiceChannels.COMMAND_CHANNEL)
             .build();
 
   }
 
-  private CommandWithDestination confirmTicketCancel(CancelOrderSagaData data) {
-    return send(new ConfirmCancelTicketCommand(data.getRestaurantId(), data.getOrderId()))
+  private CommandWithDestination undoBeginCancelTicket(CancelOrderSagaData data) {
+    return send(new UndoBeginCancelTicketCommand(data.getRestaurantId(), data.getOrderId()))
             .to(KitchenServiceChannels.COMMAND_CHANNEL)
             .build();
 
@@ -65,30 +77,18 @@ public class CancelOrderSaga implements SimpleSaga<CancelOrderSagaData> {
 
   }
 
-  private CommandWithDestination undoBeginCancelTicket(CancelOrderSagaData data) {
-    return send(new UndoBeginCancelTicketCommand(data.getRestaurantId(), data.getOrderId()))
+  private CommandWithDestination confirmTicketCancel(CancelOrderSagaData data) {
+    return send(new ConfirmCancelTicketCommand(data.getRestaurantId(), data.getOrderId()))
             .to(KitchenServiceChannels.COMMAND_CHANNEL)
             .build();
 
   }
 
-  private CommandWithDestination beginCancelTicket(CancelOrderSagaData data) {
-    return send(new BeginCancelTicketCommand(data.getRestaurantId(), (long) data.getOrderId()))
-            .to(KitchenServiceChannels.COMMAND_CHANNEL)
-            .build();
-
-  }
-
-  private CommandWithDestination undoBeginCancel(CancelOrderSagaData data) {
-    return send(new UndoBeginCancelCommand(data.getOrderId()))
+  private CommandWithDestination confirmOrderCancel(CancelOrderSagaData data) {
+    return send(new ConfirmCancelOrderCommand(data.getOrderId()))
             .to(OrderServiceChannels.COMMAND_CHANNEL)
             .build();
-  }
 
-  private CommandWithDestination beginCancel(CancelOrderSagaData data) {
-    return send(new BeginCancelCommand(data.getOrderId()))
-            .to(OrderServiceChannels.COMMAND_CHANNEL)
-            .build();
   }
 
 
