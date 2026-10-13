@@ -38,6 +38,40 @@ public class MoneyTest {
     assertEquals(new Money(M2_AMOUNT * multiplier), m2.multiply(multiplier));
   }
 
+  @Test
+  public void shouldSubtract() {
+    assertEquals(new Money(M2_AMOUNT - M1_AMOUNT), m2.subtract(m1));
+  }
 
+  @Test
+  public void shouldRecognizeZeroAtAnyScale() {
+    assertTrue(new Money("0.00").isZero());
+    assertTrue(Money.ZERO.isZero());
+    assertFalse(m1.isZero());
+  }
 
+  @Test
+  public void shouldRecognizeNegativeAmounts() {
+    assertTrue(new Money("-1.50").isNegative());
+    assertFalse(m1.isNegative());
+    assertFalse(Money.ZERO.isNegative());
+  }
+
+  @Test
+  public void shouldSumAmounts() {
+    assertEquals(new Money(M1_AMOUNT + M2_AMOUNT), Money.sum(java.util.Arrays.asList(m1, m2)));
+    assertEquals(Money.ZERO, Money.sum(java.util.Collections.emptyList()));
+  }
+
+  @Test
+  public void shouldFormatWithCurrencySymbolAndTwoDecimals() {
+    assertEquals("$12.50", new Money("12.5").formatted("$"));
+    assertEquals("$10.00", m1.formatted("$"));
+    assertEquals("$0.01", new Money("0.005").formatted("$"));
+  }
+
+  @Test
+  public void shouldFormatNegativeAmountsWithLeadingMinus() {
+    assertEquals("-$3.00", new Money("-3").formatted("$"));
+  }
 }
