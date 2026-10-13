@@ -8,8 +8,16 @@ import java.math.BigDecimal;
 
 //@Embeddable
 //@Access(AccessType.FIELD)
+
+/**
+ * An immutable monetary amount backed by {@link BigDecimal}.
+ *
+ * <p>All arithmetic operations return a new instance; the amount held by an
+ * existing {@code Money} is never modified in place.
+ */
 public class Money {
 
+  /** The zero amount, usable as the identity for {@link #add(Money)}. */
   public static Money ZERO = new Money(0);
 
   private BigDecimal amount;
@@ -57,10 +65,12 @@ public class Money {
   }
 
 
+  /** Returns a new {@code Money} equal to this amount plus {@code delta}. */
   public Money add(Money delta) {
     return new Money(amount.add(delta.amount));
   }
 
+  /** Returns {@code true} when this amount is greater than or equal to {@code other}. */
   public boolean isGreaterThanOrEqual(Money other) {
     return amount.compareTo(other.amount) >= 0;
   }
@@ -69,10 +79,12 @@ public class Money {
     return amount.toPlainString();
   }
 
-  public Money multiply(int x) {
-    return new Money(amount.multiply(new BigDecimal(x)));
+  /** Returns a new {@code Money} equal to this amount scaled by {@code multiplier}. */
+  public Money multiply(int multiplier) {
+    return new Money(amount.multiply(new BigDecimal(multiplier)));
   }
 
+  /** Returns the amount expressed in minor units (hundredths) as a {@code Long}. */
   public Long asLong() {
     return multiply(100).amount.longValue();
   }
