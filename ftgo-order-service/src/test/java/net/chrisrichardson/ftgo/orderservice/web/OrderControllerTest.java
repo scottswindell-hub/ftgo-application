@@ -3,7 +3,9 @@ package net.chrisrichardson.ftgo.orderservice.web;
 import io.eventuate.common.json.mapper.JSonMapper;
 import net.chrisrichardson.ftgo.common.CommonJsonMapperInitializer;
 import net.chrisrichardson.ftgo.orderservice.OrderDetailsMother;
+import net.chrisrichardson.ftgo.orderservice.domain.OrderNotFoundException;
 import net.chrisrichardson.ftgo.orderservice.domain.OrderRepository;
+import net.chrisrichardson.ftgo.orderservice.domain.OrderRevision;
 import net.chrisrichardson.ftgo.orderservice.domain.OrderService;
 import org.junit.Before;
 import org.junit.Test;
@@ -18,6 +20,9 @@ import static net.chrisrichardson.ftgo.orderservice.OrderDetailsMother.CHICKEN_V
 import static net.chrisrichardson.ftgo.orderservice.OrderDetailsMother.CHICKEN_VINDALOO_ORDER_TOTAL;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class OrderControllerTest {
@@ -49,10 +54,11 @@ public class OrderControllerTest {
             body("state", equalTo(OrderDetailsMother.CHICKEN_VINDALOO_ORDER_STATE.name())).
             body("orderTotal", equalTo(CHICKEN_VINDALOO_ORDER_TOTAL.asString()))
     ;
+    verify(orderRepository).findById(1L);
   }
 
   @Test
-  public void shouldFindNotOrder() {
+  public void shouldReturnEmptySuccessForMissingOrder() {
     when(orderRepository.findById(1L)).thenReturn(Optional.empty());
 
     given().
@@ -60,8 +66,36 @@ public class OrderControllerTest {
     when().
             get("/orders/1").
     then().
-            statusCode(404)
+            statusCode(200).
+            body(equalTo(""))
     ;
+    verify(orderRepository).findById(1L);
+  }
+
+  @Test
+  public void shouldReturnNotFoundWhenCancellingMissingOrder() {
+    when(orderService.cancel(1L)).thenThrow(new OrderNotFoundException(1L));
+
+    given().
+            standaloneSetup(configureControllers(orderController)).
+    when().
+            post("/orders/1/cancel").
+    then().
+            statusCode(404);
+  }
+
+  @Test
+  public void shouldReturnNotFoundWhenRevisingMissingOrder() {
+    when(orderService.reviseOrder(eq(1L), any(OrderRevision.class))).thenThrow(new OrderNotFoundException(1L));
+
+    given().
+            standaloneSetup(configureControllers(orderController)).
+            contentType("application/json").
+            body("{\"revisedOrderLineItems\":[]}").
+    when().
+            post("/orders/1/revise").
+    then().
+            statusCode(404);
   }
 
   private StandaloneMockMvcBuilder configureControllers(Object... controllers) {
