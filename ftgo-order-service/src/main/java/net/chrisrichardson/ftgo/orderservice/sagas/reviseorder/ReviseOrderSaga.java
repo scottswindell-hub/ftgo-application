@@ -29,7 +29,11 @@ public class ReviseOrderSaga implements SimpleSaga<ReviseOrderSagaData> {
 
   @PostConstruct
   public void initializeSagaDefinition() {
-    sagaDefinition = step()
+    sagaDefinition = buildSagaDefinition();
+  }
+
+  private SagaDefinition<ReviseOrderSagaData> buildSagaDefinition() {
+    return step()
             .invokeParticipant(this::beginReviseOrder)
             .onReply(BeginReviseOrderReply.class, this::handleBeginReviseOrderReply)
             .withCompensation(this::undoBeginReviseOrder)
