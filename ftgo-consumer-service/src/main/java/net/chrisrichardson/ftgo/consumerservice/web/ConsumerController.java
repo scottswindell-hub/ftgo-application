@@ -1,6 +1,7 @@
 package net.chrisrichardson.ftgo.consumerservice.web;
 
 import io.eventuate.tram.events.publisher.ResultWithEvents;
+import net.chrisrichardson.ftgo.common.PersonName;
 import net.chrisrichardson.ftgo.consumerservice.domain.Consumer;
 import net.chrisrichardson.ftgo.consumerservice.domain.ConsumerService;
 import org.springframework.http.HttpStatus;
@@ -19,8 +20,15 @@ public class ConsumerController {
 
   @RequestMapping(method= RequestMethod.POST)
   public CreateConsumerResponse create(@RequestBody CreateConsumerRequest request) {
-    ResultWithEvents<Consumer> result = consumerService.create(request.getName());
+    PersonName name = request.getName();
+    PersonName normalizedName = new PersonName(
+            trim(name.getFirstName()), trim(name.getLastName()));
+    ResultWithEvents<Consumer> result = consumerService.create(normalizedName);
     return new CreateConsumerResponse(result.result.getId());
+  }
+
+  private String trim(String component) {
+    return component == null ? null : component.trim();
   }
 
   @RequestMapping(method= RequestMethod.GET,  path="/{consumerId}")
