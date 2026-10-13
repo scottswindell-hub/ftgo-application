@@ -28,7 +28,11 @@ public class CancelOrderSaga implements SimpleSaga<CancelOrderSagaData> {
 
   @PostConstruct
   public void initializeSagaDefinition() {
-    sagaDefinition = step()
+    sagaDefinition = buildSagaDefinition();
+  }
+
+  private SagaDefinition<CancelOrderSagaData> buildSagaDefinition() {
+    return step()
             .invokeParticipant(this::beginCancel)
             .withCompensation(this::undoBeginCancel)
             .step()

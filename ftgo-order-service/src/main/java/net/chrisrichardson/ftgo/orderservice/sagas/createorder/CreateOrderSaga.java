@@ -16,8 +16,13 @@ public class CreateOrderSaga implements SimpleSaga<CreateOrderSagaState> {
 
   public CreateOrderSaga(OrderServiceProxy orderService, ConsumerServiceProxy consumerService, KitchenServiceProxy kitchenService,
                          AccountingServiceProxy accountingService) {
-    this.sagaDefinition =
-             step()
+    this.sagaDefinition = buildSagaDefinition(orderService, consumerService, kitchenService, accountingService);
+  }
+
+  private SagaDefinition<CreateOrderSagaState> buildSagaDefinition(OrderServiceProxy orderService,
+          ConsumerServiceProxy consumerService, KitchenServiceProxy kitchenService,
+          AccountingServiceProxy accountingService) {
+    return step()
               .withCompensation(orderService.reject, CreateOrderSagaState::makeRejectOrderCommand)
             .step()
               .invokeParticipant(consumerService.validateOrder, CreateOrderSagaState::makeValidateOrderByConsumerCommand)
