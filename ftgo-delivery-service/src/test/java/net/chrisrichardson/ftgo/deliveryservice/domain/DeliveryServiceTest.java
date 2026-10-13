@@ -6,6 +6,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -75,7 +76,7 @@ public class DeliveryServiceTest {
   }
 
   @Test
-  public void shouldScheduleDelivery() {
+  public void shouldScheduleDelivery() throws ReflectiveOperationException {
     Delivery delivery = Delivery.create(ORDER_ID, RESTAURANT_ID, DeliveryServiceTestData.PICKUP_ADDRESS, DeliveryServiceTestData.DELIVERY_ADDRESS);
 
     when(deliveryRepository.findById(ORDER_ID)).thenReturn(Optional.of(delivery));
@@ -84,7 +85,9 @@ public class DeliveryServiceTest {
     deliveryService.scheduleDelivery(ORDER_ID, READY_BY);
 
     assertEquals(DeliveryState.SCHEDULED, delivery.getState());
-    assertSame(courier.getId(), delivery.getAssignedCourier());
+    assertEquals(Long.valueOf(courier.getId()), delivery.getAssignedCourier());
+    verify(deliveryRepository).findById(ORDER_ID);
+    verify(courierRepository).findAllAvailable();
 
     List<Action> actions = courier.getPlan().getActions();
     assertEquals(2, actions.size());
@@ -92,6 +95,31 @@ public class DeliveryServiceTest {
     assertEquals(DeliveryServiceTestData.PICKUP_ADDRESS, actions.get(0).getAddress());
     assertEquals(DeliveryActionType.DROPOFF, actions.get(1).getType());
     assertEquals(DeliveryServiceTestData.DELIVERY_ADDRESS, actions.get(1).getAddress());
+    assertTrue(actions.get(0).actionFor(ORDER_ID));
+    assertTrue(actions.get(1).actionFor(ORDER_ID));
+    Field time = Action.class.getDeclaredField("time");
+    time.setAccessible(true);
+    assertEquals(READY_BY, time.get(actions.get(0)));
+    assertEquals(READY_BY.plusMinutes(30), time.get(actions.get(1)));
+  }
+
+  @Test
+  public void shouldAppendDeliveryAfterExistingRouteActions() {
+    Action existing = Action.makePickup(ORDER_ID + 1, DeliveryServiceTestData.PICKUP_ADDRESS, READY_BY.minusMinutes(10));
+    courier.addAction(existing);
+    Delivery delivery = Delivery.create(ORDER_ID, RESTAURANT_ID, DeliveryServiceTestData.PICKUP_ADDRESS, DeliveryServiceTestData.DELIVERY_ADDRESS);
+    when(deliveryRepository.findById(ORDER_ID)).thenReturn(Optional.of(delivery));
+    when(courierRepository.findAllAvailable()).thenReturn(Collections.singletonList(courier));
+
+    deliveryService.scheduleDelivery(ORDER_ID, READY_BY);
+
+    List<Action> actions = courier.getPlan().getActions();
+    assertEquals(3, actions.size());
+    assertSame(existing, actions.get(0));
+    assertEquals(DeliveryActionType.PICKUP, actions.get(1).getType());
+    assertEquals(DeliveryActionType.DROPOFF, actions.get(2).getType());
+    assertTrue(actions.get(1).actionFor(ORDER_ID));
+    assertTrue(actions.get(2).actionFor(ORDER_ID));
   }
 
 }
