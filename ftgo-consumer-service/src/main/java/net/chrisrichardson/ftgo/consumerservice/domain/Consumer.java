@@ -17,6 +17,8 @@ import javax.persistence.Table;
 @Access(AccessType.FIELD)
 public class Consumer {
 
+  private static final Money MAX_ORDER_TOTAL_WITHOUT_STEP_UP_VERIFICATION = new Money(100);
+
   @Id
   @GeneratedValue
   private Long id;
@@ -33,7 +35,9 @@ public class Consumer {
 
 
   public void validateOrderByConsumer(Money orderTotal) {
-    // implement some business logic
+    if (!orderTotal.isGreaterThanOrEqual(MAX_ORDER_TOTAL_WITHOUT_STEP_UP_VERIFICATION)) {
+      throw new ConsumerVerificationFailedException();
+    }
   }
 
   public Long getId() {
