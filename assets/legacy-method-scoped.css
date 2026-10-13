@@ -83,3 +83,5 @@
 
 }
 .legacy-method-explorer{font-size:14px;color:var(--ink)}.legacy-method-explorer button,.legacy-method-explorer select{color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:6px;cursor:pointer}.legacy-workflow-picker{display:block;margin:12px 0}.legacy-workflow-picker select{width:100%;margin-top:8px}.legacy-method-explorer pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:400px;overflow:auto}.legacy-method-explorer .pill{font-size:11px;padding:3px 6px;border:1px solid var(--line);border-radius:10px}.legacy-method-explorer .note{color:var(--muted)}
+
+.workflow-unaffected{grid-column:1/-1}
