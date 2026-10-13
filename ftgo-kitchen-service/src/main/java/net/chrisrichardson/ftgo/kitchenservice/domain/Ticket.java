@@ -138,15 +138,12 @@ public class Ticket {
   }
 
   public List<TicketDomainEvent> cancel() {
-    switch (state) {
-      case AWAITING_ACCEPTANCE:
-      case ACCEPTED:
-        this.previousState = state;
-        this.state = TicketState.CANCEL_PENDING;
-        return emptyList();
-      default:
-        throw new UnsupportedStateTransitionException(state);
+    if (state == TicketState.AWAITING_ACCEPTANCE || state == TicketState.ACCEPTED) {
+      this.previousState = state;
+      this.state = TicketState.CANCEL_PENDING;
+      return emptyList();
     }
+    throw new UnsupportedStateTransitionException(state);
   }
 
   public Long getId() {
