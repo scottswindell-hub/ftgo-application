@@ -34,7 +34,8 @@ public class OrderLineItems {
   }
 
   OrderLineItem findOrderLineItem(String lineItemId) {
-    return lineItems.stream().filter(li -> li.getMenuItemId().equals(lineItemId)).findFirst().get();
+    return lineItems.stream().filter(li -> li.getMenuItemId().equals(lineItemId)).findFirst()
+            .orElseThrow(() -> new IllegalArgumentException(String.format("menu item id not found in order: %s", lineItemId)));
   }
 
   Money changeToOrderTotal(OrderRevision orderRevision) {
@@ -58,7 +59,7 @@ public class OrderLineItems {
               .findFirst();
 
       li.setQuantity(revised.orElseThrow(() ->
-              new IllegalArgumentException(String.format("menu item id not found.", li.getMenuItemId()))));
+              new IllegalArgumentException(String.format("menu item id not found in revision: %s", li.getMenuItemId()))));
     });
   }
 
