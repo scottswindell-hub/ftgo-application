@@ -3,6 +3,7 @@ package net.chrisrichardson.ftgo.accountingservice.messaging;
 import io.eventuate.sync.AggregateRepository;
 import io.eventuate.tram.commands.consumer.CommandHandlers;
 import io.eventuate.tram.commands.consumer.CommandMessage;
+import io.eventuate.tram.messaging.common.Message;
 import io.eventuate.tram.sagas.participant.SagaCommandHandlersBuilder;
 import net.chrisrichardson.ftgo.accountingservice.domain.*;
 import net.chrisrichardson.ftgo.accountservice.api.AccountDisabledReply;
@@ -39,7 +40,7 @@ public class AccountingServiceCommandHandler {
     accountRepository.update(Long.toString(command.getConsumerId()),
             makeAuthorizeCommandInternal(command),
             replyingTo(cm)
-                    .catching(AccountDisabledException.class, () -> withFailure(new AccountDisabledReply()))
+                    .catching(AccountDisabledException.class, AccountingServiceCommandHandler::accountDisabledReply)
                     .build());
 
   }
@@ -51,7 +52,7 @@ public class AccountingServiceCommandHandler {
     accountRepository.update(Long.toString(command.getConsumerId()),
             makeReverseAuthorizeCommandInternal(command),
             replyingTo(cm)
-                    .catching(AccountDisabledException.class, () -> withFailure(new AccountDisabledReply()))
+                    .catching(AccountDisabledException.class, AccountingServiceCommandHandler::accountDisabledReply)
                     .build());
 
   }
@@ -62,10 +63,14 @@ public class AccountingServiceCommandHandler {
     accountRepository.update(Long.toString(command.getConsumerId()),
             makeReviseAuthorizeCommandInternal(command),
             replyingTo(cm)
-                    .catching(AccountDisabledException.class, () -> withFailure(new AccountDisabledReply()))
+                    .catching(AccountDisabledException.class, AccountingServiceCommandHandler::accountDisabledReply)
                     .build());
 
 
+  }
+
+  private static Message accountDisabledReply() {
+    return withFailure(new AccountDisabledReply());
   }
 
   private AuthorizeCommandInternal makeAuthorizeCommandInternal(AuthorizeCommand command) {
