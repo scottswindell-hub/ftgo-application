@@ -6,6 +6,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -14,6 +15,7 @@ import java.util.Optional;
 import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 
@@ -75,8 +77,8 @@ public class DeliveryServiceTest {
   }
 
   @Test
-  public void shouldScheduleDelivery() {
-    Delivery delivery = Delivery.create(ORDER_ID, RESTAURANT_ID, DeliveryServiceTestData.PICKUP_ADDRESS, DeliveryServiceTestData.DELIVERY_ADDRESS);
+  public void shouldScheduleDeliveryWithCustomerStopFirst() throws Exception {
+    Delivery delivery = spy(Delivery.create(ORDER_ID, RESTAURANT_ID, DeliveryServiceTestData.PICKUP_ADDRESS, DeliveryServiceTestData.DELIVERY_ADDRESS));
 
     when(deliveryRepository.findById(ORDER_ID)).thenReturn(Optional.of(delivery));
     when(courierRepository.findAllAvailable()).thenReturn(Collections.singletonList(courier));
@@ -84,14 +86,21 @@ public class DeliveryServiceTest {
     deliveryService.scheduleDelivery(ORDER_ID, READY_BY);
 
     assertEquals(DeliveryState.SCHEDULED, delivery.getState());
-    assertSame(courier.getId(), delivery.getAssignedCourier());
+    assertEquals(Long.valueOf(courier.getId()), delivery.getAssignedCourier());
+    verify(delivery).schedule(READY_BY, COURIER_ID);
 
     List<Action> actions = courier.getPlan().getActions();
     assertEquals(2, actions.size());
-    assertEquals(DeliveryActionType.PICKUP, actions.get(0).getType());
-    assertEquals(DeliveryServiceTestData.PICKUP_ADDRESS, actions.get(0).getAddress());
-    assertEquals(DeliveryActionType.DROPOFF, actions.get(1).getType());
-    assertEquals(DeliveryServiceTestData.DELIVERY_ADDRESS, actions.get(1).getAddress());
+    assertEquals(DeliveryActionType.DROPOFF, actions.get(0).getType());
+    assertEquals(DeliveryServiceTestData.DELIVERY_ADDRESS, actions.get(0).getAddress());
+    assertEquals(DeliveryActionType.PICKUP, actions.get(1).getType());
+    assertEquals(DeliveryServiceTestData.PICKUP_ADDRESS, actions.get(1).getAddress());
+    assertTrue(actions.get(0).actionFor(ORDER_ID));
+    assertTrue(actions.get(1).actionFor(ORDER_ID));
+    Field actionTime = Action.class.getDeclaredField("time");
+    actionTime.setAccessible(true);
+    assertEquals(READY_BY.plusMinutes(30), actionTime.get(actions.get(0)));
+    assertEquals(READY_BY, actionTime.get(actions.get(1)));
   }
 
 }
