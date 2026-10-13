@@ -6,6 +6,7 @@ import io.eventuate.tram.commands.consumer.CommandMessage;
 import io.eventuate.tram.sagas.participant.SagaCommandHandlersBuilder;
 import net.chrisrichardson.ftgo.accountingservice.domain.*;
 import net.chrisrichardson.ftgo.accountservice.api.AccountDisabledReply;
+import net.chrisrichardson.ftgo.accountservice.api.AccountingServiceChannels;
 import net.chrisrichardson.ftgo.accountservice.api.AuthorizeCommand;
 import net.chrisrichardson.ftgo.accountservice.api.ReverseAuthorizationCommand;
 import net.chrisrichardson.ftgo.accountservice.api.ReviseAuthorization;
@@ -25,7 +26,7 @@ public class AccountingServiceCommandHandler {
 
   public CommandHandlers commandHandlers() {
     return SagaCommandHandlersBuilder
-            .fromChannel("accountingService")
+            .fromChannel(AccountingServiceChannels.accountingServiceChannel)
             .onMessage(AuthorizeCommand.class, this::authorize)
             .onMessage(ReverseAuthorizationCommand.class, this::reverseAuthorization)
             .onMessage(ReviseAuthorization.class, this::reviseAuthorization)
