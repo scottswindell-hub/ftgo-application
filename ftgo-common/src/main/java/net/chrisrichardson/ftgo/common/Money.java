@@ -26,7 +26,7 @@ public class Money {
   }
 
   public Money(int i) {
-    this.amount = new BigDecimal(i);
+    this.amount = BigDecimal.valueOf(i);
   }
 
   @Override
@@ -70,7 +70,7 @@ public class Money {
   }
 
   public Money multiply(int x) {
-    return new Money(amount.multiply(new BigDecimal(x)));
+    return new Money(amount.multiply(BigDecimal.valueOf(x)));
   }
 
   public Long asLong() {
