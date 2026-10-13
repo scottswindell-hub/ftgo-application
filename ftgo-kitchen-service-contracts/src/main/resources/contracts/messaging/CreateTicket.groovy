@@ -15,7 +15,7 @@ org.springframework.cloud.contract.spec.Contract.make {
     outputMessage {
         sentTo('net.chrisrichardson.ftgo.orderservice.sagas.createorder.CreateOrderSaga-reply')
         body([
-                ticketId: 99
+                id: 99
         ])
         headers {
             header('reply_type', 'net.chrisrichardson.ftgo.kitchenservice.api.CreateTicketReply')
