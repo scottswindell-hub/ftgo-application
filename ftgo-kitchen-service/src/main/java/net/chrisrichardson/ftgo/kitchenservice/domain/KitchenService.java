@@ -48,6 +48,14 @@ public class KitchenService {
     domainEventPublisher.publish(ticket, events);
   }
 
+  @Transactional
+  public void revisePromisedReadyBy(long ticketId, LocalDateTime newReadyBy) {
+    Ticket ticket = ticketRepository.findById(ticketId)
+            .orElseThrow(() -> new TicketNotFoundException(ticketId));
+    List<TicketDomainEvent> events = ticket.revisePromisedReadyBy(newReadyBy);
+    domainEventPublisher.publish(ticket, events);
+  }
+
   public void confirmCreateTicket(Long ticketId) {
     Ticket ro = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
