@@ -18,6 +18,8 @@ import static net.chrisrichardson.ftgo.orderservice.OrderDetailsMother.CHICKEN_V
 import static net.chrisrichardson.ftgo.orderservice.OrderDetailsMother.CHICKEN_VINDALOO_ORDER_TOTAL;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 public class OrderControllerTest {
@@ -37,31 +39,36 @@ public class OrderControllerTest {
   @Test
   public void shouldFindOrder() {
 
-    when(orderRepository.findById(1L)).thenReturn(Optional.of(CHICKEN_VINDALOO_ORDER));
+    when(orderRepository.findById(42L)).thenReturn(Optional.of(CHICKEN_VINDALOO_ORDER));
 
     given().
             standaloneSetup(configureControllers(orderController)).
     when().
-            get("/orders/1").
+            get("/orders/42").
     then().
             statusCode(200).
             body("orderId", equalTo(new Long(OrderDetailsMother.ORDER_ID).intValue())).
             body("state", equalTo(OrderDetailsMother.CHICKEN_VINDALOO_ORDER_STATE.name())).
             body("orderTotal", equalTo(CHICKEN_VINDALOO_ORDER_TOTAL.asString()))
     ;
+    verify(orderRepository).findById(42L);
+    verifyNoMoreInteractions(orderRepository);
   }
 
   @Test
   public void shouldFindNotOrder() {
-    when(orderRepository.findById(1L)).thenReturn(Optional.empty());
+    when(orderRepository.findById(73L)).thenReturn(Optional.empty());
 
     given().
             standaloneSetup(configureControllers(new OrderController(orderService, orderRepository))).
     when().
-            get("/orders/1").
+            get("/orders/73").
     then().
-            statusCode(404)
+            statusCode(404).
+            body(equalTo(""))
     ;
+    verify(orderRepository).findById(73L);
+    verifyNoMoreInteractions(orderRepository);
   }
 
   private StandaloneMockMvcBuilder configureControllers(Object... controllers) {
