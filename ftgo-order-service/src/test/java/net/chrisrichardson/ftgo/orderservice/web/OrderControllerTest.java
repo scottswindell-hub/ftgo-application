@@ -3,6 +3,7 @@ package net.chrisrichardson.ftgo.orderservice.web;
 import io.eventuate.common.json.mapper.JSonMapper;
 import net.chrisrichardson.ftgo.common.CommonJsonMapperInitializer;
 import net.chrisrichardson.ftgo.orderservice.OrderDetailsMother;
+import net.chrisrichardson.ftgo.orderservice.domain.OrderNotFoundException;
 import net.chrisrichardson.ftgo.orderservice.domain.OrderRepository;
 import net.chrisrichardson.ftgo.orderservice.domain.OrderService;
 import org.junit.Before;
@@ -18,6 +19,7 @@ import static net.chrisrichardson.ftgo.orderservice.OrderDetailsMother.CHICKEN_V
 import static net.chrisrichardson.ftgo.orderservice.OrderDetailsMother.CHICKEN_VINDALOO_ORDER_TOTAL;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class OrderControllerTest {
@@ -62,6 +64,40 @@ public class OrderControllerTest {
     then().
             statusCode(404)
     ;
+  }
+
+  @Test
+  public void shouldCancelRequestedOrder() {
+    long requestedOrderId = 42L;
+    when(orderService.cancel(requestedOrderId)).thenReturn(CHICKEN_VINDALOO_ORDER);
+
+    given().
+            standaloneSetup(configureControllers(orderController)).
+    when().
+            post("/orders/" + requestedOrderId + "/cancel").
+    then().
+            statusCode(200).
+            body("orderId", equalTo(new Long(OrderDetailsMother.ORDER_ID).intValue())).
+            body("state", equalTo(OrderDetailsMother.CHICKEN_VINDALOO_ORDER_STATE.name())).
+            body("orderTotal", equalTo(CHICKEN_VINDALOO_ORDER_TOTAL.asString()));
+
+    verify(orderService).cancel(requestedOrderId);
+  }
+
+  @Test
+  public void shouldReturnEmptyNotFoundWhenCancellingMissingOrder() {
+    long requestedOrderId = 42L;
+    when(orderService.cancel(requestedOrderId)).thenThrow(new OrderNotFoundException(requestedOrderId));
+
+    given().
+            standaloneSetup(configureControllers(orderController)).
+    when().
+            post("/orders/" + requestedOrderId + "/cancel").
+    then().
+            statusCode(404).
+            body(equalTo(""));
+
+    verify(orderService).cancel(requestedOrderId);
   }
 
   private StandaloneMockMvcBuilder configureControllers(Object... controllers) {

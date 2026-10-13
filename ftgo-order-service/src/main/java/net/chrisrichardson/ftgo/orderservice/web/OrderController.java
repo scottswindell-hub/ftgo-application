@@ -55,9 +55,9 @@ public class OrderController {
   public ResponseEntity<GetOrderResponse> cancel(@PathVariable long orderId) {
     try {
       Order order = orderService.cancel(orderId);
-      return new ResponseEntity<>(makeGetOrderResponse(order), HttpStatus.OK);
+      return ResponseEntity.ok(makeGetOrderResponse(order));
     } catch (OrderNotFoundException e) {
-      return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+      return ResponseEntity.notFound().build();
     }
   }
 
