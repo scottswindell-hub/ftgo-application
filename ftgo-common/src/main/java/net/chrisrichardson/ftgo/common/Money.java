@@ -5,6 +5,7 @@ import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.commons.lang.builder.ToStringBuilder;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 //@Embeddable
 //@Access(AccessType.FIELD)
@@ -66,7 +67,7 @@ public class Money {
   }
 
   public String asString() {
-    return amount.toPlainString();
+    return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
   }
 
   public Money multiply(int x) {
