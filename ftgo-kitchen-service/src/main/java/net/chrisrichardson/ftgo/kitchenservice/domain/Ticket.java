@@ -101,6 +101,19 @@ public class Ticket {
     }
   }
 
+  public List<TicketDomainEvent> revisePromisedReadyBy(LocalDateTime newReadyBy) {
+    switch (state) {
+      case ACCEPTED:
+      case PREPARING:
+        if (!newReadyBy.isAfter(readyBy))
+          throw new IllegalArgumentException(String.format("newReadyBy %s is not after current readyBy %s", newReadyBy, readyBy));
+        this.readyBy = newReadyBy;
+        return emptyList();
+      default:
+        throw new UnsupportedStateTransitionException(state);
+    }
+  }
+
   public List<TicketDomainEvent> readyForPickup() {
     switch (state) {
       case PREPARING:
