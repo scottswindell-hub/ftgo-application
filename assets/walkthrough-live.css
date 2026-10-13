@@ -352,3 +352,4 @@ details.quiet summary{cursor:pointer;color:var(--muted)}details.quiet summary b{
 .finding-gaps{margin:0 16px 12px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13px}
 .finding-gaps h4{margin:0 0 6px;font-size:14px}
 @media(max-width:600px){.run-details .run-revisions{grid-template-columns:1fr}.run-details .run-checks td:last-child{white-space:normal}}
+.fallback-blocked{border:1px solid var(--bad);border-left:4px solid var(--bad);border-radius:6px;padding:10px 14px;margin:0 0 14px}.fallback-blocked b{color:var(--bad);font-size:15px}.fallback-blocked p{margin:6px 0 0}.desc-assessment .merge-blocked{flex-basis:100%;text-align:right;color:#ff8182;font-weight:600;font-size:13px}
