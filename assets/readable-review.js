@@ -427,7 +427,7 @@ function violationMarkup(item){
  const ref=escapeHtml(finding.ref);
  const body=finding.decision==='rule_change_requested'
   ?'<p>Reported as a false detection: its rule exception applies to this pull request now, and to the repository once it merges.</p>'
-  :'<p>Someone with write access answers on this finding\'s review page:</p><ul><li><b>Yes, intended:</b> the rule allows it in this pull request now, and in the whole repository once this pull request merges.</li><li><b>No:</b> the finding stays open and this pull request stays blocked.</li></ul>';
+  :'<p>Anyone can answer on this finding\'s review page:</p><ul><li><b>Yes, intended:</b> the rule allows it in this pull request now, and in the whole repository once this pull request merges.</li><li><b>No:</b> the finding stays open and this pull request stays blocked.</li></ul>';
  return `<section class="rr-violation"><small>RULE VIOLATION · ${ref}</small>${body}</section>`;
 }
 function detailMarkup(item,state){
