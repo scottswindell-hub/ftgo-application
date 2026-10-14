@@ -448,31 +448,16 @@ function render(options={}){
  if(reasonField){reasonField.focus();reasonField.setSelectionRange(typing.start,typing.end);}
 }
 
-// Yes accepts a finding, so it is saved under the reviewer's GitHub identity and
-// waits for the server's receipt. The API says how to prove who is answering: a
-// GitHub sign-in bounce when that is configured (the page resumes this exact
-// request on return), or otherwise a /codeintent-review comment on the PR.
-async function saveYes(request,destination,signInAllowed=true){
- const scope=request.scope,page=location.href.split('#')[0];
+// Public review submission waits for a durable receipt before returning to GitHub.
+async function saveAndReturn(request,destination){
+ const scope=request.scope;
  try{
-  const token=codeIntentFindingReviews.session();
-  await codeIntentFindingReviews.submit(token?{...request,session:token}:request);
+  await codeIntentFindingReviews.submit(request);
   location.assign(destination);
  }catch(error){
-  if(error.signIn&&signInAllowed){codeIntentFindingReviews.forget();codeIntentFindingReviews.signIn({request,destination},page);return;}
-  if(error.confirm){await confirmOnGitHub(request,destination);return;}
   state.saves.set(scope,{request:error.status===409?null:request,busy:false});render();
-  window.alert(error.signIn?'GitHub sign-in did not complete. Press Return to Github to try again.':error.message);
+  window.alert(error.message);
  }
-}
-async function confirmOnGitHub(request,destination){
- const line=codeIntentFindingReviews.command('yes',request.head_sha,request.scope);
- const message='Confirm your Yes from your GitHub account: post this as a new comment on the pull request.';
- let copied=false;
- try{await navigator.clipboard.writeText(line);copied=true;}catch(error){}
- if(copied)window.alert(message+' It is copied to your clipboard.');
- else window.prompt(message,line);
- location.assign(destination.split('#')[0]+'#new_comment_field');
 }
 document.addEventListener('click',async event=>{
  const target=event.target.closest('button,a,[data-row],[data-node],[data-method-id],[data-method-service],input');if(!target)return;
@@ -505,17 +490,7 @@ document.addEventListener('click',async event=>{
   const reason=answer==='no'?String(currentReason(review.finding.review)).trim():'';
   const request=prior?.request&&prior.request.answer===answer&&(prior.request.reason||'')===reason?prior.request:{repository:repo,pull_request:Number(pr),head_sha:sha,scope,answer,expected_review:review.finding.review.record||null,request_id:crypto.randomUUID(),...(reason?{reason}:{})};
   state.saves.set(scope,{request,busy:true});render();
-  if(answer==='yes'){await saveYes(request,destination);return;}
-  try{
-   // No only keeps a finding open, so it stays one anonymous click; a signed-in reviewer is credited.
-   // Wait for the API's receipt, as Yes does, so a failed save is shown instead of silently lost.
-   const token=codeIntentFindingReviews.session();
-   await codeIntentFindingReviews.submit(token?{...request,session:token}:request);
-   location.assign(destination);
-  }catch(error){
-   state.saves.set(scope,{request:error.status===409?null:request,busy:false});render();
-   window.alert(error.message);
-  }
+  await saveAndReturn(request,destination);
  }
 
 
@@ -554,13 +529,5 @@ function setTheme(value){
 }
 setTheme(localStorage.getItem('codeintent-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'));
 theme.addEventListener('click',()=>{const next=document.documentElement.dataset.theme==='dark'?'light':'dark';localStorage.setItem('codeintent-theme',next);setTheme(next);});
-const signedIn=codeIntentFindingReviews.finishSignIn();
-const resumed=signedIn?.pending?.request,resumeTo=signedIn?.pending?.destination;
-if(resumed)state.drafts.set(resumed.scope,'yes');
 render();poll();resolveReturnComment();
-if(signedIn?.error)setTimeout(()=>window.alert(signedIn.error),0);
-else if(resumed&&/^https:\/\/github\.com\//.test(resumeTo||'')&&resumed.repository===repo&&resumed.head_sha===sha){
- state.saves.set(resumed.scope,{request:resumed,busy:true});render();
- saveYes(resumed,resumeTo,false);
-}
 })();
