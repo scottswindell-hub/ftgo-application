@@ -3,6 +3,7 @@ package net.chrisrichardson.ftgo.orderservice.sagas.createorder;
 import net.chrisrichardson.ftgo.accountservice.api.AccountingServiceChannels;
 import net.chrisrichardson.ftgo.accountservice.api.AuthorizeCommand;
 import net.chrisrichardson.ftgo.common.CommonJsonMapperInitializer;
+import net.chrisrichardson.ftgo.common.Money;
 import net.chrisrichardson.ftgo.consumerservice.api.ConsumerServiceChannels;
 import net.chrisrichardson.ftgo.consumerservice.api.ValidateOrderByConsumer;
 import net.chrisrichardson.ftgo.kitchenservice.api.CancelCreateTicket;
@@ -51,7 +52,7 @@ public class CreateOrderSagaTest {
     andGiven().
         successReply().
     expect().
-      command(new AuthorizeCommand().withConsumerId(CONSUMER_ID).withOrderId(ORDER_ID).withOrderTotal(CHICKEN_VINDALOO_ORDER_TOTAL.asString())).
+      command(new AuthorizeCommand().withConsumerId(CONSUMER_ID).withOrderId(ORDER_ID).withOrderTotal(CHICKEN_VINDALOO_ORDER_TOTAL.add(new Money("2.00")).asString())).
       to(AccountingServiceChannels.accountingServiceChannel).
     andGiven().
         successReply().
@@ -102,7 +103,7 @@ public class CreateOrderSagaTest {
     andGiven().
       successReply().
     expect().
-      command(new AuthorizeCommand().withConsumerId(CONSUMER_ID).withOrderId(ORDER_ID).withOrderTotal(CHICKEN_VINDALOO_ORDER_TOTAL.asString())).
+      command(new AuthorizeCommand().withConsumerId(CONSUMER_ID).withOrderId(ORDER_ID).withOrderTotal(CHICKEN_VINDALOO_ORDER_TOTAL.add(new Money("2.00")).asString())).
       to(AccountingServiceChannels.accountingServiceChannel).
     andGiven().
       failureReply().
