@@ -157,7 +157,7 @@ public class Ticket {
     switch (state) {
       case CANCEL_PENDING:
         this.state = TicketState.CANCELLED;
-        return singletonList(new TicketCancelled());
+        return emptyList();
       default:
         throw new UnsupportedStateTransitionException(state);
 
