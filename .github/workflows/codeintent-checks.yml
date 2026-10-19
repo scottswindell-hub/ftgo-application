@@ -505,6 +505,8 @@ jobs:
               visible=[c for c in checks if c.get('id')!='governance_decision']
               failures=[c for c in visible if c.get('state') in {'failed','error'}]
               all_reviewed=bool(failures) and all(reviewed(c) for c in failures)
+              if status=='incomplete' and verdict=='PASS' and not failures and not any(c.get('findings') for c in visible):
+                  status=None  # a missing acceptance record alone does not make an empty PASS run need review
               needs_review=((verdict!='PASS' and not all_reviewed and not hidden) or any(not reviewed(c) for c in failures) or any(review_pending(c) for c in visible)
                             or (not shadow and status in {'blocked','review_required','incomplete','evidence_needed'}))
               label=('⏳ Running' if document.get('state')!='completed' else
@@ -550,7 +552,7 @@ jobs:
                       passed+=review_lines(check,report_url) if has_reviews else finding_lines(check) if document.get('governance_run_id') else []
                   elif state in {'failed','error'} or review_pending(check):
                       failed_count+=sum((f.get('review') or {}).get('decision')!='accepted' for f in check.get('findings') or []) if has_reviews else 1
-                      detail=boundary_summary(check) if check.get('id')=='intent_diff' and state=='failed' else 'response requested' if state=='passed' else inline(state)
+                      detail=boundary_summary(check) if check.get('id')=='intent_diff' and state=='failed' else 'response requested' if state=='passed' else inline(state)+(f" — {inline(check['detail'])}" if state in {'error','incomplete'} and check.get('detail') else '')
                       url=urlsplit(report_url)
                       query=[(key,value) for key,value in parse_qsl(url.query,keep_blank_values=True) if key not in {'view','check','item','issue'}]
                       query.extend([('view','desc'),('check',check['id'])])
