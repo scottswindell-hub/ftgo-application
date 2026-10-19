@@ -34,10 +34,10 @@ public class AccountingServiceCommandHandler {
 
   public void authorize(CommandMessage<AuthorizeCommand> cm) {
 
-    AuthorizeCommand command = cm.getCommand();
+    AuthorizeCommand request = cm.getCommand();
 
-    accountRepository.update(Long.toString(command.getConsumerId()),
-            makeAuthorizeCommandInternal(command),
+    accountRepository.update(Long.toString(request.getConsumerId()),
+            toInternalAuthorize(request),
             replyingTo(cm)
                     .catching(AccountDisabledException.class, () -> withFailure(new AccountDisabledReply()))
                     .build());
@@ -46,10 +46,10 @@ public class AccountingServiceCommandHandler {
 
   public void reverseAuthorization(CommandMessage<ReverseAuthorizationCommand> cm) {
 
-    ReverseAuthorizationCommand command = cm.getCommand();
+    ReverseAuthorizationCommand request = cm.getCommand();
 
-    accountRepository.update(Long.toString(command.getConsumerId()),
-            makeReverseAuthorizeCommandInternal(command),
+    accountRepository.update(Long.toString(request.getConsumerId()),
+            toInternalReverse(request),
             replyingTo(cm)
                     .catching(AccountDisabledException.class, () -> withFailure(new AccountDisabledReply()))
                     .build());
@@ -57,10 +57,10 @@ public class AccountingServiceCommandHandler {
   }
   public void reviseAuthorization(CommandMessage<ReviseAuthorization> cm) {
 
-    ReviseAuthorization command = cm.getCommand();
+    ReviseAuthorization request = cm.getCommand();
 
-    accountRepository.update(Long.toString(command.getConsumerId()),
-            makeReviseAuthorizeCommandInternal(command),
+    accountRepository.update(Long.toString(request.getConsumerId()),
+            toInternalRevise(request),
             replyingTo(cm)
                     .catching(AccountDisabledException.class, () -> withFailure(new AccountDisabledReply()))
                     .build());
@@ -68,13 +68,13 @@ public class AccountingServiceCommandHandler {
 
   }
 
-  private AuthorizeCommandInternal makeAuthorizeCommandInternal(AuthorizeCommand command) {
+  private AuthorizeCommandInternal toInternalAuthorize(AuthorizeCommand command) {
     return new AuthorizeCommandInternal(Long.toString(command.getConsumerId()), Long.toString(command.getOrderId()), command.getOrderTotal());
   }
-  private ReverseAuthorizationCommandInternal makeReverseAuthorizeCommandInternal(ReverseAuthorizationCommand command) {
+  private ReverseAuthorizationCommandInternal toInternalReverse(ReverseAuthorizationCommand command) {
     return new ReverseAuthorizationCommandInternal(Long.toString(command.getConsumerId()), Long.toString(command.getOrderId()), command.getOrderTotal());
   }
-  private ReviseAuthorizationCommandInternal makeReviseAuthorizeCommandInternal(ReviseAuthorization command) {
+  private ReviseAuthorizationCommandInternal toInternalRevise(ReviseAuthorization command) {
     return new ReviseAuthorizationCommandInternal(Long.toString(command.getConsumerId()), Long.toString(command.getOrderId()), command.getOrderTotal());
   }
 
