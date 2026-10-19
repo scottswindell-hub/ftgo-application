@@ -159,13 +159,7 @@ public class Order {
   }
 
   public List<OrderDomainEvent> rejectRevision() {
-    switch (state) {
-      case REVISION_PENDING:
-        this.state = APPROVED;
-        return emptyList();
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
+    return applyRejectRevisionInternal();
   }
 
   public List<OrderDomainEvent> confirmRevision(OrderRevision orderRevision) {
@@ -206,6 +200,16 @@ public class Order {
 
   public Long getConsumerId() {
     return consumerId;
+  }
+
+  private List<OrderDomainEvent> applyRejectRevisionInternal() {
+    switch (state) {
+      case REVISION_PENDING:
+        this.state = APPROVED;
+        return emptyList();
+      default:
+        throw new UnsupportedStateTransitionException(state);
+    }
   }
 }
 
