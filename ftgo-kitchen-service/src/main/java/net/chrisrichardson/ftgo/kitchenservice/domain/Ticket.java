@@ -124,17 +124,7 @@ public class Ticket {
   }
 
   public void changeLineItemQuantity() {
-    switch (state) {
-      case AWAITING_ACCEPTANCE:
-        // TODO
-        break;
-      case PREPARING:
-        // TODO - too late
-        break;
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
-
+    applyChangeLineItemQuantityInternal();
   }
 
   public List<TicketDomainEvent> cancel() {
@@ -205,5 +195,19 @@ public class Ticket {
         throw new UnsupportedStateTransitionException(state);
 
     }
+  }
+
+  private void applyChangeLineItemQuantityInternal() {
+    switch (state) {
+      case AWAITING_ACCEPTANCE:
+        // TODO
+        break;
+      case PREPARING:
+        // TODO - too late
+        break;
+      default:
+        throw new UnsupportedStateTransitionException(state);
+    }
+
   }
 }
