@@ -92,6 +92,7 @@ public class Ticket {
 
   public List<TicketDomainEvent> preparing() {
     switch (state) {
+      case AWAITING_ACCEPTANCE:
       case ACCEPTED:
         this.state = TicketState.PREPARING;
         this.preparingTime = LocalDateTime.now();
