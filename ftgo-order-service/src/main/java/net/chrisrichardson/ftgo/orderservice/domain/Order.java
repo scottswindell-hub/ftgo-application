@@ -81,7 +81,7 @@ public class Order {
   }
 
   public Money getOrderTotal() {
-    return orderLineItems.orderTotal();
+    return applyGetOrderTotalInternal();
   }
 
   public List<OrderDomainEvent> cancel() {
@@ -206,6 +206,10 @@ public class Order {
 
   public Long getConsumerId() {
     return consumerId;
+  }
+
+  private Money applyGetOrderTotalInternal() {
+    return orderLineItems.orderTotal();
   }
 }
 
