@@ -55,6 +55,7 @@ public class OrderHistoryDaoDynamoDb implements OrderHistoryDao {
           "ftgo-order-history-by-consumer-id-and-creation-time";
   public static final String ORDER_STATUS_FIELD = "orderStatus";
   private static final String DELIVERY_STATUS_FIELD = "deliveryStatus";
+  private static final int MAX_PAGE_SIZE = 100;
 
   private final DynamoDB dynamoDB;
 
@@ -216,9 +217,7 @@ public class OrderHistoryDaoDynamoDb implements OrderHistoryDao {
       spec.withFilterExpression(filterExpression);
     }
 
-    System.out.print("filterExpression.toString()=" + filterExpression);
-
-    filter.getPageSize().ifPresent(spec::withMaxResultSize);
+    spec.withMaxResultSize(Math.min(filter.getPageSize().orElse(MAX_PAGE_SIZE), MAX_PAGE_SIZE));
 
     ItemCollection<QueryOutcome> result = index.query(spec);
 
