@@ -154,14 +154,7 @@ public class Ticket {
   }
 
   public List<TicketDomainEvent> confirmCancel() {
-    switch (state) {
-      case CANCEL_PENDING:
-        this.state = TicketState.CANCELLED;
-        return singletonList(new TicketCancelled());
-      default:
-        throw new UnsupportedStateTransitionException(state);
-
-    }
+    return applyConfirmCancelInternal();
   }
   public List<TicketDomainEvent> undoCancel() {
     switch (state) {
@@ -201,6 +194,17 @@ public class Ticket {
       case REVISION_PENDING:
         this.state = this.previousState;
         return singletonList(new TicketRevised());
+      default:
+        throw new UnsupportedStateTransitionException(state);
+
+    }
+  }
+
+  private List<TicketDomainEvent> applyConfirmCancelInternal() {
+    switch (state) {
+      case CANCEL_PENDING:
+        this.state = TicketState.CANCELLED;
+        return singletonList(new TicketCancelled());
       default:
         throw new UnsupportedStateTransitionException(state);
 
