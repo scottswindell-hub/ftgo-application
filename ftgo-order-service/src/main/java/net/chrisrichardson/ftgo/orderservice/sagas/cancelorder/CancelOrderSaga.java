@@ -33,7 +33,6 @@ public class CancelOrderSaga implements SimpleSaga<CancelOrderSagaData> {
             .withCompensation(this::undoBeginCancel)
             .step()
             .invokeParticipant(this::beginCancelTicket)
-            .withCompensation(this::undoBeginCancelTicket)
             .step()
             .invokeParticipant(this::reverseAuthorization)
             .step()
