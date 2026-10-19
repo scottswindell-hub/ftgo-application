@@ -7,6 +7,7 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 import reactor.util.function.Tuple4;
 
+import java.time.Duration;
 import java.util.Optional;
 
 import static org.springframework.web.reactive.function.BodyInserters.fromObject;
@@ -35,16 +36,19 @@ public class OrderHandlers {
 
     Mono<Optional<TicketInfo>> ticketInfo = kitchenService
             .findTicketById(orderId)
+            .timeout(Duration.ofSeconds(2))
             .map(Optional::of)
             .onErrorReturn(Optional.empty());
 
     Mono<Optional<DeliveryInfo>> deliveryInfo = deliveryService
             .findDeliveryByOrderId(orderId)
+            .timeout(Duration.ofSeconds(2))
             .map(Optional::of)
             .onErrorReturn(Optional.empty());
 
     Mono<Optional<BillInfo>> billInfo = accountingService
             .findBillByOrderId(orderId)
+            .timeout(Duration.ofSeconds(2))
             .map(Optional::of)
             .onErrorReturn(Optional.empty());
 
