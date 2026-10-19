@@ -87,7 +87,7 @@ public class Order {
   public List<OrderDomainEvent> cancel() {
     switch (state) {
       case APPROVED:
-        this.state = OrderState.CANCEL_PENDING;
+        this.state = OrderState.CANCELLED;
         return emptyList();
       default:
         throw new UnsupportedStateTransitionException(state);
@@ -118,7 +118,7 @@ public class Order {
     switch (state) {
       case APPROVAL_PENDING:
         this.state = APPROVED;
-        return singletonList(new OrderAuthorized());
+        return emptyList();
       default:
         throw new UnsupportedStateTransitionException(state);
     }
@@ -150,7 +150,7 @@ public class Order {
         if (change.newOrderTotal.isGreaterThanOrEqual(orderMinimum)) {
           throw new OrderMinimumNotMetException();
         }
-        this.state = REVISION_PENDING;
+        this.state = APPROVED;
         return new ResultWithDomainEvents<>(change, singletonList(new OrderRevisionProposed(orderRevision, change.currentOrderTotal, change.newOrderTotal)));
 
       default:
