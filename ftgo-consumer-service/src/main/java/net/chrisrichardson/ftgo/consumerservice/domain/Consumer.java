@@ -45,6 +45,10 @@ public class Consumer {
   }
 
   public static ResultWithEvents<Consumer> create(PersonName name) {
+    return applyCreateInternal(name);
+  }
+
+  private static ResultWithEvents<Consumer> applyCreateInternal(PersonName name) {
     return new ResultWithEvents<>(new Consumer(name), new ConsumerCreated());
   }
 }
