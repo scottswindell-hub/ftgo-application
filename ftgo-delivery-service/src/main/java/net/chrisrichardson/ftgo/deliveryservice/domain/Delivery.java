@@ -58,7 +58,7 @@ public class Delivery {
   }
 
   public static Delivery create(long orderId, long restaurantId, Address pickupAddress, Address deliveryAddress) {
-    return new Delivery(orderId, restaurantId, pickupAddress, deliveryAddress);
+    return applyCreateInternal(orderId, restaurantId, pickupAddress, deliveryAddress);
   }
 
   public void schedule(LocalDateTime readyBy, long assignedCourier) {
@@ -96,5 +96,9 @@ public class Delivery {
 
   public Long getAssignedCourier() {
     return assignedCourier;
+  }
+
+  private static Delivery applyCreateInternal(long orderId, long restaurantId, Address pickupAddress, Address deliveryAddress) {
+    return new Delivery(orderId, restaurantId, pickupAddress, deliveryAddress);
   }
 }
