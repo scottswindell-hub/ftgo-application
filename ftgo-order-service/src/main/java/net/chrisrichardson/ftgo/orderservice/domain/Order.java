@@ -172,13 +172,7 @@ public class Order {
     switch (state) {
       case REVISION_PENDING:
         LineItemQuantityChange licd = orderLineItems.lineItemQuantityChange(orderRevision);
-
-        orderRevision.getDeliveryInformation().ifPresent(newDi -> this.deliveryInformation = newDi);
-
-        if (orderRevision.getRevisedOrderLineItems() != null && orderRevision.getRevisedOrderLineItems().size() > 0) {
-          orderLineItems.updateLineItems(orderRevision);
-        }
-
+        applyRevision(orderRevision);
         this.state = APPROVED;
         return singletonList(new OrderRevised(orderRevision, licd.currentOrderTotal, licd.newOrderTotal));
       default:
@@ -186,6 +180,14 @@ public class Order {
     }
   }
 
+
+  private void applyRevision(OrderRevision orderRevision) {
+    orderRevision.getDeliveryInformation().ifPresent(newDi -> this.deliveryInformation = newDi);
+
+    if (orderRevision.getRevisedOrderLineItems() != null && orderRevision.getRevisedOrderLineItems().size() > 0) {
+      orderLineItems.updateLineItems(orderRevision);
+    }
+  }
 
   public Long getVersion() {
     return version;
