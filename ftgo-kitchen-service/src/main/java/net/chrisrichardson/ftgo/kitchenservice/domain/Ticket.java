@@ -58,13 +58,7 @@ public class Ticket {
   }
 
   public List<TicketDomainEvent> confirmCreate() {
-    switch (state) {
-      case CREATE_PENDING:
-        state = TicketState.AWAITING_ACCEPTANCE;
-        return singletonList(new TicketCreatedEvent(id, new TicketDetails()));
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
+    return applyConfirmCreateInternal();
   }
 
   public List<TicketDomainEvent> cancelCreate() {
@@ -204,6 +198,16 @@ public class Ticket {
       default:
         throw new UnsupportedStateTransitionException(state);
 
+    }
+  }
+
+  private List<TicketDomainEvent> applyConfirmCreateInternal() {
+    switch (state) {
+      case CREATE_PENDING:
+        state = TicketState.AWAITING_ACCEPTANCE;
+        return singletonList(new TicketCreatedEvent(id, new TicketDetails()));
+      default:
+        throw new UnsupportedStateTransitionException(state);
     }
   }
 }
