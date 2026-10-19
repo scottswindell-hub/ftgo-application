@@ -62,6 +62,9 @@ public class Delivery {
   }
 
   public void schedule(LocalDateTime readyBy, long assignedCourier) {
+    if (readyBy == null) {
+      throw new IllegalArgumentException("readyBy is required");
+    }
     this.readyBy = readyBy;
     this.assignedCourier = assignedCourier;
     this.state = DeliveryState.SCHEDULED;
