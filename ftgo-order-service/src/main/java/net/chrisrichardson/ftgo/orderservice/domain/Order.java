@@ -87,6 +87,7 @@ public class Order {
   public List<OrderDomainEvent> cancel() {
     switch (state) {
       case APPROVED:
+      case APPROVAL_PENDING:
         this.state = OrderState.CANCEL_PENDING;
         return emptyList();
       default:
