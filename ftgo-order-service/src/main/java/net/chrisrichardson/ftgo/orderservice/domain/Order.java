@@ -95,13 +95,7 @@ public class Order {
   }
 
   public List<OrderDomainEvent> undoPendingCancel() {
-    switch (state) {
-      case CANCEL_PENDING:
-        this.state = OrderState.APPROVED;
-        return emptyList();
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
+    return applyUndoPendingCancelInternal();
   }
 
   public List<OrderDomainEvent> noteCancelled() {
@@ -206,6 +200,16 @@ public class Order {
 
   public Long getConsumerId() {
     return consumerId;
+  }
+
+  private List<OrderDomainEvent> applyUndoPendingCancelInternal() {
+    switch (state) {
+      case CANCEL_PENDING:
+        this.state = OrderState.APPROVED;
+        return emptyList();
+      default:
+        throw new UnsupportedStateTransitionException(state);
+    }
   }
 }
 
