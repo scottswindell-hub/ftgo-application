@@ -197,6 +197,10 @@ public class Ticket {
   }
 
   public List<TicketDomainEvent> confirmReviseTicket(List<RevisedOrderLineItem> revisedOrderLineItems) {
+    return applyConfirmReviseTicketInternal(revisedOrderLineItems);
+  }
+
+  private List<TicketDomainEvent> applyConfirmReviseTicketInternal(List<RevisedOrderLineItem> revisedOrderLineItems) {
     switch (state) {
       case REVISION_PENDING:
         this.state = this.previousState;
