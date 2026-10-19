@@ -125,7 +125,7 @@ public class Ticket {
 
   public void changeLineItemQuantity() {
     switch (state) {
-      case AWAITING_ACCEPTANCE:
+      case ACCEPTED:
         // TODO
         break;
       case PREPARING:
