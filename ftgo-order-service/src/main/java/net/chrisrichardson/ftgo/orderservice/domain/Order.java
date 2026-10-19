@@ -115,14 +115,7 @@ public class Order {
   }
 
   public List<OrderDomainEvent> noteApproved() {
-    switch (state) {
-      case APPROVAL_PENDING:
-        this.state = APPROVED;
-        return singletonList(new OrderAuthorized());
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
-
+    return applyNoteApprovedInternal();
   }
 
   public List<OrderDomainEvent> noteRejected() {
@@ -206,6 +199,17 @@ public class Order {
 
   public Long getConsumerId() {
     return consumerId;
+  }
+
+  private List<OrderDomainEvent> applyNoteApprovedInternal() {
+    switch (state) {
+      case APPROVAL_PENDING:
+        this.state = APPROVED;
+        return singletonList(new OrderAuthorized());
+      default:
+        throw new UnsupportedStateTransitionException(state);
+    }
+
   }
 }
 
