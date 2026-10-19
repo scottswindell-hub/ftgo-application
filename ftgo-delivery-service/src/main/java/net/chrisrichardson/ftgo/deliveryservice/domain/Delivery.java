@@ -69,8 +69,7 @@ public class Delivery {
   }
 
   public void cancel() {
-    this.state = DeliveryState.CANCELLED;
-    this.assignedCourier = null;
+    applyCancelInternal();
   }
 
 
@@ -96,5 +95,10 @@ public class Delivery {
 
   public Long getAssignedCourier() {
     return assignedCourier;
+  }
+
+  private void applyCancelInternal() {
+    this.state = DeliveryState.CANCELLED;
+    this.assignedCourier = null;
   }
 }
