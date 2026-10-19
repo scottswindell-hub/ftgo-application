@@ -62,10 +62,7 @@ public class Delivery {
   }
 
   public void schedule(LocalDateTime readyBy, long assignedCourier) {
-    this.readyBy = readyBy;
-    this.assignedCourier = assignedCourier;
-    this.state = DeliveryState.SCHEDULED;
-
+    applyScheduleInternal(readyBy, assignedCourier);
   }
 
   public void cancel() {
@@ -96,5 +93,12 @@ public class Delivery {
 
   public Long getAssignedCourier() {
     return assignedCourier;
+  }
+
+  private void applyScheduleInternal(LocalDateTime readyBy, long assignedCourier) {
+    this.readyBy = readyBy;
+    this.assignedCourier = assignedCourier;
+    this.state = DeliveryState.SCHEDULED;
+
   }
 }
