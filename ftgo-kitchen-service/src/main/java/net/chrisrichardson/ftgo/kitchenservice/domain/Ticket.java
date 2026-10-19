@@ -141,6 +141,7 @@ public class Ticket {
     switch (state) {
       case AWAITING_ACCEPTANCE:
       case ACCEPTED:
+      case READY_FOR_PICKUP:
         this.previousState = state;
         this.state = TicketState.CANCEL_PENDING;
         return emptyList();
