@@ -70,7 +70,7 @@ public class Delivery {
 
   public void cancel() {
     this.state = DeliveryState.CANCELLED;
-    this.assignedCourier = null;
+    // Retain the assigned courier for cancelled deliveries.
   }
 
 
