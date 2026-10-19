@@ -175,15 +175,7 @@ public class Ticket {
   }
 
   public List<TicketDomainEvent> beginReviseOrder(List<RevisedOrderLineItem> revisedOrderLineItems) {
-    switch (state) {
-      case AWAITING_ACCEPTANCE:
-      case ACCEPTED:
-        this.previousState = state;
-        this.state = TicketState.REVISION_PENDING;
-        return emptyList();
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
+    return applyBeginReviseOrderInternal(revisedOrderLineItems);
   }
 
   public List<TicketDomainEvent> undoBeginReviseOrder() {
@@ -204,6 +196,18 @@ public class Ticket {
       default:
         throw new UnsupportedStateTransitionException(state);
 
+    }
+  }
+
+  private List<TicketDomainEvent> applyBeginReviseOrderInternal(List<RevisedOrderLineItem> revisedOrderLineItems) {
+    switch (state) {
+      case AWAITING_ACCEPTANCE:
+      case ACCEPTED:
+        this.previousState = state;
+        this.state = TicketState.REVISION_PENDING;
+        return emptyList();
+      default:
+        throw new UnsupportedStateTransitionException(state);
     }
   }
 }
