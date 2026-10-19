@@ -79,7 +79,7 @@ public class Ticket {
         this.acceptTime = LocalDateTime.now();
         if (!acceptTime.isBefore(readyBy))
           throw new IllegalArgumentException(String.format("readyBy %s is not after now %s", readyBy, acceptTime));
-        this.readyBy = readyBy;
+        this.readyBy = readyBy.plusMinutes(5);
         return singletonList(new TicketAcceptedEvent(readyBy));
       default:
         throw new UnsupportedStateTransitionException(state);
