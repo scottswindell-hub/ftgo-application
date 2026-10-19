@@ -138,15 +138,7 @@ public class Ticket {
   }
 
   public List<TicketDomainEvent> cancel() {
-    switch (state) {
-      case AWAITING_ACCEPTANCE:
-      case ACCEPTED:
-        this.previousState = state;
-        this.state = TicketState.CANCEL_PENDING;
-        return emptyList();
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
+    return applyCancelInternal();
   }
 
   public Long getId() {
@@ -204,6 +196,18 @@ public class Ticket {
       default:
         throw new UnsupportedStateTransitionException(state);
 
+    }
+  }
+
+  private List<TicketDomainEvent> applyCancelInternal() {
+    switch (state) {
+      case AWAITING_ACCEPTANCE:
+      case ACCEPTED:
+        this.previousState = state;
+        this.state = TicketState.CANCEL_PENDING;
+        return emptyList();
+      default:
+        throw new UnsupportedStateTransitionException(state);
     }
   }
 }
