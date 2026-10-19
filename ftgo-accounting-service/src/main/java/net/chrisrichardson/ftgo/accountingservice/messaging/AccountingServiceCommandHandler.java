@@ -50,9 +50,7 @@ public class AccountingServiceCommandHandler {
 
     accountRepository.update(Long.toString(command.getConsumerId()),
             makeReverseAuthorizeCommandInternal(command),
-            replyingTo(cm)
-                    .catching(AccountDisabledException.class, () -> withFailure(new AccountDisabledReply()))
-                    .build());
+            replyingTo(cm).build());
 
   }
   public void reviseAuthorization(CommandMessage<ReviseAuthorization> cm) {
