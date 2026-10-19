@@ -113,14 +113,7 @@ public class Ticket {
   }
 
   public List<TicketDomainEvent> pickedUp() {
-    switch (state) {
-      case READY_FOR_PICKUP:
-        this.state = TicketState.PICKED_UP;
-        this.pickedUpTime = LocalDateTime.now();
-        return singletonList(new TicketPickedUpEvent());
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
+    return applyPickedUpInternal();
   }
 
   public void changeLineItemQuantity() {
@@ -204,6 +197,17 @@ public class Ticket {
       default:
         throw new UnsupportedStateTransitionException(state);
 
+    }
+  }
+
+  private List<TicketDomainEvent> applyPickedUpInternal() {
+    switch (state) {
+      case READY_FOR_PICKUP:
+        this.state = TicketState.PICKED_UP;
+        this.pickedUpTime = LocalDateTime.now();
+        return singletonList(new TicketPickedUpEvent());
+      default:
+        throw new UnsupportedStateTransitionException(state);
     }
   }
 }
