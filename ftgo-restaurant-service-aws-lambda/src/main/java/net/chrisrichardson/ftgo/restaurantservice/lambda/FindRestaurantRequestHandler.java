@@ -33,6 +33,10 @@ public class FindRestaurantRequestHandler extends AbstractAutowiringHttpRequestH
       return makeBadRequestResponse(context);
     }
 
+    if (restaurantId <= 0) {
+      return makeBadRequestResponse(context);
+    }
+
     Optional<Restaurant> possibleRestaurant = restaurantService.findById(restaurantId);
 
     return possibleRestaurant
