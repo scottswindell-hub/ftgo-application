@@ -143,19 +143,7 @@ public class Order {
   }
 
   public ResultWithDomainEvents<LineItemQuantityChange, OrderDomainEvent> revise(OrderRevision orderRevision) {
-    switch (state) {
-
-      case APPROVED:
-        LineItemQuantityChange change = orderLineItems.lineItemQuantityChange(orderRevision);
-        if (change.newOrderTotal.isGreaterThanOrEqual(orderMinimum)) {
-          throw new OrderMinimumNotMetException();
-        }
-        this.state = REVISION_PENDING;
-        return new ResultWithDomainEvents<>(change, singletonList(new OrderRevisionProposed(orderRevision, change.currentOrderTotal, change.newOrderTotal)));
-
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
+    return applyReviseInternal(orderRevision);
   }
 
   public List<OrderDomainEvent> rejectRevision() {
@@ -206,6 +194,22 @@ public class Order {
 
   public Long getConsumerId() {
     return consumerId;
+  }
+
+  private ResultWithDomainEvents<LineItemQuantityChange, OrderDomainEvent> applyReviseInternal(OrderRevision orderRevision) {
+    switch (state) {
+
+      case APPROVED:
+        LineItemQuantityChange change = orderLineItems.lineItemQuantityChange(orderRevision);
+        if (change.newOrderTotal.isGreaterThanOrEqual(orderMinimum)) {
+          throw new OrderMinimumNotMetException();
+        }
+        this.state = REVISION_PENDING;
+        return new ResultWithDomainEvents<>(change, singletonList(new OrderRevisionProposed(orderRevision, change.currentOrderTotal, change.newOrderTotal)));
+
+      default:
+        throw new UnsupportedStateTransitionException(state);
+    }
   }
 }
 
