@@ -161,7 +161,7 @@ public class Order {
   public List<OrderDomainEvent> rejectRevision() {
     switch (state) {
       case REVISION_PENDING:
-        this.state = APPROVED;
+        this.state = REJECTED;
         return emptyList();
       default:
         throw new UnsupportedStateTransitionException(state);
