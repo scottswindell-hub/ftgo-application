@@ -105,13 +105,7 @@ public class Order {
   }
 
   public List<OrderDomainEvent> noteCancelled() {
-    switch (state) {
-      case CANCEL_PENDING:
-        this.state = OrderState.CANCELLED;
-        return singletonList(new OrderCancelled());
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
+    return applyNoteCancelledInternal();
   }
 
   public List<OrderDomainEvent> noteApproved() {
@@ -206,6 +200,16 @@ public class Order {
 
   public Long getConsumerId() {
     return consumerId;
+  }
+
+  private List<OrderDomainEvent> applyNoteCancelledInternal() {
+    switch (state) {
+      case CANCEL_PENDING:
+        this.state = OrderState.CANCELLED;
+        return singletonList(new OrderCancelled());
+      default:
+        throw new UnsupportedStateTransitionException(state);
+    }
   }
 }
 
