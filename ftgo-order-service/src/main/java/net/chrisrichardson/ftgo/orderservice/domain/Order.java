@@ -117,6 +117,7 @@ public class Order {
   public List<OrderDomainEvent> noteApproved() {
     switch (state) {
       case APPROVAL_PENDING:
+      case REJECTED:
         this.state = APPROVED;
         return singletonList(new OrderAuthorized());
       default:
