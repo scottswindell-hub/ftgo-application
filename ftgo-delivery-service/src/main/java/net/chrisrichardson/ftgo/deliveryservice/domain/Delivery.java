@@ -62,6 +62,9 @@ public class Delivery {
   }
 
   public void schedule(LocalDateTime readyBy, long assignedCourier) {
+    if (assignedCourier <= 0) {
+      throw new IllegalArgumentException("assignedCourier must be positive");
+    }
     this.readyBy = readyBy;
     this.assignedCourier = assignedCourier;
     this.state = DeliveryState.SCHEDULED;
