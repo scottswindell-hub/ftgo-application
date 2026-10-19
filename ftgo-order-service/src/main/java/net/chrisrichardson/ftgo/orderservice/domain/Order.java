@@ -115,26 +115,19 @@ public class Order {
   }
 
   public List<OrderDomainEvent> noteApproved() {
-    switch (state) {
-      case APPROVAL_PENDING:
-        this.state = APPROVED;
-        return singletonList(new OrderAuthorized());
-      default:
-        throw new UnsupportedStateTransitionException(state);
+    if (state != APPROVAL_PENDING) {
+      throw new UnsupportedStateTransitionException(state);
     }
-
+    this.state = APPROVED;
+    return singletonList(new OrderAuthorized());
   }
 
   public List<OrderDomainEvent> noteRejected() {
-    switch (state) {
-      case APPROVAL_PENDING:
-        this.state = REJECTED;
-        return singletonList(new OrderRejected());
-
-      default:
-        throw new UnsupportedStateTransitionException(state);
+    if (state != APPROVAL_PENDING) {
+      throw new UnsupportedStateTransitionException(state);
     }
-
+    this.state = REJECTED;
+    return singletonList(new OrderRejected());
   }
 
 
