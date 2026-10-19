@@ -58,6 +58,9 @@ public class Delivery {
   }
 
   public static Delivery create(long orderId, long restaurantId, Address pickupAddress, Address deliveryAddress) {
+    if (orderId <= 0) {
+      throw new IllegalArgumentException("orderId must be positive");
+    }
     return new Delivery(orderId, restaurantId, pickupAddress, deliveryAddress);
   }
 
