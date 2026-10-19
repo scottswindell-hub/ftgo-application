@@ -453,7 +453,7 @@ function comparisonMarkup(before,after,formatter){
 
 function codeText(comparison,side){return comparison?.[side]?.text||'Source comparison was not supplied for this intent change.';}
 function violationMarkup(item){
- // A rule violation is answered publicly on its review page; Yes records its rule exception.
+ // A rule violation is answered on its review page: a GitHub-verified Yes records its rule exception.
  const finding=(item.findings||[]).find(f=>f.ref&&!f.watchOnly);
  if(!finding)return '';
  const ref=escapeHtml(finding.ref);

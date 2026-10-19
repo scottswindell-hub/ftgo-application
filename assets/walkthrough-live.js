@@ -260,7 +260,7 @@ function typeIcon(value){
 }
 function row(item,kind){
  const answer=decision(item.id),submitted=confirmed(item);
- const status=item.status==='unknown'?'LACKS_DETERMINISTIC_EVIDENCE':answer==='yes'?(submitted?'Intended · recorded':'Yes, I meant this'):answer==='no'?(submitted?'Reported incorrect · sent to Holonic':'No, finding is incorrect'):'';
+ const status=item.status==='unknown'?'LACKS_DETERMINISTIC_EVIDENCE':answer==='yes'?(submitted?'Accepted · recorded':'Accept'):answer==='no'?(submitted?'Rejected · recorded':'Reject'):'';
  const type=String(item.reviewType||'Behavior');
  return `<button type="button" class="row ${answer||''} ${submitted?'submitted':''}" data-row="${esc(item.id)}"><span class="t"><b>${esc(item.title||item.summary)}</b>${item.summary?`<span class="row-summary">${esc(item.summary)}</span>`:''}<small class="meta">${esc(item.concept||item.file||item.groundingLabel||'Recorded review evidence')}${item.objective?' · accepted constraint':''}</small></span><span class="row-side">${typeIcon(type)}${status?`<span class="st">${esc(status)}</span>`:''}</span></button>`;
 }
@@ -363,17 +363,17 @@ function detailScreen(item){
  const connections=item.connections?.length?`<div class="holon"><b>Connected governed outcomes</b><ul>${item.connections.map(connection=>`<li><b>${esc(connection.title)}</b> · ${esc(connection.detail)}</li>`).join('')}</ul></div>`:'';
  const resolution=item.resolution?`<div class="rule"><small>HOW TO RESOLVE IT</small><p>${esc(item.resolution)}</p></div>`:'';
  const interpretation=`<div class="summary"><small>${esc(item.groundingLabel||'RECORDED PIPELINE EVIDENCE')}</small><p>${esc(item.detailSummary||item.summary)}</p></div>`;
- const question='Was this an intended change?';
+ const question='Accept this governed change?';
  // A run whose deterministic checks did not finish never goes in, so its findings take no answers.
  const answersClosed=Boolean(state.status?.llm_review);
  const closedBar=`<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><span class="merge-blocked" role="status">${esc(llmErrorReview.BLOCKED)}</span><b>No answer is taken: deterministic verification did not finish for this run.</b></div>`;
- const yes='Yes, I meant this',no='No, this finding is incorrect';
+ const yes='Accept — this change is intended',no='Reject — not acceptable';
  const target=reviewTarget(item),targets=reviewTargets(item);
  const save=state.saves.get(target?.finding.review.scope);
  const review=target?.finding.review,reason=currentReason(review);
  // A No reports the finding as incorrect; the optional reason travels with it to Holonic's review queue.
- const reasonBox=answer==='no'&&review?`<label class="incorrect-reason"><span>Why is this finding incorrect? <small>Optional · sent to Holonic for review with the pinned evidence</small></span><textarea data-review-reason maxlength="500" rows="2" placeholder="For example: renamed only, behavior is unchanged" ${save?.busy?'disabled':''}>${esc(reason)}</textarea></label>`:'';
- const reported=review?.disposition==='finding_incorrect'&&review.decision==='unresolved'?`<div class="rule incorrect-reported"><small>REPORTED AS INCORRECT · SENT TO HOLONIC</small><p>${esc(review.reason||'No reason was given.')}${review.actor?` · ${esc(review.actor)}`:''}</p></div>`:'';
+ const reasonBox=answer==='no'&&review?`<label class="incorrect-reason"><span>Why is this change not acceptable? <small>Optional · recorded with the pinned evidence</small></span><textarea data-review-reason maxlength="500" rows="2" placeholder="For example: this breaks the accepted cancellation flow" ${save?.busy?'disabled':''}>${esc(reason)}</textarea></label>`:'';
+ const reported=review?.decision==='rejected'?`<div class="rule incorrect-reported"><small>REJECTED · WILL BE FLAGGED ON FUTURE PRS UNTIL ADJUDICATED</small><p>${esc(review.reason||'No reason was given.')}${review.actor?` · ${esc(review.actor)}`:''}</p></div>`:'';
  const selector=targets.length>1?`<label>Finding <select data-review-scope><option value="">Choose a finding</option>${targets.map(t=>`<option value="${esc(t.finding.review.scope)}" ${target===t||target?.finding.review.scope===t.finding.review.scope?'selected':''}>${esc(t.finding.title||t.finding.name||t.finding.id||t.finding.ref)}</option>`).join('')}</select></label>`:'';
 
  return `<div class="ci desc-page"><article class="tile">
@@ -448,16 +448,31 @@ function render(options={}){
  if(reasonField){reasonField.focus();reasonField.setSelectionRange(typing.start,typing.end);}
 }
 
-// Public review submission waits for a durable receipt before returning to GitHub.
-async function saveAndReturn(request,destination){
- const scope=request.scope;
+// Yes accepts a finding, so it is saved under the reviewer's GitHub identity and
+// waits for the server's receipt. The API says how to prove who is answering: a
+// GitHub sign-in bounce when that is configured (the page resumes this exact
+// request on return), or otherwise a /codeintent-review comment on the PR.
+async function saveYes(request,destination,signInAllowed=true){
+ const scope=request.scope,page=location.href.split('#')[0];
  try{
-  await codeIntentFindingReviews.submit(request);
+  const token=codeIntentFindingReviews.session();
+  await codeIntentFindingReviews.submit(token?{...request,session:token}:request);
   location.assign(destination);
  }catch(error){
+  if(error.signIn&&signInAllowed){codeIntentFindingReviews.forget();codeIntentFindingReviews.signIn({request,destination},page);return;}
+  if(error.confirm){await confirmOnGitHub(request,destination);return;}
   state.saves.set(scope,{request:error.status===409?null:request,busy:false});render();
-  window.alert(error.message);
+  window.alert(error.signIn?'GitHub sign-in did not complete. Press Return to Github to try again.':error.message);
  }
+}
+async function confirmOnGitHub(request,destination){
+ const line=codeIntentFindingReviews.command('yes',request.head_sha,request.scope);
+ const message='Confirm your Yes from your GitHub account: post this as a new comment on the pull request.';
+ let copied=false;
+ try{await navigator.clipboard.writeText(line);copied=true;}catch(error){}
+ if(copied)window.alert(message+' It is copied to your clipboard.');
+ else window.prompt(message,line);
+ location.assign(destination.split('#')[0]+'#new_comment_field');
 }
 document.addEventListener('click',async event=>{
  const target=event.target.closest('button,a,[data-row],[data-node],[data-method-id],[data-method-service],input');if(!target)return;
@@ -488,9 +503,17 @@ document.addEventListener('click',async event=>{
   const scope=review.finding.review.scope,answer=decision(item.id),prior=state.saves.get(scope);
   if(!answer||prior?.busy)return;
   const reason=answer==='no'?String(currentReason(review.finding.review)).trim():'';
-  const request=prior?.request&&prior.request.answer===answer&&(prior.request.reason||'')===reason?prior.request:{repository:repo,pull_request:Number(pr),head_sha:sha,scope,answer,expected_review:review.finding.review.record||null,request_id:crypto.randomUUID(),...(reason?{reason}:{})};
+  // Demo: record the Accept/Reject anonymously on click, then return to GitHub. No identity
+  // is collected; both answers are one plain POST to the review_service decision endpoint.
+  const request=prior?.request&&prior.request.answer===answer&&(prior.request.reason||'')===reason?prior.request:{repository:repo,pull_request:Number(pr),head_sha:sha,scope,answer,boundary_sig:review.finding.review.boundary_sig,check_id:review.check.id,finding_ref:review.finding.ref||review.finding.id,request_id:crypto.randomUUID(),...(reason?{reason}:{})};
   state.saves.set(scope,{request,busy:true});render();
-  await saveAndReturn(request,destination);
+  try{
+   await codeIntentFindingReviews.submit(request);
+   location.assign(destination);
+  }catch(error){
+   state.saves.set(scope,{request:error.status===409?null:request,busy:false});render();
+   window.alert(error.message);
+  }
  }
 
 
@@ -529,5 +552,13 @@ function setTheme(value){
 }
 setTheme(localStorage.getItem('codeintent-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'));
 theme.addEventListener('click',()=>{const next=document.documentElement.dataset.theme==='dark'?'light':'dark';localStorage.setItem('codeintent-theme',next);setTheme(next);});
+const signedIn=codeIntentFindingReviews.finishSignIn();
+const resumed=signedIn?.pending?.request,resumeTo=signedIn?.pending?.destination;
+if(resumed)state.drafts.set(resumed.scope,'yes');
 render();poll();resolveReturnComment();
+if(signedIn?.error)setTimeout(()=>window.alert(signedIn.error),0);
+else if(resumed&&/^https:\/\/github\.com\//.test(resumeTo||'')&&resumed.repository===repo&&resumed.head_sha===sha){
+ state.saves.set(resumed.scope,{request:resumed,busy:true});render();
+ saveYes(resumed,resumeTo,false);
+}
 })();
