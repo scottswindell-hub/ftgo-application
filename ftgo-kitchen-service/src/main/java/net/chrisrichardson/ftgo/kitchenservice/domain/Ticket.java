@@ -102,14 +102,7 @@ public class Ticket {
   }
 
   public List<TicketDomainEvent> readyForPickup() {
-    switch (state) {
-      case PREPARING:
-        this.state = TicketState.READY_FOR_PICKUP;
-        this.readyForPickupTime = LocalDateTime.now();
-        return singletonList(new TicketPreparationCompletedEvent());
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
+    return applyReadyForPickupInternal();
   }
 
   public List<TicketDomainEvent> pickedUp() {
@@ -204,6 +197,17 @@ public class Ticket {
       default:
         throw new UnsupportedStateTransitionException(state);
 
+    }
+  }
+
+  private List<TicketDomainEvent> applyReadyForPickupInternal() {
+    switch (state) {
+      case PREPARING:
+        this.state = TicketState.READY_FOR_PICKUP;
+        this.readyForPickupTime = LocalDateTime.now();
+        return singletonList(new TicketPreparationCompletedEvent());
+      default:
+        throw new UnsupportedStateTransitionException(state);
     }
   }
 }
