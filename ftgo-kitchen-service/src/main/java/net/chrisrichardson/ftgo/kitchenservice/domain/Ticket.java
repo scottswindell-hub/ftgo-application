@@ -200,7 +200,7 @@ public class Ticket {
     switch (state) {
       case REVISION_PENDING:
         this.state = this.previousState;
-        return singletonList(new TicketRevised());
+        return emptyList();
       default:
         throw new UnsupportedStateTransitionException(state);
 
