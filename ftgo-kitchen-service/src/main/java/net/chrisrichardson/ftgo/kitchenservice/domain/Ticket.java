@@ -93,6 +93,9 @@ public class Ticket {
   public List<TicketDomainEvent> preparing() {
     switch (state) {
       case ACCEPTED:
+        if (readyBy == null) {
+          throw new IllegalStateException("ticket " + id + " has no ready-by time");
+        }
         this.state = TicketState.PREPARING;
         this.preparingTime = LocalDateTime.now();
         return singletonList(new TicketPreparationStartedEvent());

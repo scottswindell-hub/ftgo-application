@@ -49,17 +49,17 @@ public class KitchenService {
   }
 
   public void confirmCreateTicket(Long ticketId) {
-    Ticket ro = ticketRepository.findById(ticketId)
+    Ticket pending = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
-    List<TicketDomainEvent> events = ro.confirmCreate();
-    domainEventPublisher.publish(ro, events);
+    List<TicketDomainEvent> events = pending.confirmCreate();
+    domainEventPublisher.publish(pending, events);
   }
 
   public void cancelCreateTicket(Long ticketId) {
-    Ticket ro = ticketRepository.findById(ticketId)
+    Ticket pending = ticketRepository.findById(ticketId)
             .orElseThrow(() -> new TicketNotFoundException(ticketId));
-    List<TicketDomainEvent> events = ro.cancelCreate();
-    domainEventPublisher.publish(ro, events);
+    List<TicketDomainEvent> events = pending.cancelCreate();
+    domainEventPublisher.publish(pending, events);
   }
 
 
