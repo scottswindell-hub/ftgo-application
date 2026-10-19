@@ -169,21 +169,7 @@ public class Order {
   }
 
   public List<OrderDomainEvent> confirmRevision(OrderRevision orderRevision) {
-    switch (state) {
-      case REVISION_PENDING:
-        LineItemQuantityChange licd = orderLineItems.lineItemQuantityChange(orderRevision);
-
-        orderRevision.getDeliveryInformation().ifPresent(newDi -> this.deliveryInformation = newDi);
-
-        if (orderRevision.getRevisedOrderLineItems() != null && orderRevision.getRevisedOrderLineItems().size() > 0) {
-          orderLineItems.updateLineItems(orderRevision);
-        }
-
-        this.state = APPROVED;
-        return singletonList(new OrderRevised(orderRevision, licd.currentOrderTotal, licd.newOrderTotal));
-      default:
-        throw new UnsupportedStateTransitionException(state);
-    }
+    return applyConfirmRevisionInternal(orderRevision);
   }
 
 
@@ -206,6 +192,24 @@ public class Order {
 
   public Long getConsumerId() {
     return consumerId;
+  }
+
+  private List<OrderDomainEvent> applyConfirmRevisionInternal(OrderRevision orderRevision) {
+    switch (state) {
+      case REVISION_PENDING:
+        LineItemQuantityChange licd = orderLineItems.lineItemQuantityChange(orderRevision);
+
+        orderRevision.getDeliveryInformation().ifPresent(newDi -> this.deliveryInformation = newDi);
+
+        if (orderRevision.getRevisedOrderLineItems() != null && orderRevision.getRevisedOrderLineItems().size() > 0) {
+          orderLineItems.updateLineItems(orderRevision);
+        }
+
+        this.state = APPROVED;
+        return singletonList(new OrderRevised(orderRevision, licd.currentOrderTotal, licd.newOrderTotal));
+      default:
+        throw new UnsupportedStateTransitionException(state);
+    }
   }
 }
 
