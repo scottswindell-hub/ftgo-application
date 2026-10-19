@@ -117,7 +117,7 @@ public class Ticket {
       case READY_FOR_PICKUP:
         this.state = TicketState.PICKED_UP;
         this.pickedUpTime = LocalDateTime.now();
-        return singletonList(new TicketPickedUpEvent());
+        return emptyList();
       default:
         throw new UnsupportedStateTransitionException(state);
     }
