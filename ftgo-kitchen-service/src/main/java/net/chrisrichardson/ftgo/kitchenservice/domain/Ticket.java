@@ -189,7 +189,7 @@ public class Ticket {
   public List<TicketDomainEvent> undoBeginReviseOrder() {
     switch (state) {
       case REVISION_PENDING:
-        this.state = this.previousState;
+        this.state = TicketState.ACCEPTED;
         return emptyList();
       default:
         throw new UnsupportedStateTransitionException(state);
