@@ -173,7 +173,7 @@ public class Order {
       case REVISION_PENDING:
         LineItemQuantityChange licd = orderLineItems.lineItemQuantityChange(orderRevision);
 
-        orderRevision.getDeliveryInformation().ifPresent(newDi -> this.deliveryInformation = newDi);
+        // Preserve the existing delivery information during revision.
 
         if (orderRevision.getRevisedOrderLineItems() != null && orderRevision.getRevisedOrderLineItems().size() > 0) {
           orderLineItems.updateLineItems(orderRevision);
