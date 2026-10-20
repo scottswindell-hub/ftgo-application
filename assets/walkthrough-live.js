@@ -434,7 +434,7 @@ function render(options={}){
  runContext.textContent=repo+(pr?' · Pull request #'+pr:'');
  const prUrl=pullRequestUrl();prBack.href=prUrl;prBack.hidden=prUrl==='#';
  document.title=`CodeIntent · ${repo||'review'}${pr?' #'+pr:''}`;
- if(state.error&&!state.status&&!state.packet){screen.innerHTML=`<div class="error-box"><b>CodeIntent could not load this run.</b><p>${esc(state.error)}</p><p><a href="/">Return to local PR runs</a></p></div>`;return;}
+ if(state.error&&!state.status&&!state.packet){screen.innerHTML=`<div class="error-box"><b>CodeIntent could not load this run.</b><p>${esc(state.error)}</p><p><a href="/">Return to local PR runs</a></p></div>`;codeIntentCustomerLanguage.sanitize(screen);return;}
  if(state.desc){
   const route=new URLSearchParams(location.search);
   const item=walkthroughPipeline.descriptionItem(items(),state.packet,state.summary,checks(),route.get('check'),route.get('issue'));
@@ -451,6 +451,7 @@ function render(options={}){
  if(state.status?.llm_review){
   screen.insertAdjacentHTML('beforeend',`<section class="llm-fallback-review">${llmErrorReview.render(state.status.llm_review,state.status.checks)}</section>`);
  }
+ codeIntentCustomerLanguage.sanitize(screen);
  assessmentResize?.disconnect();
  const assessment=screen.querySelector('.desc-assessment');
  const desc=screen.querySelector('.desc-page');
