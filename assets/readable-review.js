@@ -83,6 +83,12 @@ function scopedPatchComparison(packet,file,method,flows){
   qualification:scope==='method'?'Changed hunks in the recorded method.':'Changed hunks matching the recorded operations; these may belong to a shared helper.'};
 }
 
+function dedupeFacts(entries){
+ // A merged change links several flows that can carry the identical before/after fact
+ // (e.g. one method reached by several sagas). Keep one copy so the intent is not repeated.
+ const seen=new Set();
+ return (entries||[]).filter(entry=>{const key=JSON.stringify(entry);if(seen.has(key))return false;seen.add(key);return true;});
+}
 function flowFacts(flow,side){
  const values=[];
  for(const change of flow?.fact_changes||[]){
@@ -164,7 +170,7 @@ function modelFromSemantics(packet,summary){
    after:row.behavior_after,
    summary:row.semantic_consequence,
    detailSummary:[row.semantic_consequence,row.user_or_system_effect].filter(Boolean).join(' '),
-   intentBefore:related.flatMap(value=>flowFacts(value,'before')),intentAfter:related.flatMap(value=>flowFacts(value,'after')),
+   intentBefore:dedupeFacts(related.flatMap(value=>flowFacts(value,'before'))),intentAfter:dedupeFacts(related.flatMap(value=>flowFacts(value,'after'))),
    connections:paths.map(path=>({title:path.customer_outcome||path.workflow_name||path.workflow_id,
     detail:path.obligation_statement||path.obligation_phase||'Accepted workflow connection'})),
    comparison,reviewType:reviewType({objective}),
@@ -256,8 +262,8 @@ function modelFromGovernedFlows(packet,checks){
    before:'The accepted baseline recorded the governed boundary behavior shown below.',
    after:unresolved?'The available evidence does not establish whether this change preserves the accepted requirement.':violated?'This pull request changes that governed boundary and the recorded judgment reports a violation.':'The recorded judgment reports that this pull request preserves the governed boundary.',
    summary:unresolved?'The analysis completed with an unresolved judgment. Review the evidence for this exact claim.':violated?'The deterministic boundary comparison and recorded judgment establish a governed semantic violation.':'The deterministic boundary comparison and recorded judgment establish preservation.',
-   detailSummary:'',intentBefore:flows.flatMap(value=>flowFacts(value,'before')),
-   intentAfter:flows.flatMap(value=>flowFacts(value,'after')),connections:[],
+   detailSummary:'',intentBefore:dedupeFacts(flows.flatMap(value=>flowFacts(value,'before'))),
+   intentAfter:dedupeFacts(flows.flatMap(value=>flowFacts(value,'after'))),connections:[],
    comparison:patchComparison(packet,file),reviewType:objective?'Business':'Behavior',
    groundingLabel:'RECORDED GOVERNED BOUNDARY JUDGMENT',
    qualification:'Projected directly from the digest-pinned intent-flow facts and recorded governed-boundary judgment; no optional semantic prose was available.'};
