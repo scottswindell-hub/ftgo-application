@@ -44,9 +44,7 @@ public class Money {
 
   @Override
   public int hashCode() {
-    return new HashCodeBuilder(17, 37)
-            .append(amount)
-            .toHashCode();
+    return amount.hashCode();
   }
 
   @Override
