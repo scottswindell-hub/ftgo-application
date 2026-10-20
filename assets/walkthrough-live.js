@@ -385,6 +385,7 @@ function detailScreen(item){
  const resolution=item.resolution?`<div class="rule"><small>HOW TO RESOLVE IT</small><p>${esc(item.resolution)}</p></div>`:'';
  const interpretation=`<div class="summary"><small>${esc(item.groundingLabel||'RECORDED PIPELINE EVIDENCE')}</small><p>${esc(item.detailSummary||item.summary)}</p></div>`;
  const standard=item.findings?.[0]?.kind==='standard'?item.findings[0]:null;
+ const governance=!standard&&Boolean(item.objective);
  const question=standard?`Accept this code as an exception to ${standard.rule_id}?`:'Accept this governed change?';
  // A run whose deterministic checks did not finish never goes in, so its findings take no answers.
  const answersClosed=Boolean(state.status?.llm_review);
@@ -398,9 +399,15 @@ function detailScreen(item){
  const reported=review?.decision==='unresolved'?`<div class="rule incorrect-reported"><small>REJECTED · WILL BE FLAGGED ON FUTURE PRS UNTIL ADJUDICATED</small><p>${esc(review.reason||'No reason was given.')}${review.actor?` · ${esc(review.actor)}`:''}</p></div>`:'';
  const selector=targets.length>1?`<label>Finding <select data-review-scope><option value="">Choose a finding</option>${targets.map(t=>`<option value="${esc(t.finding.review.scope)}" ${target===t||target?.finding.review.scope===t.finding.review.scope?'selected':''}>${esc(t.finding.title||t.finding.name||t.finding.id||t.finding.ref)}</option>`).join('')}</select></label>`:'';
 
- return `<div class="ci desc-page${standard?' standard-page':''}"><article class="tile">
+ return `<div class="ci desc-page${standard?' standard-page':governance?' governance-page':''}"><article class="tile">
   ${standard?`<div class="tile-head"><h3>${esc(item.title)}</h3></div>
   <div class="summary standard-intro"><p><b>Code standard violation:</b> ${esc(item.detailSummary||item.summary)}</p>${item.resolution?`<p class="standard-resolution"><b>How to resolve it:</b> ${esc(item.resolution)}</p>`:''}</div>
+  ${standardCode(item)}
+  ${findingOrigins(item)}`:governance?`<div class="tile-head"><h3>${esc(item.title)}</h3></div>
+  <div class="governance-intro"><p><b>Violated constraint:</b> ${esc(item.objective)}</p></div>
+  <div class="governance-consequences"><p><b>Consequences:</b> ${esc(item.detailSummary||item.summary)}</p></div>
+  <div class="ba"><div><small>Before</small>${esc(item.before)}</div><div class="after"><small>With this PR</small>${esc(item.after)}</div></div>
+  <div class="diffs governance-intent"><section class="pane"><header><h4>Intent</h4></header>${intent.length?`<pre>${lines(intent)}</pre>`:'<p class="evidence-empty">No intent comparison recorded for this item.</p>'}</section></div>
   ${standardCode(item)}
   ${findingOrigins(item)}`:`  <div class="tile-head"><h3>${esc(item.title)}</h3>${typeIcon(item.reviewType||'Behavior')}</div>
   <div class="tile-sub"><code>${esc(item.method||short(item.file))}</code></div>
