@@ -506,7 +506,8 @@ jobs:
               failures=[c for c in visible if c.get('state') in {'failed','error'}]
               all_reviewed=bool(failures) and all(reviewed(c) for c in failures)
               needs_review=((verdict!='PASS' and not all_reviewed and not hidden) or any(not reviewed(c) for c in failures) or any(review_pending(c) for c in visible)
-                            or (not shadow and status in {'blocked','review_required','incomplete','evidence_needed'}))
+                            or (verdict!='PASS' and not shadow
+                                and status in {'blocked','review_required','incomplete','evidence_needed'}))
               label=('⏳ Running' if document.get('state')!='completed' else
                      '⚠️ LACKS_DETERMINISTIC_EVIDENCE' if needs_review and verdict=='UNKNOWN' else
                      '❌ Needs Review' if needs_review else '✅ Reviewed' if all_reviewed else 'Review results' if hidden else '✅ Passed')
@@ -606,6 +607,22 @@ jobs:
               gh api --method POST "repos/$PR_FULL_REPO/statuses/$PR_SHA" \
                 -f state="$review_state" -f context='CodeIntent / Finding review' \
                 -f description="$review_description" -f target_url="$DASHBOARD_URL" >/dev/null
+              # Keep review attention visible on the repository's /pulls page without
+              # turning this advisory check into a merge blocker. The comment above is
+              # the canonical human-facing summary, so use its completed headline to
+              # reconcile (and remove stale instances of) the matching PR label.
+              review_label='governance: needs review'
+              encoded_review_label=$(jq -rn --arg value "$review_label" '$value | @uri')
+              gh api --method POST "repos/$PR_FULL_REPO/labels" \
+                -f name="$review_label" -f color='FBCA04' \
+                -f description='CodeIntent findings need human review' >/dev/null 2>&1 || true
+              if grep -Eq '^### CodeIntent checks -- (❌ Needs Review|⚠️ LACKS_DETERMINISTIC_EVIDENCE)$' /tmp/codeintent-comment.md; then
+                gh api --method POST "repos/$PR_FULL_REPO/issues/$PR_NUMBER/labels" \
+                  -f "labels[]=$review_label" >/dev/null
+              else
+                gh api --method DELETE \
+                  "repos/$PR_FULL_REPO/issues/$PR_NUMBER/labels/$encoded_review_label" >/dev/null 2>&1 || true
+              fi
               acceptance=$(jq -r '.acceptance.status // "legacy"' <<<"$document")
               mode=$(jq -r '.acceptance.mode // "shadow"' <<<"$document")
               # A completed run cannot gain evidence by keeping a runner alive.
