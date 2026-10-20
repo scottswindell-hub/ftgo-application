@@ -372,7 +372,7 @@ function detailScreen(item){
  const save=state.saves.get(target?.finding.review.scope);
  const review=target?.finding.review,reason=currentReason(review);
  // A No reports the finding as incorrect; the optional reason travels with it to Holonic's review queue.
- const reasonBox=answer==='no'&&review?`<label class="incorrect-reason"><span>Why is this change not acceptable? <small>Optional · recorded with the pinned evidence</small></span><textarea data-review-reason maxlength="500" rows="2" placeholder="For example: this breaks the accepted cancellation flow" ${save?.busy?'disabled':''}>${esc(reason)}</textarea></label>`:'';
+ const reasonBox='';   // Reject-reason textarea removed; a No records without a free-text reason.
  const reported=review?.decision==='unresolved'?`<div class="rule incorrect-reported"><small>REJECTED · WILL BE FLAGGED ON FUTURE PRS UNTIL ADJUDICATED</small><p>${esc(review.reason||'No reason was given.')}${review.actor?` · ${esc(review.actor)}`:''}</p></div>`:'';
  const selector=targets.length>1?`<label>Finding <select data-review-scope><option value="">Choose a finding</option>${targets.map(t=>`<option value="${esc(t.finding.review.scope)}" ${target===t||target?.finding.review.scope===t.finding.review.scope?'selected':''}>${esc(t.finding.title||t.finding.name||t.finding.id||t.finding.ref)}</option>`).join('')}</select></label>`:'';
 
