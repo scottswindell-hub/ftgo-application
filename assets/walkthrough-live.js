@@ -351,7 +351,7 @@ function findingOrigins(item){
    static:'Whether the code breaks the rule was decided by a deterministic static check, not a model.',
    always_flag:'Whether the code breaks the rule was decided by a fixed pattern, not a model.'}[finding.detected_by]
    ||'This run did not record whether the judge model or a static check raised the finding; compare the code with the rule.';
-  return `<details class="provenance" open><summary>Where this comes from</summary><dl><dt>Set by people</dt><dd>${esc(people)}</dd><dt>Derived from code</dt><dd>${esc(code.join(' '))}</dd><dt>Model wording</dt><dd>${esc('None. The explanation is assembled from the rule and its guidance. '+decided)}</dd></dl></details>`;
+  return `<section class="provenance"><h4>Where this comes from</h4><dl><dt>Set by people</dt><dd>${esc(people)}</dd><dt>Derived from code</dt><dd>${esc(code.join(' '))}</dd><dt>Model wording</dt><dd>${esc('None. The explanation is assembled from the rule and its guidance. '+decided)}</dd></dl></section>`;
  }
  if(item.intentBefore?.length||item.intentAfter?.length)code.push(`The intent facts were extracted by deterministic analysis of the baseline (${base||'unknown'}) and this PR (${head}).`);
  if(item.comparison?.before?.text!=null)code.push(`The code excerpt is ${item.comparison.scope==='method'?'the changed hunks of the recorded method':'taken'} from the digest-verified PR patch.`);
@@ -367,12 +367,17 @@ function currentReason(review){
  if(!review)return '';
  return state.reasons.get(review.scope)??(review.decision==='unresolved'?review.reason||'':'');
 }
-// The violated rule as people wrote it: its requirement, full text, the question its category asks,
-// and how this finding was raised. Every field comes from the rule file or the check result.
-function standardRule(finding){
- const how={judge:'Judged against the rule text by the coding-standards judge',static:`Deterministic static check${finding.static_check?` · ${finding.static_check}`:''}`,always_flag:'A pattern this rule always flags'}[finding.detected_by];
- const meta=[finding.severity&&`Severity ${finding.severity}`,[finding.category_parent,finding.category].filter(Boolean).join(' · '),finding.owner&&`Owner ${finding.owner}`,how&&`How it was found: ${how}`].filter(Boolean);
- return `<div class="rule standard-rule"><small>REPOSITORY RULE · ${esc(finding.rule_id)}${finding.rule_version?` v${esc(finding.rule_version)}`:''}</small><p><b>${esc(finding.name||finding.title)}</b></p>${finding.rule_text?`<p>${esc(finding.rule_text)}</p>`:''}${finding.category_question?`<p class="standard-question">Question this rule answers: ${esc(finding.category_question)}</p>`:''}${meta.length?`<p class="standard-meta">${esc(meta.join(' · '))}</p>`:''}</div>`;
+// Number only source lines anchored by a recorded patch hunk; excerpts without an anchor stay unnumbered.
+function standardCode(item){
+ let before=null,after=null;
+ const rows=sourceLines(item).map(([mark,text])=>{
+  const hunk=String(text).match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+  if(hunk){before=Number(hunk[1]);after=Number(hunk[2]);return `<div class="standard-diff-line"><span class="line-no"></span><span class="line-no"></span><code>${esc(text)}</code></div>`;}
+  const old=mark!=='+'&&before!=null?before++:'',next=mark!=='-'&&after!=null?after++:'';
+  return `<div class="standard-diff-line ${mark==='+'?'a':mark==='-'?'d':''}"><span class="line-no">${old}</span><span class="line-no">${next}</span><code>${esc((mark||' ')+' '+text)}</code></div>`;
+ }).join('');
+ const available=item.comparison?.before?.text!=null&&item.comparison?.after?.text!=null;
+ return `<div class="diffs source-only"><section class="pane"><header><h4>Code</h4><span>${esc(item.file)}</span></header>${available?`<div class="standard-numbered-diff">${rows}</div>`:`<p class="evidence-empty">${esc(item.comparison?.reason||'Source comparison unavailable. Open Source evidence for available patches.')}</p>`}</section></div>`;
 }
 function detailScreen(item){
  const answer=decision(item.id),intent=diffLines(intentLines(item.intentBefore),intentLines(item.intentAfter));
@@ -393,10 +398,13 @@ function detailScreen(item){
  const reported=review?.decision==='unresolved'?`<div class="rule incorrect-reported"><small>REJECTED · WILL BE FLAGGED ON FUTURE PRS UNTIL ADJUDICATED</small><p>${esc(review.reason||'No reason was given.')}${review.actor?` · ${esc(review.actor)}`:''}</p></div>`:'';
  const selector=targets.length>1?`<label>Finding <select data-review-scope><option value="">Choose a finding</option>${targets.map(t=>`<option value="${esc(t.finding.review.scope)}" ${target===t||target?.finding.review.scope===t.finding.review.scope?'selected':''}>${esc(t.finding.title||t.finding.name||t.finding.id||t.finding.ref)}</option>`).join('')}</select></label>`:'';
 
- return `<div class="ci desc-page"><article class="tile">
-  <div class="tile-head"><h3>${esc(item.title)}</h3>${typeIcon(item.reviewType||'Behavior')}</div>
+ return `<div class="ci desc-page${standard?' standard-page':''}"><article class="tile">
+  ${standard?`<div class="tile-head"><h3>${esc(item.title)}</h3></div>
+  <div class="summary standard-intro"><p><b>Code standard violation:</b> ${esc(item.detailSummary||item.summary)}</p>${item.resolution?`<p class="standard-resolution"><b>How to resolve it:</b> ${esc(item.resolution)}</p>`:''}</div>
+  ${standardCode(item)}
+  ${findingOrigins(item)}`:`  <div class="tile-head"><h3>${esc(item.title)}</h3>${typeIcon(item.reviewType||'Behavior')}</div>
   <div class="tile-sub"><code>${esc(item.method||short(item.file))}</code></div>
-  ${item.objective?`<div class="rule"><small>ACCEPTED CONSTRAINT</small><p>${esc(item.objective)}</p></div>`:standard?standardRule(standard):''}
+  ${item.objective?`<div class="rule"><small>ACCEPTED CONSTRAINT</small><p>${esc(item.objective)}</p></div>`:''}
   ${sourceLinks(item)}
   <div class="ba"><div><small>${esc(item.beforeLabel||'BEFORE')}</small>${esc(item.before)}</div><div class="after"><small>${esc(item.afterLabel||'WITH THIS PR')}</small>${esc(item.after)}</div></div>
   ${interpretation}
@@ -405,11 +413,12 @@ function detailScreen(item){
    ${standard?'':`<section class="pane"><header><b>Intent</b><span>${esc(label(item.concept))}</span></header>${intent.length?`<pre>${lines(intent)}</pre>`:'<p class="evidence-empty">No intent comparison recorded for this item.</p>'}</section>`}
    <section class="pane"><header><b>Code</b><span>${esc(short(item.file))}</span></header>${item.comparison?.before?.text!=null&&item.comparison?.after?.text!=null?`<pre>${lines(sourceLines(item))}</pre>${item.comparison.complete?'':`<p class="evidence-empty">${esc(item.comparison.qualification||'Recorded source excerpt; open more evidence for context.')}</p>`}`:`<p class="evidence-empty">${esc(item.comparison?.reason||'No source comparison recorded for this item. Check the source evidence view for available patches.')}</p>`}</section>
   </div>
+`}
   ${codeIntentContractTrace.contractMarkup(item,state.packet,repo,sha)}
   ${codeIntentFindingImpact.findingImpactMarkup(item,state.packet)}
   ${codeIntentRunDetails.findingGapsMarkup(item,state.packet)}
   ${answersClosed?closedBar:item.status==='unknown'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>LACKS_DETERMINISTIC_EVIDENCE. Review the analysis gap; assessments are unavailable.</b></div>':item.status==='watch'?'<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>This is informational; no response is required.</b></div>':`<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><b>${esc(question)}</b>${selector}<button type="button" class="choice yes" data-act="yes" ${target&&!save?.busy?'':'disabled'} aria-pressed="${answer==='yes'}">${esc(yes)}</button><button type="button" class="choice no" data-act="no" ${target&&!save?.busy?'':'disabled'} aria-pressed="${answer==='no'}">${esc(no)}</button>${reasonBox}<button type="button" class="choice return-github" data-act="return-github" ${answer&&target&&!save?.busy&&returnToCommentUrl()?'':'disabled'} aria-busy="${!!save?.busy}"><span class="return-spinner" aria-hidden="true"><img src="assets/checks-running.gif" width="18" height="18" alt=""></span><span>Return to Github</span></button></div>`}
-  ${reported}<section class="compact-evidence" aria-labelledby="recorded-evidence-heading"><h4 id="recorded-evidence-heading">Recorded evidence</h4><div id="recorded-evidence">${resolution}${connections}${reviewExplorer.pane(item,state.packet,state.summary,checks(),{tab:state.tab,node:state.node,full:state.full,file:state.evidenceFile,methods:state.methods})}</div></section>
+  ${reported}<section class="compact-evidence" ${standard?'aria-label="Evidence views"':'aria-labelledby="recorded-evidence-heading"'}>${standard?'':'<h4 id="recorded-evidence-heading">Recorded evidence</h4>'}<div id="recorded-evidence">${standard?'':resolution}${connections}${reviewExplorer.pane(item,state.packet,state.summary,checks(),{tab:state.tab,node:state.node,full:state.full,file:state.evidenceFile,methods:state.methods})}</div></section>
  </article></div>`;
 }
 function runDetails(){return codeIntentRunDetails.runDetailsMarkup(state.status,state.packet,repo,{open:state.runDetailsOpen});}

@@ -120,8 +120,8 @@ function pane(item,packet,summary,checks,options){
  const scope=runScope?`<div class="rx-scope"><p><b>Run-level analysis gap.</b> This check has no single source location. Browse changed-file context below; it is not a finding attributed to the selected file.</p><label>Changed file <select data-evidence-file>${files.map(f=>`<option value="${esc(f)}" ${f===file?'selected':''}>${esc(f)}</option>`).join('')}</select></label></div>`:'';
  // A coding-standards finding has no governed boundary of its own: the holon map is intent-only.
  const standard=Boolean(original.standard||original.findings?.[0]?.kind==='standard');
- const shownTabs=standard?tabs.filter(([id])=>id!=='obj'):tabs;
- const tab=shownTabs.some(([id])=>id===options.tab)?options.tab:standard?'src':'obj';let body='';
+ const shownTabs=standard?tabs.filter(([id])=>id!=='obj'&&id!=='ask'):tabs;
+ const tab=shownTabs.some(([id])=>id===options.tab)?options.tab:standard?'graph':'obj';let body='';
  if(tab==='graph')body=graphPane(item,packet,options);
  if(tab==='path'){
   const rows=linked.flatMap(({workflow,obligation,evidence})=>evidence.map(e=>`<tr><td>${esc(workflow.name)}<br>${esc(obligation.phase)} · ${esc(e.source?.owner)}</td><td><pre>${json(e.baseline_parameters)}</pre></td><td><pre>${e.replacement_parameters?.length?json(e.replacement_parameters):'No replacement parameters recorded; this does not prove the behavior was removed.'}</pre>${esc(e.classification)}</td></tr>`));
