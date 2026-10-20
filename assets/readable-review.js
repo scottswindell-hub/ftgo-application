@@ -284,6 +284,9 @@ function reviewFindings(checks,includeAdvisory=false){
    file:finding.file||'',method:finding.unit||'',line:finding.line||'',
    basis:[finding.category_parent,finding.category,finding.rule_id].filter(Boolean).join(' · '),
    category:finding.category||'',category_parent:finding.category_parent||'',rule_id:finding.rule_id||'',
+   rule_version:finding.rule_version||'',name:finding.name||'',guidance:finding.guidance||'',
+   rule_text:finding.rule_text||'',category_question:finding.category_question||'',
+   severity:finding.severity||'',owner:finding.owner||'',detected_by:finding.detected_by||'',static_check:finding.static_check||'',
    watchOnly:finding.watchOnly||finding.band==='fyi',informational:finding.band==='fyi',ref:finding.ref||'',decision:finding.decision||''});
  }
  const tests=(checks||[]).find(check=>check.id==='improper_tests');
@@ -301,6 +304,35 @@ function reviewFindings(checks,includeAdvisory=false){
  return rows;
 }
 
+// How a coding-standards finding was raised, in plain words.
+function standardDetection(finding){
+ if(finding.detected_by==='static')return `a deterministic static check${finding.static_check?` (${finding.static_check})`:''}`;
+ if(finding.detected_by==='always_flag')return 'a pattern this rule always flags';
+ if(finding.detected_by==='judge')return 'the coding-standards judge, which read the changed method against the rule';
+ return 'the coding-standards check';
+}
+// A coding-standards finding uses the same review page as an intent change, filled from the rule and the
+// finding: no intent facts, and no wording borrowed from an intent item that touches the same method.
+function standardItem(packet,checks,finding,target,interpretation){
+ const where=shortMethod(finding.method)||String(finding.file||'').split('/').pop()||'This code';
+ const line=finding.line?` (line ${finding.line})`:'';
+ const how=standardDetection(finding);
+ const summary=interpretation.summary||`${where} does not follow the rule "${String(finding.name||finding.title||'').replace(/\.$/,'')}". ${finding.guidance||''}`.trim();
+ return {id:finding.id,kind:finding.watchOnly?'change':'constraint',status:finding.watchOnly?'watch':'finding',standard:true,
+  title:finding.title,concept:'Repository standard',method:finding.method,methodRef:target?.methodRef||finding.method||'',
+  file:finding.file,line:finding.line||'',owner:finding.owner||'',objective:'',
+  beforeLabel:'THE RULE REQUIRES',afterLabel:'WITH THIS PR',
+  before:String(finding.name||finding.title||'This repository standard.').replace(/\.?$/,'.'),
+  after:`${where}${line} does not meet it. Raised by ${how}.`,
+  summary,detailSummary:interpretation.review||summary,resolution:finding.guidance||'',
+  intentBefore:[],intentAfter:[],connections:target?.connections||[],
+  comparison:target?.comparison||scopedPatchComparison(packet,finding.file,finding.method,[])||patchComparison(packet,finding.file),
+  findings:[finding],relatedBehaviorId:target?.id||null,reviewType:reviewType(finding),
+  check:(checks||[]).find(check=>check.id==='coding_standards')||null,
+  groundingLabel:'RULE FINDING · CODING-STANDARDS CHECK',
+  qualification:`Raised by ${how}. The rule and its guidance were written by people in this repository's coding standards; this explanation is assembled from them, not written by a model.`};
+}
+
 function reviewFindingItems(packet,summary,items,checks,includeAdvisory=false){
  const interpretations=new Map((summary?.intent_semantics?.finding_explanations||[])
   .map(row=>[row.finding_id,{summary:row.summary||row.explanation,review:row.review||row.explanation}]));
@@ -311,6 +343,7 @@ function reviewFindingItems(packet,summary,items,checks,includeAdvisory=false){
   const target=finding.kind==='standard'?(candidates.find(item=>method&&shortMethod(item.method)===method)
     ||(candidates.length===1?candidates[0]:null)):null;
   const interpretation=interpretations.get(finding.findingKey)||{};
+  if(finding.kind==='standard'){projected.push(standardItem(packet,checks,finding,target,interpretation));continue;}
   const plain=interpretation.summary||target?.summary||finding.title;
   const fallback=finding.kind==='test'?[finding.summary,finding.basis].filter(Boolean).join(' '):plain;
   projected.push({id:finding.id,kind:finding.kind==='standard'&&!finding.watchOnly?'constraint':'change',status:finding.watchOnly?'watch':'finding',title:finding.title,
@@ -474,7 +507,7 @@ function detailMarkup(item,state){
  return `<button type="button" class="rr-back" data-rr-back>← All changes</button><article class="rr-detail">
   <header><div><h2>${escapeHtml(item.title)}</h2><p><code>${escapeHtml(item.method||shortFile(item.file))}</code></p></div><span class="rr-badge ${item.status}">${escapeHtml(label(item))}</span></header>
   ${item.objective?`<section class="rr-objective"><small>ACCEPTED CONSTRAINT</small><b>${escapeHtml(item.objective)}</b></section>`:''}
-  <div class="rr-before-after"><section><small>BEFORE</small><p>${escapeHtml(item.before)}</p></section><section><small>WITH THIS PR</small><p>${escapeHtml(item.after)}</p></section></div>
+  <div class="rr-before-after"><section><small>${escapeHtml(item.beforeLabel||'BEFORE')}</small><p>${escapeHtml(item.before)}</p></section><section><small>${escapeHtml(item.afterLabel||'WITH THIS PR')}</small><p>${escapeHtml(item.after)}</p></section></div>
   <section class="rr-explanation"><small>${escapeHtml(item.groundingLabel||'ASK CODE INTENT')}</small><p>${escapeHtml(item.summary)}</p></section>
   <div class="rr-evidence ${item.intentBefore?.length||item.intentAfter?.length?'':'source-only'}">${item.intentBefore?.length||item.intentAfter?.length?`<section><header><b>Intent</b><span>${escapeHtml(words(item.concept))}</span></header>${comparisonMarkup(item.intentBefore,item.intentAfter,intentText)}</section>`:''}
   <section><header><b>Code</b><span title="${escapeHtml(item.file)}">${escapeHtml(shortFile(item.file))}</span></header>${comparisonMarkup(codeText(item.comparison,'before'),codeText(item.comparison,'after'),valueText)}</section></div>
@@ -520,8 +553,7 @@ function advisoryDescription(packet,summary,check,finding){
   row.ref&&row.ref===finding.ref&&row.rule_id===finding.rule_id&&row.file===finding.file&&row.method===finding.unit));
  if(!item)return null;
  return {...item,title:`Informational check: ${shortMethod(finding.unit)||String(finding.file||'').split('/').pop()}`,
-  before:'This observation does not establish a change from the baseline.',
-  after:`The current run classified this observation in ${finding.unit||finding.file} as informational.`,
+  after:`The current run classified this observation in ${finding.unit||finding.file} as informational; no response is required.`,
   summary:`The checker raised an informational concern about ${finding.category||'this code'}.`,
   detailSummary:`Review guidance: ${finding.guidance||'Inspect the recorded source below.'}`};
 }

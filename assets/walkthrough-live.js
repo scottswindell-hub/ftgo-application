@@ -344,6 +344,15 @@ function findingOrigins(item){
  }
  const base=String(state.packet?.baseline_commit||'').slice(0,12),head=sha.slice(0,12);
  const code=[];
+ if(finding?.kind==='standard'){
+  code.push(`The finding is the recorded result of the coding-standards check on this commit (${head}), which checked ${finding.method||'the changed code'} against rule ${finding.rule_id}.`);
+  if(item.comparison?.before?.text!=null)code.push(`The code excerpt is ${item.comparison.scope==='method'?'the changed hunks of that method':'taken'} from the digest-verified PR patch.`);
+  const decided={judge:'Whether the code breaks the rule was decided by the coding-standards judge model. It can be wrong; compare the code with the rule.',
+   static:'Whether the code breaks the rule was decided by a deterministic static check, not a model.',
+   always_flag:'Whether the code breaks the rule was decided by a fixed pattern, not a model.'}[finding.detected_by]
+   ||'This run did not record whether the judge model or a static check raised the finding; compare the code with the rule.';
+  return `<details class="provenance" open><summary>Where this comes from</summary><dl><dt>Set by people</dt><dd>${esc(people)}</dd><dt>Derived from code</dt><dd>${esc(code.join(' '))}</dd><dt>Model wording</dt><dd>${esc('None. The explanation is assembled from the rule and its guidance. '+decided)}</dd></dl></details>`;
+ }
  if(item.intentBefore?.length||item.intentAfter?.length)code.push(`The intent facts were extracted by deterministic analysis of the baseline (${base||'unknown'}) and this PR (${head}).`);
  if(item.comparison?.before?.text!=null)code.push(`The code excerpt is ${item.comparison.scope==='method'?'the changed hunks of the recorded method':'taken'} from the digest-verified PR patch.`);
  if(finding)code.push(`The finding itself is the recorded result of the ${finding.kind==='test'?'test-quality':'coding-standards'} check on this commit.`);
@@ -358,16 +367,24 @@ function currentReason(review){
  if(!review)return '';
  return state.reasons.get(review.scope)??(review.decision==='unresolved'?review.reason||'':'');
 }
+// The violated rule as people wrote it: its requirement, full text, the question its category asks,
+// and how this finding was raised. Every field comes from the rule file or the check result.
+function standardRule(finding){
+ const how={judge:'Judged against the rule text by the coding-standards judge',static:`Deterministic static check${finding.static_check?` · ${finding.static_check}`:''}`,always_flag:'A pattern this rule always flags'}[finding.detected_by];
+ const meta=[finding.severity&&`Severity ${finding.severity}`,[finding.category_parent,finding.category].filter(Boolean).join(' · '),finding.owner&&`Owner ${finding.owner}`,how&&`How it was found: ${how}`].filter(Boolean);
+ return `<div class="rule standard-rule"><small>REPOSITORY RULE · ${esc(finding.rule_id)}${finding.rule_version?` v${esc(finding.rule_version)}`:''}</small><p><b>${esc(finding.name||finding.title)}</b></p>${finding.rule_text?`<p>${esc(finding.rule_text)}</p>`:''}${finding.category_question?`<p class="standard-question">Question this rule answers: ${esc(finding.category_question)}</p>`:''}${meta.length?`<p class="standard-meta">${esc(meta.join(' · '))}</p>`:''}</div>`;
+}
 function detailScreen(item){
  const answer=decision(item.id),intent=diffLines(intentLines(item.intentBefore),intentLines(item.intentAfter));
  const connections=item.connections?.length?`<div class="holon"><b>Connected governed outcomes</b><ul>${item.connections.map(connection=>`<li><b>${esc(connection.title)}</b> · ${esc(connection.detail)}</li>`).join('')}</ul></div>`:'';
  const resolution=item.resolution?`<div class="rule"><small>HOW TO RESOLVE IT</small><p>${esc(item.resolution)}</p></div>`:'';
  const interpretation=`<div class="summary"><small>${esc(item.groundingLabel||'RECORDED PIPELINE EVIDENCE')}</small><p>${esc(item.detailSummary||item.summary)}</p></div>`;
- const question='Accept this governed change?';
+ const standard=item.findings?.[0]?.kind==='standard'?item.findings[0]:null;
+ const question=standard?`Accept this code as an exception to ${standard.rule_id}?`:'Accept this governed change?';
  // A run whose deterministic checks did not finish never goes in, so its findings take no answers.
  const answersClosed=Boolean(state.status?.llm_review);
  const closedBar=`<div class="ask desc-assessment" role="region" aria-label="Intent assessment"><span class="merge-blocked" role="status">${esc(llmErrorReview.BLOCKED)}</span><b>No answer is taken: deterministic verification did not finish for this run.</b></div>`;
- const yes='Accept — this change is intended',no='Reject — not acceptable';
+ const yes=standard?'Accept — allow it here':'Accept — this change is intended',no=standard?'Reject — the code must change':'Reject — not acceptable';
  const target=reviewTarget(item),targets=reviewTargets(item);
  const save=state.saves.get(target?.finding.review.scope);
  const review=target?.finding.review,reason=currentReason(review);
@@ -379,13 +396,13 @@ function detailScreen(item){
  return `<div class="ci desc-page"><article class="tile">
   <div class="tile-head"><h3>${esc(item.title)}</h3>${typeIcon(item.reviewType||'Behavior')}</div>
   <div class="tile-sub"><code>${esc(item.method||short(item.file))}</code></div>
-  ${item.objective?`<div class="rule"><small>ACCEPTED CONSTRAINT</small><p>${esc(item.objective)}</p></div>`:item.findings?.[0]?.kind==='standard'?`<div class="rule"><small>REPOSITORY RULE · ${esc(item.findings[0].rule_id)}</small><p>${esc(item.findings[0].title)}${item.findings[0].summary?`. ${esc(item.findings[0].summary)}`:''}</p></div>`:''}
+  ${item.objective?`<div class="rule"><small>ACCEPTED CONSTRAINT</small><p>${esc(item.objective)}</p></div>`:standard?standardRule(standard):''}
   ${sourceLinks(item)}
-  <div class="ba"><div><small>BEFORE</small>${esc(item.before)}</div><div class="after"><small>WITH THIS PR</small>${esc(item.after)}</div></div>
+  <div class="ba"><div><small>${esc(item.beforeLabel||'BEFORE')}</small>${esc(item.before)}</div><div class="after"><small>${esc(item.afterLabel||'WITH THIS PR')}</small>${esc(item.after)}</div></div>
   ${interpretation}
   ${findingOrigins(item)}
-  <div class="diffs">
-   <section class="pane"><header><b>Intent</b><span>${esc(label(item.concept))}</span></header>${intent.length?`<pre>${lines(intent)}</pre>`:'<p class="evidence-empty">No intent comparison recorded for this item.</p>'}</section>
+  <div class="diffs${standard?' source-only':''}">
+   ${standard?'':`<section class="pane"><header><b>Intent</b><span>${esc(label(item.concept))}</span></header>${intent.length?`<pre>${lines(intent)}</pre>`:'<p class="evidence-empty">No intent comparison recorded for this item.</p>'}</section>`}
    <section class="pane"><header><b>Code</b><span>${esc(short(item.file))}</span></header>${item.comparison?.before?.text!=null&&item.comparison?.after?.text!=null?`<pre>${lines(sourceLines(item))}</pre>${item.comparison.complete?'':`<p class="evidence-empty">${esc(item.comparison.qualification||'Recorded source excerpt; open more evidence for context.')}</p>`}`:`<p class="evidence-empty">${esc(item.comparison?.reason||'No source comparison recorded for this item. Check the source evidence view for available patches.')}</p>`}</section>
   </div>
   ${codeIntentContractTrace.contractMarkup(item,state.packet,repo,sha)}

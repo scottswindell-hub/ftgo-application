@@ -168,6 +168,7 @@ details.quiet summary{cursor:pointer;color:var(--muted)}details.quiet summary b{
 .rule{margin:0 16px 10px;padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:var(--sunk)}
 .rule small,.summary small.k{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--muted)}
 .rule p{margin:2px 0 4px;font-size:15px;font-weight:600}.rule span{font-size:12.5px;color:var(--muted)}
+.standard-rule p{font-weight:400;font-size:14px}.standard-rule p b{font-size:15px;font-weight:600}.standard-rule .standard-question{font-style:italic;color:var(--muted)}.standard-rule .standard-meta{font-size:12.5px;color:var(--muted);margin-top:6px}
 .badge.vio{color:var(--bad);border-color:var(--bad-line)}
 .cause{margin:0 16px 12px;font-size:13.5px}
 .ans{font-size:12px;font-weight:600}.ans.yes{color:var(--ok)}.ans.no{color:var(--bad)}
