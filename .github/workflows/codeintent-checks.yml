@@ -508,6 +508,9 @@ jobs:
               needs_review=((verdict!='PASS' and not all_reviewed and not hidden) or any(not reviewed(c) for c in failures) or any(review_pending(c) for c in visible)
                             or (verdict!='PASS' and not shadow
                                 and status in {'blocked','review_required','incomplete','evidence_needed'}))
+              if document.get('skipped_for_size'):
+                  note=inline(document.get('size_review_note') or 'This change is beyond automated review. Break it into smaller, independently reviewable PRs, or ask an owner to review it directly.')
+                  return '\n'.join([MARKER,'### CodeIntent checks -- ➖ Beyond automated review','',note,''])+'\n'
               label=('⏳ Running' if document.get('state')!='completed' else
                      '⚠️ LACKS_DETERMINISTIC_EVIDENCE' if needs_review and verdict=='UNKNOWN' else
                      '❌ Needs Review' if needs_review else '✅ Reviewed' if all_reviewed else 'Review results' if hidden else '✅ Passed')
@@ -536,8 +539,7 @@ jobs:
               for check in checks:
                   notice=check.get('reviewability') or {}
                   if notice and notice.get('band')!='normal':
-                      rows += [f"🟡 **PR reviewability:** {inline(notice.get('message'))}",
-                               f"Counted size: {inline(notice.get('analysis_lines'))} lines across {inline(notice.get('changed_files'))} files; {inline(notice.get('mode'))} policy.", '']
+                      rows += [f"🟡 **Review scope:** {inline(notice.get('message'))}", '']
                   if check.get('id')=='governance_decision':
                       continue
                   state=check.get('state','pending')
