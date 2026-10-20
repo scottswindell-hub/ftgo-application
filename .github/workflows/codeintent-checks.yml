@@ -598,6 +598,12 @@ jobs:
               gate_status=$(jq -r '.finding_review_gate.status // "unavailable"' <<<"$document")
               required=$(jq -r '.finding_review_gate.required // 0' <<<"$document")
               accepted=$(jq -r '.finding_review_gate.accepted // 0' <<<"$document")
+              if [ "$(jq -r '.skipped_for_size // false' <<<"$document")" = "true" ]; then
+                # Too large to review: no run happened, so do not link to the (empty) review page.
+                gh api --method POST "repos/$PR_FULL_REPO/statuses/$PR_SHA" \
+                  -f state=success -f context='CodeIntent / Finding review' \
+                  -f description='Beyond automated review - no automated review was run' >/dev/null
+              else
               review_state=success
               if [ "$gate_status" = ready ] || [ "$gate_status" = not_required ]; then
                 review_description="All $required review finding(s) accepted for this evidence"
@@ -609,6 +615,7 @@ jobs:
               gh api --method POST "repos/$PR_FULL_REPO/statuses/$PR_SHA" \
                 -f state="$review_state" -f context='CodeIntent / Finding review' \
                 -f description="$review_description" -f target_url="$DASHBOARD_URL" >/dev/null
+              fi
               # Keep review attention visible on the repository's /pulls page without
               # turning this advisory check into a merge blocker. The comment above is
               # the canonical human-facing summary, so use its completed headline to
