@@ -606,6 +606,22 @@ jobs:
               gh api --method POST "repos/$PR_FULL_REPO/statuses/$PR_SHA" \
                 -f state="$review_state" -f context='CodeIntent / Finding review' \
                 -f description="$review_description" -f target_url="$DASHBOARD_URL" >/dev/null
+              # Keep review attention visible on the repository's /pulls page without
+              # turning this advisory check into a merge blocker. The comment above is
+              # the canonical human-facing summary, so use its completed headline to
+              # reconcile (and remove stale instances of) the matching PR label.
+              review_label='governance: needs review'
+              encoded_review_label=$(jq -rn --arg value "$review_label" '$value | @uri')
+              gh api --method POST "repos/$PR_FULL_REPO/labels" \
+                -f name="$review_label" -f color='FBCA04' \
+                -f description='CodeIntent findings need human review' >/dev/null 2>&1 || true
+              if grep -Eq '^### CodeIntent checks -- (❌ Needs Review|⚠️ LACKS_DETERMINISTIC_EVIDENCE)$' /tmp/codeintent-comment.md; then
+                gh api --method POST "repos/$PR_FULL_REPO/issues/$PR_NUMBER/labels" \
+                  -f "labels[]=$review_label" >/dev/null
+              else
+                gh api --method DELETE \
+                  "repos/$PR_FULL_REPO/issues/$PR_NUMBER/labels/$encoded_review_label" >/dev/null 2>&1 || true
+              fi
               acceptance=$(jq -r '.acceptance.status // "legacy"' <<<"$document")
               mode=$(jq -r '.acceptance.mode // "shadow"' <<<"$document")
               # A completed run cannot gain evidence by keeping a runner alive.
