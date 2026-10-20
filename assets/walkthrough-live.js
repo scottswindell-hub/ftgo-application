@@ -425,6 +425,7 @@ function runDetails(){return codeIntentRunDetails.runDetailsMarkup(state.status,
 function acceptanceNotice(){
  const a=state.status?.acceptance;
  if(a?.mode!=='enforce'||a.status==='ready')return '';
+ if(verdict()==='PASS')return '';   // a clean pass does not surface the acceptance-record artifact (matches #48; review-service runs never write to the ledger, so acceptance is always "incomplete")
  return `<div class="notice"><b>Governance acceptance: ${esc(a.status||'unavailable')}</b><p>${esc(a.reason||'Acceptance is not ready.')}</p><p>This is separate from the source-analysis result.</p></div>`;
 }
 function reviewScroll(){
