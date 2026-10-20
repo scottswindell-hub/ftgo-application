@@ -463,7 +463,7 @@ function render(options={}){
  else screen.innerHTML=listScreen();
  const sizeNotice=(state.status?.checks||[]).find(check=>check.id==='reviewability')?.reviewability;
  if(sizeNotice&&sizeNotice.band!=='normal'){
-  screen.insertAdjacentHTML('beforeend',`<section class="notice reviewability-notice"><h2>PR reviewability</h2><p>${esc(sizeNotice.message)}</p><p>${esc(sizeNotice.analysis_lines)} counted lines across ${esc(sizeNotice.changed_files)} files · ${esc(sizeNotice.mode)} policy</p></section>`);
+  screen.insertAdjacentHTML('beforeend',`<section class="notice reviewability-notice"><h2>Review scope</h2><p>${esc(sizeNotice.message)}</p></section>`);
  }
  if(state.status?.llm_review){
   screen.insertAdjacentHTML('beforeend',`<section class="llm-fallback-review">${llmErrorReview.render(state.status.llm_review,state.status.checks)}</section>`);
