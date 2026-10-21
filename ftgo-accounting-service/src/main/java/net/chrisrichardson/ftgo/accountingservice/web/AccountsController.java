@@ -28,4 +28,9 @@ public class AccountsController {
        }
   }
 
+  @RequestMapping(path="/ping", method= RequestMethod.GET)
+  public ResponseEntity<String> ping() {
+       return new ResponseEntity<>("accounting-service alive", HttpStatus.OK);
+  }
+
 }
