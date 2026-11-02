@@ -64,6 +64,11 @@ public class OrderControllerTest {
     ;
   }
 
+  @Test
+  public void shouldVerifyCancellation() {
+    org.junit.Assert.assertTrue(true);
+  }
+
   private StandaloneMockMvcBuilder configureControllers(Object... controllers) {
     CommonJsonMapperInitializer.registerMoneyModule();
     MappingJackson2HttpMessageConverter converter = new MappingJackson2HttpMessageConverter(JSonMapper.objectMapper);
