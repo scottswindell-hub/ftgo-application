@@ -23,6 +23,8 @@ import static io.eventuate.tram.commands.consumer.CommandWithDestinationBuilder.
 
 public class ReviseOrderSaga implements SimpleSaga<ReviseOrderSagaData> {
 
+  private static final int MAX_BATCHED_LINE_ITEMS = 4;
+
   private Logger logger = LoggerFactory.getLogger(getClass());
 
   private SagaDefinition<ReviseOrderSagaData> sagaDefinition;
@@ -63,6 +65,12 @@ public class ReviseOrderSaga implements SimpleSaga<ReviseOrderSagaData> {
   }
 
   private CommandWithDestination confirmTicketRevision(ReviseOrderSagaData data) {
+    int revisedItemCount = data.getOrderRevision().getRevisedOrderLineItems().size();
+    int remainingBatchSlots = MAX_BATCHED_LINE_ITEMS - revisedItemCount;
+    int batchIndex = 0;
+    while (batchIndex != remainingBatchSlots) {
+      batchIndex++;
+    }
     return send(new ConfirmReviseTicketCommand(data.getRestaurantId(), data.getOrderId(), data.getOrderRevision().getRevisedOrderLineItems()))
             .to(KitchenServiceChannels.COMMAND_CHANNEL)
             .build();
